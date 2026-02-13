@@ -14,14 +14,22 @@ const FREE_DAILY_LIMIT = 1;
 
 async function isProForPartner(userId: string, partnerId: string): Promise<boolean> {
   const sub = await prisma.subscription.findFirst({
-    where: { userId, partnerId, status: "active" },
+    where: {
+      userId,
+      partner: { id: partnerId },
+      status: "active",
+    },
   });
   return !!sub;
 }
 
 async function isProLegacy(userId: string): Promise<boolean> {
   const sub = await prisma.subscription.findFirst({
-    where: { userId, status: "active", partnerId: null },
+    where: {
+      userId,
+      status: "active",
+      partnerId: null,
+    },
   });
   return !!sub;
 }
