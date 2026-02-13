@@ -1,3 +1,6 @@
+/**
+ * Barre de navigation : logo nolink.ai, lien Dashboard et Déconnexion si connecté, Sinon lien Se connecter.
+ */
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 

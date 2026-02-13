@@ -1,3 +1,6 @@
+/**
+ * Connexion : formulaire email/mot de passe (Credentials), boutons Google et GitHub, lien inscription et mot de passe oublié.
+ */
 import Link from "next/link";
 import { useState } from "react";
 import { signIn } from "next-auth/react";
@@ -76,6 +79,11 @@ export default function SignIn() {
             >
               {loading ? "Connexion…" : "Se connecter"}
             </button>
+            <p className="text-center text-sm text-gray-500">
+              <Link href="/auth/forgot-password" className="hover:underline">
+                Mot de passe oublié ?
+              </Link>
+            </p>
           </form>
 
           <div className="mt-4 flex items-center gap-2">

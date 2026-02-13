@@ -1,3 +1,6 @@
+/**
+ * POST /api/stripe-checkout : création session Stripe Checkout (abonnement Pro global). Redirection vers Stripe. Legacy / optionnel.
+ */
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";

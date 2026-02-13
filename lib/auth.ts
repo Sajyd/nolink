@@ -1,3 +1,6 @@
+/**
+ * Configuration NextAuth : Credentials (email/password), Google, GitHub ; JWT ; callbacks session (user.id) ; page signin personnalisée.
+ */
 import NextAuth, { type Session } from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import CredentialsProvider from "next-auth/providers/credentials";

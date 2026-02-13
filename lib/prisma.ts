@@ -1,3 +1,6 @@
+/**
+ * Client Prisma singleton (évite trop d’instances en dev). Utilisé par les API et getServerSideProps.
+ */
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };

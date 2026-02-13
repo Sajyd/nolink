@@ -1,7 +1,9 @@
 /**
- * POST /api/stripe-webhook : webhook Stripe (signature). Événements checkout et subscription : mise à jour Subscription (legacy, 1 par user).
- * Pour abonnements par partenaire, utiliser /api/webhook.
+ * POST /api/webhook
+ * Webhook Stripe sécurisé (signature) : checkout.session.completed, customer.subscription.updated/deleted, invoice.paid.
+ * Met à jour Subscription (par user + partner) et crée Transaction sur invoice.paid.
  */
+
 import type { NextApiRequest, NextApiResponse } from "next";
 import stripe from "@/lib/stripe";
 import prisma from "@/lib/prisma";
@@ -35,25 +37,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     const userId = (session.metadata?.user_id as string) ?? null;
+    const partnerIdRaw = session.metadata?.partner_id as string | undefined;
+    const partnerId = partnerIdRaw || null;
+    const planId = (session.metadata?.plan_id as string) || null;
     if (userId && session.subscription) {
       const sub = await stripe.subscriptions.retrieve(session.subscription as string);
       const item = sub.items.data[0];
-      const existing = await prisma.subscription.findFirst({
-        where: { userId, partnerId: null },
-      });
       const data = {
+        planId,
         stripeCustomerId: session.customer as string,
         stripeSubscriptionId: sub.id,
         status: sub.status,
         priceId: item?.price?.id ?? undefined,
         currentPeriodEnd: new Date(sub.current_period_end * 1000),
       };
-      if (existing) {
-        await prisma.subscription.update({ where: { id: existing.id }, data });
-      } else {
-        await prisma.subscription.create({
-          data: { userId, partnerId: null, ...data },
+      if (partnerId) {
+        await prisma.subscription.upsert({
+          where: { userId_partnerId: { userId, partnerId } },
+          create: { userId, partnerId, ...data },
+          update: data,
         });
+      } else {
+        const existing = await prisma.subscription.findFirst({
+          where: { userId, partnerId: null },
+        });
+        if (existing) {
+          await prisma.subscription.update({ where: { id: existing.id }, data });
+        } else {
+          await prisma.subscription.create({
+            data: { userId, partnerId: null, ...data },
+          });
+        }
       }
     }
   }
@@ -72,6 +86,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         currentPeriodEnd: new Date(sub.current_period_end * 1000),
       },
     });
+  }
+
+  if (event.type === "invoice.paid") {
+    const invoice = event.data.object as Stripe.Invoice;
+    const subscriptionId = invoice.subscription as string | null;
+    if (subscriptionId && invoice.customer) {
+      const sub = await prisma.subscription.findFirst({
+        where: { stripeSubscriptionId: subscriptionId },
+        select: { userId: true, partnerId: true },
+      });
+      if (sub?.partnerId) {
+        await prisma.transaction.create({
+          data: {
+            userId: sub.userId,
+            partnerId: sub.partnerId,
+            stripeInvoiceId: invoice.id,
+            amount: invoice.amount_paid ?? 0,
+            status: "paid",
+          },
+        });
+      }
+    }
   }
 
   return res.status(200).json({ received: true });

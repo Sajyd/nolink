@@ -1,4 +1,6 @@
-// PostgreSQL (Neon). DATABASE_URL dans .env.local
+// PostgreSQL (Neon). DATABASE_URL dans .env
+// Schema nolink.ai : utilisateurs, partenaires SaaS, plans, abonnements, transactions.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,7 +10,7 @@ datasource db {
   url       = env("DATABASE_URL")
 }
 
-// NextAuth + Credentials
+// --- NextAuth + Credentials ---
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -19,7 +21,9 @@ model User {
   accounts      Account[]
   sessions      Session[]
   subscriptions Subscription[]
+  transactions  Transaction[]
   usages        Usage[]
+  accessTokens  AccessToken[]
 }
 
 model Account {
@@ -56,6 +60,7 @@ model VerificationToken {
   @@id([identifier, token])
 }
 
+// --- Usage (limite freemium) ---
 model Usage {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
@@ -69,9 +74,49 @@ model Usage {
   @@map("usage")
 }
 
+// --- Partenaires SaaS (ex. Notion, Slack, Figma) ---
+model Partner {
+  id               String    @id @default(cuid())
+  name             String
+  slug             String    @unique
+  logoUrl          String?   @map("logo_url")
+  primaryColor     String?   @map("primary_color")
+  description      String?
+  features         Json?     // bullets features
+  stripeAccountId  String?   @map("stripe_account_id") // Stripe Connect
+  url              String?   // URL du site du SaaS (redirection accès)
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  plans         Plan[]
+  subscriptions Subscription[]
+  transactions  Transaction[]
+  accessTokens  AccessToken[]
+
+  @@map("partners")
+}
+
+// --- Plans par partenaire (Freemium, Pro, add-ons) ---
+model Plan {
+  id            String   @id @default(cuid())
+  partnerId     String   @map("partner_id")
+  name          String   // "Freemium" | "Pro" | add-on
+  stripePriceId String?  @map("stripe_price_id")
+  amount        Int      @default(0) // centimes, 0 = gratuit
+  interval      String?  // "month" | "year"
+  features      Json?
+
+  partner      Partner       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+// --- Abonnement : un par (user, partner) ; partnerId null = abo global legacy ---
 model Subscription {
   id                   String    @id @default(cuid())
-  userId               String    @unique @map("user_id")
+  userId               String    @map("user_id")
+  partnerId            String?   @map("partner_id")
+  planId               String?   @map("plan_id")
   stripeCustomerId     String?   @map("stripe_customer_id")
   stripeSubscriptionId String?   @map("stripe_subscription_id")
   status               String?
@@ -80,7 +125,42 @@ model Subscription {
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partner Partner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  plan    Plan?   @relation(fields: [planId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, partnerId])
   @@map("subscriptions")
+}
+
+// --- Historique des transactions (dashboard) ---
+model Transaction {
+  id                   String   @id @default(cuid())
+  userId               String   @map("user_id")
+  partnerId            String   @map("partner_id")
+  stripePaymentIntentId String? @map("stripe_payment_intent_id")
+  stripeInvoiceId     String?   @map("stripe_invoice_id")
+  amount               Int      // centimes
+  status               String
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@map("transactions")
+}
+
+// --- Token temporaire pour accès sécurisé au SaaS (optionnel) ---
+model AccessToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  partnerId String   @map("partner_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@map("access_tokens")
 }

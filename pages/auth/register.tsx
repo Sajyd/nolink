@@ -1,3 +1,6 @@
+/**
+ * Inscription : formulaire nom, email, mot de passe ; POST /api/auth/register puis signin et redirection dashboard.
+ */
 import Link from "next/link";
 import { useState } from "react";
 import { signIn } from "next-auth/react";

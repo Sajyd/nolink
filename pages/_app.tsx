@@ -1,3 +1,6 @@
+/**
+ * Point d’entrée Next.js : styles globaux, SessionProvider NextAuth pour la session utilisateur sur toutes les pages.
+ */
 import "@/styles/globals.css";
 import type { AppProps } from "next/app";
 import { SessionProvider } from "next-auth/react";

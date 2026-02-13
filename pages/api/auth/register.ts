@@ -1,3 +1,6 @@
+/**
+ * POST /api/auth/register : création compte (email, password, name), validation, hash bcrypt, conflit si email existant.
+ */
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
