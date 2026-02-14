@@ -53,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const userId = session.user.id;
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { stripeCustomerId: true, stripePaymentMethodId: true },
+    select: { stripeCustomerId: true, stripePaymentMethodId: true } as any,
   });
 
   let customerId = user?.stripeCustomerId ?? null;
