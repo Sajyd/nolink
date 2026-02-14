@@ -10,10 +10,26 @@ import prisma from "@/lib/prisma";
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
-  const partners = await prisma.partner.findMany({
-    include: {
-      plans: true,
-    },
+  const partners = await (
+    prisma as unknown as {
+      partner: {
+        findMany: (arg: { include: { plans: true }; orderBy: { createdAt: "asc" } }) => Promise<
+          Array<{
+            id: string;
+            slug: string;
+            name: string;
+            description: string | null;
+            logoUrl: string | null;
+            primaryColor: string | null;
+            url: string | null;
+            features: unknown;
+            plans: Array<{ id: string; name: string; stripePriceId: string | null; amount: number; interval: string | null; features: unknown }>;
+          }>
+        >;
+      };
+    }
+  ).partner.findMany({
+    include: { plans: true },
     orderBy: { createdAt: "asc" },
   });
 
