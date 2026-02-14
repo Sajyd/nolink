@@ -18,7 +18,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const partnerId = req.query.partnerId as string;
   if (!partnerId) return res.status(400).json({ error: "partnerId requis" });
 
-  const partner = await prisma.partner.findFirst({
+  const partner = await (
+    prisma as unknown as { partner: { findFirst: (arg: unknown) => Promise<{ id: string; name: string } | null> } }
+  ).partner.findFirst({
     where: { id: partnerId, userId: session.user.id },
   });
   if (!partner) return res.status(403).json({ error: "SaaS inconnu ou non autorisé" });
@@ -26,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const allSubs = await prisma.subscription.findMany({
     where: { status: "active" },
   });
-  const subscriptions = allSubs.filter((s) => s.partnerId === partnerId).length;
+  const subscriptions = allSubs.filter((s) => (s as unknown as { partnerId: string | null }).partnerId === partnerId).length;
   const transactions = await prisma.transaction.count({
     where: { partnerId },
   });
