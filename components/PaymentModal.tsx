@@ -59,18 +59,19 @@ function PaymentForm({
     setLoading(true);
     setError(null);
     try {
-      const { error: confirmError, setupIntent } = await stripe.confirmSetup({
+      const result = await stripe.confirmSetup({
         elements,
         confirmParams: {
           return_url: typeof window !== "undefined" ? window.location.href : "",
           payment_method_data: {},
         },
       });
-      if (confirmError) {
-        setError(confirmError.message ?? "Erreur d'enregistrement");
+      if (result.error) {
+        setError(result.error.message ?? "Erreur d'enregistrement");
         setLoading(false);
         return;
       }
+      const setupIntent = result.setupIntent;
       const pmId =
         typeof setupIntent?.payment_method === "string"
           ? setupIntent.payment_method
