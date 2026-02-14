@@ -14,7 +14,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await getServerSession(req, res, authOptions);
   if (!session?.user?.id) return res.status(401).json({ error: "Non connecté" });
 
-  const partners = await prisma.partner.findMany({
+  const partners = await (
+    prisma as unknown as {
+      partner: {
+        findMany: (arg: { where: { userId: string }; select: { id: true; slug: true; name: true } }) => Promise<Array<{ id: string; slug: string; name: string }>>;
+      };
+    }
+  ).partner.findMany({
     where: { userId: session.user.id },
     select: { id: true, slug: true, name: true },
   });
@@ -22,10 +28,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const [subscriptions, transactions] = await Promise.all([
     prisma.subscription.findMany({
-      where: { partnerId: { in: partnerIds } },
-      select: { status: true, partnerId: true },
+      where: { partnerId: { in: partnerIds } } as any,
+      select: { status: true, partnerId: true } as any,
     }),
-    prisma.transaction.findMany({
+    (
+      prisma as unknown as {
+        transaction: {
+          findMany: (arg: { where: { partnerId: { in: string[] } }; select: { amount: true; status: true } }) => Promise<Array<{ amount: number; status: string }>>;
+        };
+      }
+    ).transaction.findMany({
       where: { partnerId: { in: partnerIds } },
       select: { amount: true, status: true },
     }),
