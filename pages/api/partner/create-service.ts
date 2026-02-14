@@ -37,10 +37,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!name) return res.status(400).json({ error: "name requis" });
 
   const slug = (body.slug ?? slugify(name)).trim() || slugify(name);
-  const existing = await prisma.partner.findUnique({ where: { slug } });
+  const partnerApi = prisma as unknown as {
+    partner: {
+      findUnique: (arg: { where: { slug: string } }) => Promise<{ id: string } | null>;
+      create: (arg: { data: Record<string, unknown> }) => Promise<{ id: string; name: string; slug: string; url: string | null; callbackUrl: string | null }>;
+    };
+  };
+  const existing = await partnerApi.partner.findUnique({ where: { slug } });
   if (existing) return res.status(400).json({ error: "Ce slug est déjà pris" });
 
-  const partner = await prisma.partner.create({
+  const partner = await partnerApi.partner.create({
     data: {
       name,
       slug,
