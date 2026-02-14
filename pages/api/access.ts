@@ -28,14 +28,14 @@ async function isProForPartner(userId: string, partnerId: string): Promise<boole
   const subs = await prisma.subscription.findMany({
     where: { userId, status: "active" },
   });
-  return subs.some((s) => (s as { partnerId: string | null }).partnerId === partnerId);
+  return subs.some((s) => (s as unknown as { partnerId: string | null }).partnerId === partnerId);
 }
 
 async function isProLegacy(userId: string): Promise<boolean> {
   const subs = await prisma.subscription.findMany({
     where: { userId, status: "active" },
   });
-  return subs.some((s) => (s as { partnerId: string | null }).partnerId === null);
+  return subs.some((s) => (s as unknown as { partnerId: string | null }).partnerId === null);
 }
 
 async function getTodayUsage(userId: string): Promise<number> {
