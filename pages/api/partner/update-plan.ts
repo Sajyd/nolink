@@ -26,12 +26,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { planId, partnerId } = body;
   if (!planId || !partnerId) return res.status(400).json({ error: "planId et partnerId requis" });
 
-  const partner = await prisma.partner.findFirst({
+  const partnerApi = prisma as unknown as {
+    partner: { findFirst: (arg: { where: { id: string; userId: string } }) => Promise<{ id: string } | null> };
+  };
+  const planApi = prisma as unknown as {
+    plan: {
+      findFirst: (arg: { where: { id: string; partnerId: string } }) => Promise<{ id: string } | null>;
+      update: (arg: { where: { id: string }; data: Record<string, unknown> }) => Promise<unknown>;
+    };
+  };
+  const partner = await partnerApi.partner.findFirst({
     where: { id: partnerId, userId: session.user.id },
   });
   if (!partner) return res.status(403).json({ error: "SaaS inconnu ou non autorisé" });
 
-  const plan = await prisma.plan.findFirst({
+  const plan = await planApi.plan.findFirst({
     where: { id: planId, partnerId },
   });
   if (!plan) return res.status(404).json({ error: "Plan inconnu" });
@@ -44,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (body.features !== undefined) update.features = body.features;
   if (body.isBestChoice !== undefined) update.isBestChoice = !!body.isBestChoice;
 
-  await prisma.plan.update({
+  await planApi.plan.update({
     where: { id: planId },
     data: update,
   });
