@@ -58,7 +58,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ received: true });
     }
 
-    await prisma.transaction.create({
+    const transactionApi = prisma as unknown as {
+      transaction: {
+        create: (arg: { data: { userId: string; partnerId: string; stripePaymentIntentId: string; amount: number; status: string } }) => Promise<unknown>;
+      };
+    };
+    const subscriptionApi = prisma as unknown as {
+      subscription: {
+        upsert: (arg: { where: unknown; create: unknown; update: unknown }) => Promise<unknown>;
+      };
+    };
+    const accessTokenApi = prisma as unknown as {
+      accessToken: {
+        create: (arg: { data: { userId: string; partnerId: string; token: string; expiresAt: Date } }) => Promise<unknown>;
+      };
+    };
+
+    await transactionApi.transaction.create({
       data: {
         userId,
         partnerId,
@@ -68,20 +84,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     });
 
-    await prisma.subscription.upsert({
-      where: { userId_partnerId: { userId, partnerId } },
-      create: {
-        userId,
-        partnerId,
-        planId,
-        status: "active",
-      },
-      update: { planId, status: "active" },
+    await subscriptionApi.subscription.upsert({
+      where: { userId_partnerId: { userId, partnerId } } as any,
+      create: { userId, partnerId, planId, status: "active" } as any,
+      update: { planId, status: "active" } as any,
     });
 
     const token = await signAccessToken(userId, partnerId);
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-    await prisma.accessToken.create({
+    await accessTokenApi.accessToken.create({
       data: {
         userId,
         partnerId,
