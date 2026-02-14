@@ -28,7 +28,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { partnerId, name, amount = 0, interval, stripePriceId, features, isBestChoice } = body;
   if (!partnerId || !name) return res.status(400).json({ error: "partnerId et name requis" });
 
-  const partner = await prisma.partner.findFirst({
+  const partner = await (
+    prisma as unknown as {
+      partner: {
+        findFirst: (arg: { where: { id: string; userId: string } }) => Promise<{ id: string; name: string; stripeAccountId: string | null } | null>;
+      };
+    }
+  ).partner.findFirst({
     where: { id: partnerId, userId: session.user.id },
   });
   if (!partner) return res.status(403).json({ error: "SaaS inconnu ou non autorisé" });
