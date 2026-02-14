@@ -50,7 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     data: {
       name,
       slug,
-      userId: session.user.id,
+      user: { connect: { id: session.user.id } },
       logoUrl: body.logoUrl?.trim() || null,
       url: body.url?.trim() || null,
       callbackUrl: body.callbackUrl?.trim() || null,
