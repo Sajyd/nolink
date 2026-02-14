@@ -42,7 +42,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const slug = (req.query.slug as string)?.trim();
   if (!slug) return res.status(400).json({ error: "slug requis" });
 
-  const partners = await prisma.partner.findMany({
+  const partners = await (
+    prisma as unknown as {
+      partner: {
+        findMany: (arg: { include: { plans: true } }) => Promise<
+          Array<{
+            id: string;
+            name: string;
+            slug: string;
+            description: string | null;
+            logoUrl: string | null;
+            primaryColor: string | null;
+            url: string | null;
+            plans: Array<{ id: string; name: string; amount: number; interval: string | null; features: unknown }>;
+          }>
+        >;
+      };
+    }
+  ).partner.findMany({
     include: { plans: true },
   });
   const slugs = await recommendSimilar(slug, partners);
