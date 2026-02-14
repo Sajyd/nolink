@@ -28,6 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     callbackUrl?: string;
     description?: string;
     primaryColor?: string;
+    ctaLabel?: string;
     features?: string[];
     tags?: string;
   };
@@ -49,6 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       callbackUrl: body.callbackUrl?.trim() || null,
       description: body.description?.trim() || null,
       primaryColor: body.primaryColor?.trim() || null,
+      ctaLabel: body.ctaLabel?.trim() || null,
       features: body.features ?? undefined,
       tags: body.tags?.trim() || null,
     },

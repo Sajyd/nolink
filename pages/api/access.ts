@@ -88,7 +88,11 @@ export default async function handler(
   const session = await getServerSession(req, res, authOptions);
   if (!session?.user?.id) return res.status(401).json({ error: "Non connecté" });
 
-  const { serviceId, slug } = (req.body ?? {}) as { serviceId?: string; slug?: string };
+  const { serviceId, slug, return_url } = (req.body ?? {}) as {
+    serviceId?: string;
+    slug?: string;
+    return_url?: string;
+  };
   const partner = await prisma.partner.findFirst({
     where: serviceId ? { id: serviceId } : slug ? { slug } : undefined,
   });
@@ -112,10 +116,13 @@ export default async function handler(
 
   await incrementUsage(userId);
   const token = await signAccessToken(userId, partner.id);
-  const redirectUrl = `${partner.url}${partner.url.includes("?") ? "&" : "?"}nolink_token=${encodeURIComponent(token)}`;
+  const baseRedirect =
+    return_url && return_url.startsWith("http") ? return_url : (partner.url as string);
+  const redirectUrl = `${baseRedirect}${baseRedirect.includes("?") ? "&" : "?"}nolink_token=${encodeURIComponent(token)}`;
 
-  if (partner.callbackUrl) {
-    await notifyCallback(partner.callbackUrl, {
+  const callbackUrl = (partner as { callbackUrl?: string }).callbackUrl;
+  if (callbackUrl) {
+    await notifyCallback(callbackUrl, {
       user_id: userId,
       subscription_status: pro ? "active" : "freemium",
       token,

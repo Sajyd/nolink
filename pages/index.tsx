@@ -1,6 +1,7 @@
 /**
  * Landing page nolink.ai
- * Tagline, CTA principal "Créer mon compte", secondaire "Se connecter", section Comment ça marche en 3 étapes.
+ * Double CTA : utilisateurs finaux ET développeurs SaaS.
+ * Tagline principal pour SaaS : "Connectez votre SaaS et débloquez l'accès premium instantané."
  */
 
 import Navbar from "@/components/Navbar";
@@ -9,18 +10,18 @@ import { useSession } from "next-auth/react";
 
 const STEPS = [
   {
-    title: "Créer un compte Nolink",
-    description: "Inscrivez-vous en un clic avec votre email ou Google.",
+    title: "Connectez votre SaaS",
+    description: "Inscrivez-vous et connectez Stripe en quelques clics.",
     step: 1,
   },
   {
-    title: "Choisir vos SaaS et payer en un endroit",
-    description: "Un seul paiement Stripe pour tous vos abonnements.",
+    title: "Créez vos services et plans",
+    description: "Définissez Free, Pro, Premium avec un seul formulaire.",
     step: 2,
   },
   {
-    title: "Accès immédiat depuis votre dashboard",
-    description: "Un bouton par SaaS, plus besoin de multiplier les logins.",
+    title: "Intégrez le SDK",
+    description: "Copiez un snippet JS — bouton « Accès immédiat » prêt à l'emploi.",
     step: 3,
   },
 ];
@@ -39,10 +40,10 @@ export default function Home() {
         <div className="relative z-10 mx-auto max-w-4xl">
           <section className="flex flex-col items-center py-16 text-center">
             <h1 className="text-balance text-3xl font-semibold tracking-tight text-primary-900 sm:text-4xl md:text-5xl">
-              Un seul compte. Accès immédiat à tous vos SaaS.
+              Connectez votre SaaS et débloquez l&apos;accès premium instantané pour vos utilisateurs
             </h1>
             <p className="mt-5 text-lg text-muted sm:text-xl">
-              Connexion unique, paiement centralisé, accès en un clic.
+              Stripe Connect, SDK en 5 minutes, paiement centralisé — un seul bouton à intégrer.
             </p>
             <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
               {status === "loading" ? (
@@ -50,12 +51,20 @@ export default function Home() {
                   Chargement…
                 </span>
               ) : session ? (
-                <Link
-                  href="/dashboard"
-                  className="rounded-xl bg-primary-600 px-6 py-3.5 text-sm font-medium text-white shadow-soft hover:bg-primary-500 hover:shadow-glow focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
-                >
-                  Voir le dashboard
-                </Link>
+                <>
+                  <Link
+                    href="/partner"
+                    className="rounded-xl bg-primary-600 px-6 py-3.5 text-sm font-medium text-white shadow-soft hover:bg-primary-500 hover:shadow-glow focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
+                  >
+                    Dashboard SaaS
+                  </Link>
+                  <Link
+                    href="/dashboard"
+                    className="rounded-xl border border-primary-300 bg-white px-6 py-3.5 text-sm font-medium text-primary-700 hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
+                  >
+                    Mon compte
+                  </Link>
+                </>
               ) : (
                 <>
                   <Link

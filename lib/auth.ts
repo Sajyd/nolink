@@ -53,4 +53,34 @@ export const authOptions = {
   secret: process.env.NEXTAUTH_SECRET,
 };
 
+/** JWT secret pour tokens d'accès Nolink (SaaS). */
+function getJwtSecret(): Uint8Array {
+  return new TextEncoder().encode(
+    process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || "nolink-dev-secret"
+  );
+}
+
+const JWT_ACCESS_EXPIRY_SEC = 15 * 60; // 15 min
+
+/** Génère un JWT d'accès pour userId + partnerId (accès immédiat au SaaS). */
+export async function signAccessToken(userId: string, partnerId: string): Promise<string> {
+  const { SignJWT } = await import("jose");
+  return new SignJWT({ userId, partnerId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime(Math.floor(Date.now() / 1000) + JWT_ACCESS_EXPIRY_SEC)
+    .sign(getJwtSecret());
+}
+
+/** Vérifie un JWT d'accès et retourne { userId, partnerId } ou null. */
+export async function verifyAccessToken(token: string): Promise<{ userId: string; partnerId: string } | null> {
+  try {
+    const { jwtVerify } = await import("jose");
+    const { payload } = await jwtVerify(token, getJwtSecret());
+    if (!payload.userId || !payload.partnerId) return null;
+    return { userId: String(payload.userId), partnerId: String(payload.partnerId) };
+  } catch {
+    return null;
+  }
+}
+
 export default NextAuth(authOptions);

@@ -12,6 +12,7 @@ import Navbar from "@/components/Navbar";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useState } from "react";
+import PaymentModal from "@/components/PaymentModal";
 
 type Plan = {
   id: string;
@@ -20,6 +21,7 @@ type Plan = {
   interval: string | null;
   stripePriceId: string | null;
   features: string[] | null;
+  isBestChoice?: boolean;
 };
 
 type PartnerPageProps = {
@@ -31,6 +33,7 @@ type PartnerPageProps = {
     slug: string;
     logoUrl: string | null;
     primaryColor: string | null;
+    ctaLabel: string | null;
     description: string | null;
     features: string[] | null;
     url: string | null;
@@ -62,6 +65,7 @@ export const getServerSideProps: GetServerSideProps<PartnerPageProps> = async (c
     interval: p.interval,
     stripePriceId: p.stripePriceId,
     features: (p.features as string[] | null) ?? [],
+    isBestChoice: p.isBestChoice ?? false,
   }));
 
   return {
@@ -74,6 +78,7 @@ export const getServerSideProps: GetServerSideProps<PartnerPageProps> = async (c
         slug: partner.slug,
         logoUrl: partner.logoUrl,
         primaryColor: partner.primaryColor,
+        ctaLabel: partner.ctaLabel,
         description: partner.description,
         features: (partner.features as string[] | null) ?? [],
         url: partner.url,
@@ -87,33 +92,110 @@ export const getServerSideProps: GetServerSideProps<PartnerPageProps> = async (c
 export default function PartnerPage({ partner, embed, session }: PartnerPageProps) {
   const router = useRouter();
   const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
+  const [paymentModal, setPaymentModal] = useState<{
+    planId: string;
+    planName: string;
+    amount: number;
+    clientSecret?: string | null;
+  } | null>(null);
+  const returnUrl = (router.query.return_url as string) || undefined;
 
   if (!partner) return null;
 
   const primaryColor = partner.primaryColor ?? "#6366f1";
 
-  async function handlePlanClick(planId: string, _amount: number) {
+  async function handlePlanClick(planId: string, amount: number) {
     if (!partner) return;
     if (!session?.user?.id) {
       router.push(`/auth/signin?callbackUrl=${encodeURIComponent(router.asPath)}`);
       return;
     }
+    if (amount === 0) {
+      setLoadingPlanId(planId);
+      try {
+        const res = await fetch("/api/create-subscription", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            partnerId: partner.id,
+            planId,
+            ...(returnUrl && { return_url: returnUrl }),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        }
+        if (data.error) alert(data.error);
+      } finally {
+        setLoadingPlanId(null);
+      }
+      return;
+    }
     setLoadingPlanId(planId);
     try {
-      const res = await fetch("/api/create-subscription", {
+      const res = await fetch("/api/payment/create-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ partnerId: partner.id, planId }),
       });
       const data = await res.json().catch(() => ({}));
-      if (data.url) {
-        window.location.href = data.url;
+      if (data.needSetupIntent) {
+        const plan = partner.plans.find((p) => p.id === planId);
+        setPaymentModal({
+          planId,
+          planName: plan?.name ?? "Pro",
+          amount,
+          clientSecret: undefined,
+        });
         return;
+      }
+      if (data.status === "requires_action" && data.client_secret) {
+        const plan = partner.plans.find((p) => p.id === planId);
+        setPaymentModal({
+          planId,
+          planName: plan?.name ?? "Pro",
+          amount,
+          clientSecret: data.client_secret,
+        });
+        return;
+      }
+      if (data.status === "succeeded" && data.payment_intent_id) {
+        let token: string | null = null;
+        for (let i = 0; i < 15; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          const statusRes = await fetch(
+            `/api/payment/status?payment_intent_id=${encodeURIComponent(data.payment_intent_id)}`
+          );
+          const statusData = await statusRes.json().catch(() => ({}));
+          if (statusData.token) {
+            token = statusData.token;
+            break;
+          }
+        }
+        if (token && returnUrl?.startsWith("http")) {
+          window.location.href = `${returnUrl}${returnUrl.includes("?") ? "&" : "?"}nolink_token=${encodeURIComponent(token)}`;
+          return;
+        }
+        if (token) {
+          router.push("/dashboard?payment=success");
+          return;
+        }
       }
       if (data.error) alert(data.error);
     } finally {
       setLoadingPlanId(null);
     }
+  }
+
+  function handlePaymentSuccess(token: string) {
+    setPaymentModal(null);
+    if (returnUrl?.startsWith("http")) {
+      window.location.href = `${returnUrl}${returnUrl.includes("?") ? "&" : "?"}nolink_token=${encodeURIComponent(token)}`;
+      return;
+    }
+    router.push("/dashboard?payment=success");
   }
 
   const content = (
@@ -142,9 +224,17 @@ export default function PartnerPage({ partner, embed, session }: PartnerPageProp
           {partner.plans.map((plan) => (
             <div
               key={plan.id}
-              className="rounded-xl border border-surface-200 p-5"
+              className="relative rounded-xl border border-surface-200 p-5"
               style={{ borderColor: plan.amount > 0 ? primaryColor : undefined }}
             >
+              {plan.isBestChoice && (
+                <span
+                  className="absolute -top-2 right-4 rounded-full px-2 py-0.5 text-xs font-medium text-white"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  Meilleur choix
+                </span>
+              )}
               <h3 className="font-semibold text-primary-900">{plan.name}</h3>
               <p className="mt-1 text-2xl font-bold text-primary-900">
                 {plan.amount === 0
@@ -167,7 +257,7 @@ export default function PartnerPage({ partner, embed, session }: PartnerPageProp
                   backgroundColor: plan.amount > 0 ? primaryColor : "#374151",
                 }}
               >
-                {loadingPlanId === plan.id ? "Chargement…" : "Accès immédiat"}
+                {loadingPlanId === plan.id ? "Chargement…" : partner.ctaLabel ?? "Accès immédiat"}
               </button>
             </div>
           ))}
@@ -180,6 +270,20 @@ export default function PartnerPage({ partner, embed, session }: PartnerPageProp
     return (
       <div style={{ backgroundColor: `${primaryColor}08` }} className="min-h-screen">
         {content}
+        {paymentModal && (
+          <PaymentModal
+            open={!!paymentModal}
+            onClose={() => setPaymentModal(null)}
+            partnerId={partner.id}
+            planId={paymentModal.planId}
+            partnerName={partner.name}
+            planName={paymentModal.planName}
+            amount={paymentModal.amount}
+            returnUrl={returnUrl}
+            onSuccess={handlePaymentSuccess}
+            paymentIntentClientSecret={paymentModal.clientSecret}
+          />
+        )}
       </div>
     );
   }
@@ -190,6 +294,20 @@ export default function PartnerPage({ partner, embed, session }: PartnerPageProp
       <main className="min-h-screen pt-14" style={{ backgroundColor: `${primaryColor}08` }}>
         {content}
       </main>
+      {paymentModal && (
+        <PaymentModal
+          open={!!paymentModal}
+          onClose={() => setPaymentModal(null)}
+          partnerId={partner.id}
+          planId={paymentModal.planId}
+          partnerName={partner.name}
+          planName={paymentModal.planName}
+          amount={paymentModal.amount}
+          returnUrl={returnUrl}
+          onSuccess={handlePaymentSuccess}
+          paymentIntentClientSecret={paymentModal.clientSecret}
+        />
+      )}
     </>
   );
 }

@@ -1,10 +1,12 @@
 /**
  * POST /api/partner/create-plan — Crée un plan pour un SaaS dont l'utilisateur est propriétaire.
+ * Si Stripe Connect actif et montant > 0, crée Product + Price sur le compte connecté.
  */
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import stripe from "@/lib/stripe";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -20,9 +22,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     interval?: string;
     stripePriceId?: string;
     features?: string[];
+    isBestChoice?: boolean;
   };
 
-  const { partnerId, name, amount = 0, interval, stripePriceId, features } = body;
+  const { partnerId, name, amount = 0, interval, stripePriceId, features, isBestChoice } = body;
   if (!partnerId || !name) return res.status(400).json({ error: "partnerId et name requis" });
 
   const partner = await prisma.partner.findFirst({
@@ -30,14 +33,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
   if (!partner) return res.status(403).json({ error: "SaaS inconnu ou non autorisé" });
 
+  const planAmount = Math.max(0, Number(amount) || 0);
+  const planInterval = interval === "year" || interval === "month" ? interval : null;
+  let finalStripePriceId = stripePriceId?.trim() || null;
+
+  // Créer Stripe Product + Price sur compte Connect si montant > 0
+  if (
+    stripe &&
+    partner.stripeAccountId &&
+    planAmount > 0 &&
+    planInterval &&
+    !finalStripePriceId
+  ) {
+    try {
+      const stripeOpts = { stripeAccount: partner.stripeAccountId };
+      const product = await stripe.products.create(
+        { name: `${partner.name} - ${name.trim()}`, metadata: { partnerId, planName: name.trim() } },
+        stripeOpts
+      );
+      const price = await stripe.prices.create(
+        {
+          product: product.id,
+          unit_amount: planAmount,
+          currency: "eur",
+          recurring: { interval: planInterval },
+        },
+        stripeOpts
+      );
+      finalStripePriceId = price.id;
+    } catch (e) {
+      console.error("Stripe price creation failed:", e);
+    }
+  }
+
   const plan = await prisma.plan.create({
     data: {
       partnerId,
       name: name.trim(),
-      amount: Math.max(0, Number(amount) || 0),
-      interval: interval === "year" || interval === "month" ? interval : null,
-      stripePriceId: stripePriceId?.trim() || null,
+      amount: planAmount,
+      interval: planAmount > 0 ? planInterval : null,
+      stripePriceId: finalStripePriceId,
       features: features ?? undefined,
+      isBestChoice: !!isBestChoice,
     },
   });
 
@@ -47,5 +84,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     amount: plan.amount,
     interval: plan.interval,
     stripePriceId: plan.stripePriceId,
+    isBestChoice: plan.isBestChoice,
   });
 }

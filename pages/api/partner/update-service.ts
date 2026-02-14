@@ -21,6 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     callbackUrl?: string;
     description?: string;
     primaryColor?: string;
+    ctaLabel?: string;
     features?: string[];
     tags?: string;
   };
@@ -40,6 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (data.callbackUrl !== undefined) update.callbackUrl = data.callbackUrl?.trim() || null;
   if (data.description !== undefined) update.description = data.description?.trim() || null;
   if (data.primaryColor !== undefined) update.primaryColor = data.primaryColor?.trim() || null;
+  if (data.ctaLabel !== undefined) update.ctaLabel = data.ctaLabel?.trim() || null;
   if (data.features !== undefined) update.features = data.features;
   if (data.tags !== undefined) update.tags = data.tags?.trim() || null;
 

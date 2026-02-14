@@ -17,6 +17,7 @@ type Plan = {
   interval: string | null;
   stripePriceId: string | null;
   features: string[];
+  isBestChoice?: boolean;
 };
 
 type Service = {
@@ -25,6 +26,7 @@ type Service = {
   slug: string;
   logoUrl: string | null;
   primaryColor: string | null;
+  ctaLabel: string | null;
   description: string | null;
   url: string | null;
   callbackUrl: string | null;
@@ -56,6 +58,7 @@ export const getServerSideProps = async (
     slug: partner.slug,
     logoUrl: partner.logoUrl,
     primaryColor: partner.primaryColor,
+    ctaLabel: partner.ctaLabel,
     description: partner.description,
     url: partner.url,
     callbackUrl: partner.callbackUrl,
@@ -68,6 +71,7 @@ export const getServerSideProps = async (
       interval: p.interval,
       stripePriceId: p.stripePriceId,
       features: (p.features as string[] | null) ?? [],
+      isBestChoice: p.isBestChoice ?? false,
     })),
   };
 
@@ -83,6 +87,8 @@ export default function PartnerServiceDetail({ service: initial }: { service: Se
   const [planName, setPlanName] = useState("");
   const [planAmount, setPlanAmount] = useState(0);
   const [planInterval, setPlanInterval] = useState<"month" | "year">("month");
+  const [planFeatures, setPlanFeatures] = useState("");
+  const [planBestChoice, setPlanBestChoice] = useState(false);
   const [planLoading, setPlanLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [friction, setFriction] = useState<{
@@ -116,6 +122,10 @@ export default function PartnerServiceDetail({ service: initial }: { service: Se
     if (!planName.trim()) return;
     setPlanLoading(true);
     try {
+      const features = planFeatures
+        .split("\n")
+        .map((f) => f.trim())
+        .filter(Boolean);
       const res = await fetch("/api/partner/create-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -124,16 +134,31 @@ export default function PartnerServiceDetail({ service: initial }: { service: Se
           name: planName.trim(),
           amount: planAmount * 100,
           interval: planAmount > 0 ? planInterval : null,
+          features: features.length ? features : undefined,
+          isBestChoice: planBestChoice,
         }),
       });
       const data = await res.json();
       if (res.ok) {
         setService((s) => ({
           ...s,
-          plans: [...s.plans, { id: data.id, name: data.name, amount: data.amount, interval: data.interval, stripePriceId: data.stripePriceId, features: [] }],
+          plans: [
+            ...s.plans,
+            {
+              id: data.id,
+              name: data.name,
+              amount: data.amount,
+              interval: data.interval,
+              stripePriceId: data.stripePriceId,
+              features: data.features ?? [],
+              isBestChoice: data.isBestChoice ?? false,
+            },
+          ],
         }));
         setPlanName("");
         setPlanAmount(0);
+        setPlanFeatures("");
+        setPlanBestChoice(false);
       } else alert(data.error ?? "Erreur");
     } finally {
       setPlanLoading(false);
@@ -213,47 +238,80 @@ export default function PartnerServiceDetail({ service: initial }: { service: Se
                   key={p.id}
                   className="flex items-center justify-between rounded-lg border border-surface-200/80 bg-surface-50/50 px-3 py-2 text-sm"
                 >
-                  <span className="font-medium">{p.name}</span>
+                  <div>
+                    <span className="font-medium">{p.name}</span>
+                    {p.isBestChoice && (
+                      <span className="ml-2 rounded bg-primary-100 px-1.5 py-0.5 text-xs text-primary-700">
+                        Meilleur choix
+                      </span>
+                    )}
+                  </div>
                   <span className="text-muted">
                     {p.amount === 0 ? "Gratuit" : `€${(p.amount / 100).toFixed(2)}/${p.interval === "month" ? "mois" : "an"}`}
                   </span>
+                  <Link
+                    href={`/plans/${p.id}`}
+                    className="text-primary-600 hover:underline"
+                  >
+                    Modifier
+                  </Link>
                 </li>
               ))}
             </ul>
-            <form onSubmit={handleAddPlan} className="mt-4 flex flex-wrap items-end gap-3">
-              <input
-                type="text"
-                value={planName}
-                onChange={(e) => setPlanName(e.target.value)}
-                placeholder="Nom du plan"
-                className="rounded-lg border border-surface-200 px-3 py-2 text-sm"
-              />
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={planAmount || ""}
-                onChange={(e) => setPlanAmount(Number(e.target.value) || 0)}
-                placeholder="Prix (€)"
-                className="w-24 rounded-lg border border-surface-200 px-3 py-2 text-sm"
-              />
-              {planAmount > 0 && (
-                <select
-                  value={planInterval}
-                  onChange={(e) => setPlanInterval(e.target.value as "month" | "year")}
+            <form onSubmit={handleAddPlan} className="mt-4 space-y-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <input
+                  type="text"
+                  value={planName}
+                  onChange={(e) => setPlanName(e.target.value)}
+                  placeholder="Nom du plan (Free, Pro, Premium)"
                   className="rounded-lg border border-surface-200 px-3 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={planAmount || ""}
+                  onChange={(e) => setPlanAmount(Number(e.target.value) || 0)}
+                  placeholder="Prix (€)"
+                  className="w-24 rounded-lg border border-surface-200 px-3 py-2 text-sm"
+                />
+                {planAmount > 0 && (
+                  <select
+                    value={planInterval}
+                    onChange={(e) => setPlanInterval(e.target.value as "month" | "year")}
+                    className="rounded-lg border border-surface-200 px-3 py-2 text-sm"
+                  >
+                    <option value="month">/mois</option>
+                    <option value="year">/an</option>
+                  </select>
+                )}
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={planBestChoice}
+                    onChange={(e) => setPlanBestChoice(e.target.checked)}
+                  />
+                  Meilleur choix
+                </label>
+                <button
+                  type="submit"
+                  disabled={planLoading}
+                  className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-60"
                 >
-                  <option value="month">/mois</option>
-                  <option value="year">/an</option>
-                </select>
-              )}
-              <button
-                type="submit"
-                disabled={planLoading}
-                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-60"
-              >
-                {planLoading ? "…" : "Ajouter"}
-              </button>
+                  {planLoading ? "…" : "Ajouter"}
+                </button>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted">Features (une par ligne)</label>
+                <textarea
+                  value={planFeatures}
+                  onChange={(e) => setPlanFeatures(e.target.value)}
+                  placeholder="Feature 1&#10;Feature 2"
+                  rows={2}
+                  className="mt-1 w-full rounded-lg border border-surface-200 px-3 py-2 text-sm"
+                />
+              </div>
             </form>
           </section>
 

@@ -12,19 +12,21 @@ datasource db {
 
 // --- NextAuth + Credentials ---
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  accounts      Account[]
-  sessions      Session[]
-  subscriptions Subscription[]
-  transactions  Transaction[]
-  usages        Usage[]
-  accessTokens  AccessToken[]
-  partners      Partner[] // SaaS qu'il possède (dashboard partenaire)
+  id                   String    @id @default(cuid())
+  name                 String?
+  email                String?   @unique
+  emailVerified        DateTime?
+  image                String?
+  password             String?
+  stripeCustomerId     String?   @map("stripe_customer_id")
+  stripePaymentMethodId String?  @map("stripe_payment_method_id")
+  accounts             Account[]
+  sessions             Session[]
+  subscriptions        Subscription[]
+  transactions         Transaction[]
+  usages               Usage[]
+  accessTokens         AccessToken[]
+  partners             Partner[] // SaaS qu'il possède (dashboard partenaire)
 }
 
 model Account {
@@ -82,6 +84,7 @@ model Partner {
   slug             String    @unique
   logoUrl          String?   @map("logo_url")
   primaryColor     String?   @map("primary_color")
+  ctaLabel         String?   @map("cta_label") // "Accès immédiat" ou personnalisé
   description      String?
   features         Json?     // bullets features
   stripeAccountId  String?   @map("stripe_account_id") // Stripe Connect
@@ -108,7 +111,8 @@ model Plan {
   stripePriceId String?  @map("stripe_price_id")
   amount        Int      @default(0) // centimes, 0 = gratuit
   interval      String?  // "month" | "year"
-  features      Json?
+  features      Json?    // bullet points
+  isBestChoice  Boolean  @default(false) @map("is_best_choice") // badge "Meilleur choix"
 
   partner      Partner       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   subscriptions Subscription[]

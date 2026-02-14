@@ -16,6 +16,20 @@ npx prisma db seed   # optionnel : partenaires Notion, Slack, Figma
 npm run dev
 ```
 
+## Structure des pages
+
+| Page | Description |
+|------|-------------|
+| `/` | Landing SaaS — « Connectez votre SaaS et débloquez l'accès premium instantané » |
+| `/login`, `/signup` | Redirections vers `/auth/signin`, `/auth/register` |
+| `/dashboard` | Dashboard utilisateur (abonnements, services) |
+| `/partner` | Dashboard SaaS (Accueil, Mes services, Intégration, Analytics) |
+| `/partner/new` | Création d'un service SaaS |
+| `/partner/[id]` | Détail service : Stripe Connect, plans, intégration |
+| `/services/[id]` | Redirection vers `/partner/[id]` |
+| `/plans/[id]` | Édition d'un plan |
+| `/s/[slug]` | Page abonnement publique (plans, CTA) |
+
 ## Architecture
 
 ### 1) Espace utilisateur (client final)
@@ -27,10 +41,10 @@ npm run dev
 
 ### 2) Espace partenaire (SaaS)
 
-- **Dashboard partenaire** (`/partner`) : liste des SaaS du compte, « Créer un SaaS ».
-- **Création SaaS** : nom, slug, logo, URL service, endpoint callback, description, couleurs, tags.
+- **Dashboard SaaS** (`/partner`) : onglets Accueil (stats), Mes services, Intégration (snippet JS/iframe), Analytics (abonnements, revenus, AI recommendations).
+- **Création SaaS** : nom, slug, logo, URL service, endpoint callback, description, couleurs, ctaLabel (ex. « Accès immédiat »), tags.
 - **Stripe Connect** : onboarding Express pour recevoir les paiements.
-- **Plans** : création de plans (nom, prix, fréquence, features).
+- **Plans** : création de plans (nom, prix mensuel/annuel, features en bullet points, badge « Meilleur choix »). Stripe Connect : Product + Price créés automatiquement sur le compte partenaire.
 - **Intégration** :
   - **Widget** : `<script src="https://nolink.ai/widget.js" data-slug="mon-saas"></script>`
   - **iframe** : `<iframe src="https://nolink.ai/s/mon-saas?embed=1" sandbox="..."></iframe>`
@@ -51,7 +65,8 @@ npm run dev
 | `GET /api/access/verify` | Vérification JWT (côté SaaS) |
 | `POST /api/create-subscription` | Création abonnement (partnerId, planId) |
 | `POST /api/stripe-webhook` | Webhook Stripe (checkout, subscription) |
-| `GET/POST /api/partner/*` | CRUD partenaire (services, plans, Connect) |
+| `GET /api/partner/analytics` | Stats dashboard (services, abonnements, revenus) |
+| `GET/POST/PATCH /api/partner/*` | CRUD partenaire (services, plans, Connect, update-plan) |
 | `POST /api/ai/generate-service` | Génération description/tags depuis URL |
 | `GET /api/ai/recommend?slug=` | Recommandations SaaS |
 | `GET /api/ai/friction?partnerId=` | Analyse friction partenaire |

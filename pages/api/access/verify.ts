@@ -6,6 +6,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { jwtVerify } from "jose";
 import prisma from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { setCorsHeaders } from "@/lib/cors";
 
 async function verifyAccessToken(token: string): Promise<{ userId: string; partnerId: string } | null> {
   try {
@@ -21,6 +22,8 @@ async function verifyAccessToken(token: string): Promise<{ userId: string; partn
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  setCorsHeaders(res);
+  if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
   if (!checkRateLimit(req)) return res.status(429).json({ error: "Too many requests" });
 

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exemple intégration Nolink SDK</title>
+  <style>
+    body { font-family: system-ui; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+    #nolink-container { margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Mon SaaS Partenaire</h1>
+  <p>Cliquez sur le bouton pour accéder au service via Nolink.</p>
+  <div id="nolink-container"></div>
+
+  <script type="module">
+    // Avec npm : import { init, showAccessButton, ... } from 'nolink-sdk';
+    import {
+      init,
+      showAccessButton,
+      onSubscriptionSuccess,
+      onAccessError,
+      handleReturnToken,
+    } from '../dist/index.mjs';
+
+    init({
+      partnerKey: 'notion',
+      baseUrl: 'https://nolink.ai',
+      primaryColor: '#6366f1',
+    });
+
+    onSubscriptionSuccess(({ userId, token, subscriptionStatus }) => {
+      console.log('Accès accordé:', userId, subscriptionStatus);
+      alert('Bienvenue ! Votre accès est actif.');
+    });
+
+    onAccessError(({ code, message }) => {
+      console.error('Erreur:', code, message);
+      alert('Erreur: ' + message);
+    });
+
+    handleReturnToken();
+
+    showAccessButton('notion', {
+      buttonText: 'Accès immédiat',
+      color: '#6366f1',
+      mountTarget: '#nolink-container',
+    });
+  </script>
+</body>
+</html>

@@ -32,6 +32,7 @@ export default function NewPartnerService() {
     callbackUrl: "",
     description: "",
     primaryColor: "#6366f1",
+    ctaLabel: "Accès immédiat",
     tags: "",
   });
 
@@ -80,6 +81,7 @@ export default function NewPartnerService() {
           callbackUrl: form.callbackUrl || undefined,
           description: form.description || undefined,
           primaryColor: form.primaryColor || undefined,
+          ctaLabel: form.ctaLabel || undefined,
           tags: form.tags || undefined,
         }),
       });
@@ -178,6 +180,16 @@ export default function NewPartnerService() {
                 rows={3}
                 className="mt-1 w-full rounded-lg border border-surface-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 placeholder="Description courte du SaaS"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-primary-800">Texte bouton CTA</label>
+              <input
+                type="text"
+                value={form.ctaLabel}
+                onChange={(e) => setForm((f) => ({ ...f, ctaLabel: e.target.value }))}
+                className="mt-1 w-full rounded-lg border border-surface-200 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="Accès immédiat"
               />
             </div>
             <div>
