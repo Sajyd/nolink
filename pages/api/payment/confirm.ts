@@ -43,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (userId && paymentMethodId) {
       await prisma.user.update({
         where: { id: userId },
-        data: { stripePaymentMethodId: String(paymentMethodId) },
+        data: { stripePaymentMethodId: String(paymentMethodId) } as any,
       });
     }
     return res.status(200).json({ received: true });
