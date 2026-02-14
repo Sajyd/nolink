@@ -27,17 +27,15 @@ async function signAccessToken(userId: string, partnerId: string): Promise<strin
 async function isProForPartner(userId: string, partnerId: string): Promise<boolean> {
   const subs = await prisma.subscription.findMany({
     where: { userId, status: "active" },
-    select: { partnerId: true },
   });
-  return subs.some((s) => s.partnerId === partnerId);
+  return subs.some((s) => (s as { partnerId: string | null }).partnerId === partnerId);
 }
 
 async function isProLegacy(userId: string): Promise<boolean> {
   const subs = await prisma.subscription.findMany({
     where: { userId, status: "active" },
-    select: { partnerId: true },
   });
-  return subs.some((s) => s.partnerId === null);
+  return subs.some((s) => (s as { partnerId: string | null }).partnerId === null);
 }
 
 async function getTodayUsage(userId: string): Promise<number> {
