@@ -18,14 +18,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const paymentIntentId = (req.query.payment_intent_id as string)?.trim();
   if (!paymentIntentId) return res.status(400).json({ error: "payment_intent_id requis" });
 
-  const tx = await prisma.transaction.findFirst({
+  const db = prisma as any;
+  const tx = await db.transaction.findFirst({
     where: { stripePaymentIntentId: paymentIntentId, userId: session.user.id },
   });
   if (!tx) {
     return res.status(200).json({ status: "pending", token: null });
   }
 
-  const accessToken = await prisma.accessToken.findFirst({
+  const accessToken = await db.accessToken.findFirst({
     where: {
       userId: session.user.id,
       partnerId: tx.partnerId,
