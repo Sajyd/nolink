@@ -52,7 +52,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (plan.amount === 0) {
     await prisma.subscription.upsert({
-      where: { userId_partnerId: { userId, partnerId } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Prisma generated type may omit compound unique
+      where: { userId_partnerId: { userId, partnerId } } as any,
       create: {
         userId,
         partnerId,
