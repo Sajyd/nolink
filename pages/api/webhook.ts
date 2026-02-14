@@ -60,7 +60,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       } else {
         const subs = await prisma.subscription.findMany({
           where: { userId },
-          select: { id: true, partnerId: true },
         });
         const existing = subs.find((s) => s.partnerId === null);
         if (existing) {
@@ -96,7 +95,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (subscriptionId && invoice.customer) {
       const sub = await prisma.subscription.findFirst({
         where: { stripeSubscriptionId: subscriptionId },
-        select: { userId: true, partnerId: true },
       });
       if (sub?.partnerId) {
         await prisma.transaction.create({

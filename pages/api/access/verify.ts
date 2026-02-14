@@ -32,7 +32,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const subs = await prisma.subscription.findMany({
     where: { userId: payload.userId, status: "active" },
-    select: { partnerId: true },
   });
   const subscription_status = subs.some((s) => s.partnerId === payload.partnerId) ? "active" : "freemium";
 

@@ -117,6 +117,7 @@ model Plan {
 }
 
 // --- Abonnement : un par (user, partner) ; partnerId null = abo global legacy ---
+// En API Prisma (TypeScript) on utilise toujours "partnerId" ; en base la colonne est "partner_id" (@map).
 model Subscription {
   id                   String    @id @default(cuid())
   userId               String    @map("user_id")

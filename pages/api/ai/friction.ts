@@ -25,7 +25,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const allSubs = await prisma.subscription.findMany({
     where: { status: "active" },
-    select: { partnerId: true },
   });
   const subscriptions = allSubs.filter((s) => s.partnerId === partnerId).length;
   const transactions = await prisma.transaction.count({

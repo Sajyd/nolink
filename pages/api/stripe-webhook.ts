@@ -50,7 +50,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
       const subs = await prisma.subscription.findMany({
         where: { userId },
-        select: { id: true, partnerId: true },
       });
       const existing = subs.find((s) => s.partnerId === (partnerId || null));
       if (existing) {
