@@ -28,7 +28,7 @@ async function isProForPartner(userId: string, partnerId: string): Promise<boole
   const sub = await prisma.subscription.findFirst({
     where: {
       userId,
-      partnerId,
+      partner: { id: partnerId },
       status: "active",
     },
   });
@@ -40,7 +40,7 @@ async function isProLegacy(userId: string): Promise<boolean> {
     where: {
       userId,
       status: "active",
-      partnerId: null,
+      partner: null,
     },
   });
   return !!sub;
