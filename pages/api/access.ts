@@ -93,7 +93,9 @@ export default async function handler(
     slug?: string;
     return_url?: string;
   };
-  const partner = await prisma.partner.findFirst({
+  const partner = await (
+    prisma as unknown as { partner: { findFirst: (arg: unknown) => Promise<{ id: string; slug: string; url: string | null; callbackUrl?: string } | null> } }
+  ).partner.findFirst({
     where: serviceId ? { id: serviceId } : slug ? { slug } : undefined,
   });
   if (!partner?.url)
