@@ -29,7 +29,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { partnerId, ...data } = body;
   if (!partnerId) return res.status(400).json({ error: "partnerId requis" });
 
-  const partner = await prisma.partner.findFirst({
+  const partnerApi = prisma as unknown as {
+    partner: {
+      findFirst: (arg: { where: { id: string; userId: string } }) => Promise<{ id: string } | null>;
+      update: (arg: { where: { id: string }; data: Record<string, unknown> }) => Promise<unknown>;
+    };
+  };
+  const partner = await partnerApi.partner.findFirst({
     where: { id: partnerId, userId: session.user.id },
   });
   if (!partner) return res.status(403).json({ error: "SaaS inconnu ou non autorisé" });
@@ -45,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (data.features !== undefined) update.features = data.features;
   if (data.tags !== undefined) update.tags = data.tags?.trim() || null;
 
-  await prisma.partner.update({
+  await partnerApi.partner.update({
     where: { id: partnerId },
     data: update,
   });
