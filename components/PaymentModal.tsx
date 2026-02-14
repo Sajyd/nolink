@@ -71,7 +71,7 @@ function PaymentForm({
         setLoading(false);
         return;
       }
-      const setupIntent = result.setupIntent;
+      const setupIntent = "setupIntent" in result ? result.setupIntent : null;
       const pmId =
         typeof setupIntent?.payment_method === "string"
           ? setupIntent.payment_method
