@@ -28,8 +28,8 @@ async function isProForPartner(userId: string, partnerId: string): Promise<boole
   const sub = await prisma.subscription.findFirst({
     where: {
       userId,
-      partner: { id: partnerId },
       status: "active",
+      partner: { id: partnerId },
     },
   });
   return !!sub;
