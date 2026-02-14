@@ -56,8 +56,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     select: { stripeCustomerId: true, stripePaymentMethodId: true } as any,
   });
 
-  let customerId = user?.stripeCustomerId ?? null;
-  let paymentMethodToUse = paymentMethodId ?? user?.stripePaymentMethodId ?? null;
+  let customerId: string | null = (user as { stripeCustomerId?: string | null } | null)?.stripeCustomerId ?? null;
+  let paymentMethodToUse: string | null = paymentMethodId ?? (user as { stripePaymentMethodId?: string | null } | null)?.stripePaymentMethodId ?? null;
 
   if (paymentMethodId && !user?.stripePaymentMethodId) {
     await prisma.user.update({
@@ -89,8 +89,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } = {
     amount,
     currency: "eur",
-    customer: customerId,
-    payment_method: paymentMethodToUse,
+    customer: customerId as string,
+    payment_method: paymentMethodToUse as string,
     confirm: true,
     off_session: true,
     metadata: { nolink_user_id: userId, partner_id: partnerId, plan_id: plan.id },
