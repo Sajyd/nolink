@@ -29,7 +29,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: "partnerId et planId requis" });
   }
 
-  const plan = await prisma.plan.findFirst({
+  const plan = await (
+    prisma as unknown as {
+      plan: {
+        findFirst: (arg: { where: { id: string; partnerId: string }; include: { partner: true } }) => Promise<{
+          id: string;
+          amount: number;
+          partner: { stripeAccountId: string | null };
+        } | null>;
+      };
+    }
+  ).plan.findFirst({
     where: { id: planId, partnerId },
     include: { partner: true },
   });
@@ -52,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (paymentMethodId && !user?.stripePaymentMethodId) {
     await prisma.user.update({
       where: { id: userId },
-      data: { stripePaymentMethodId: paymentMethodId },
+      data: { stripePaymentMethodId: paymentMethodId } as any,
     });
   }
 
