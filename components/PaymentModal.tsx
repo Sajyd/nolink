@@ -3,8 +3,8 @@
  * Résumé : plan, montant, SaaS. Callback onSuccess(token) pour accès immédiat.
  */
 import React, { useState, useEffect } from "react";
+import { loadStripe } from "@stripe/stripe-js";
 import {
-  loadStripe,
   Elements,
   PaymentElement,
   useStripe,
