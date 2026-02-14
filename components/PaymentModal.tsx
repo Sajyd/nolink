@@ -61,7 +61,10 @@ function PaymentForm({
     try {
       const { error: confirmError, setupIntent } = await stripe.confirmSetup({
         elements,
-        confirmParams: { payment_method_data: {} },
+        confirmParams: {
+          return_url: typeof window !== "undefined" ? window.location.href : "",
+          payment_method_data: {},
+        },
       });
       if (confirmError) {
         setError(confirmError.message ?? "Erreur d'enregistrement");
