@@ -72,10 +72,13 @@ function PaymentForm({
         return;
       }
       const setupIntent = "setupIntent" in result ? result.setupIntent : null;
+      const si = setupIntent as { payment_method?: string | { id?: string } | null } | null;
       const pmId =
-        typeof setupIntent?.payment_method === "string"
-          ? setupIntent.payment_method
-          : (setupIntent?.payment_method as { id?: string })?.id ?? null;
+        typeof si?.payment_method === "string"
+          ? si.payment_method
+          : si?.payment_method && typeof si.payment_method === "object"
+            ? (si.payment_method as { id?: string }).id ?? null
+            : null;
       if (!pmId) {
         setError("Mode de paiement introuvable");
         setLoading(false);
