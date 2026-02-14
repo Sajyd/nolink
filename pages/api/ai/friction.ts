@@ -29,7 +29,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     where: { status: "active" },
   });
   const subscriptions = allSubs.filter((s) => (s as unknown as { partnerId: string | null }).partnerId === partnerId).length;
-  const transactions = await prisma.transaction.count({
+  const transactions = await (
+    prisma as unknown as { transaction: { count: (arg: { where: { partnerId: string } }) => Promise<number> } }
+  ).transaction.count({
     where: { partnerId },
   });
   // MVP: estimation. En prod : table events (page_view, checkout_started, checkout_completed).
