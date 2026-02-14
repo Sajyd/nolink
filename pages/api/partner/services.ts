@@ -13,7 +13,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await getServerSession(req, res, authOptions);
   if (!session?.user?.id) return res.status(401).json({ error: "Non connecté" });
 
-  const partners = await prisma.partner.findMany({
+  const partners = await (
+    prisma as unknown as {
+      partner: {
+        findMany: (arg: {
+          where: { userId: string };
+          include: { plans: true };
+          orderBy: { createdAt: "desc" };
+        }) => Promise<
+          Array<{
+            id: string;
+            name: string;
+            slug: string;
+            logoUrl: string | null;
+            primaryColor: string | null;
+            description: string | null;
+            url: string | null;
+            callbackUrl: string | null;
+            tags: string | null;
+            stripeAccountId: string | null;
+            plans: Array<{ id: string; name: string; amount: number; interval: string | null; stripePriceId: string | null; features: unknown }>;
+          }>
+        >;
+      };
+    }
+  ).partner.findMany({
     where: { userId: session.user.id },
     include: { plans: true },
     orderBy: { createdAt: "desc" },
