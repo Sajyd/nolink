@@ -16,6 +16,7 @@
     iframe.src = base + "/s/" + encodeURIComponent(slug) + "?embed=1";
     iframe.title = "Nolink - " + (slug || "abonnement");
     iframe.style.cssText = "width:100%;min-height:400px;border:0;border-radius:8px;";
+    iframe.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups");
     container.appendChild(iframe);
   }
   window.NolinkWidget = {

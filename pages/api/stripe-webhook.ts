@@ -35,24 +35,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     const userId = (session.metadata?.user_id as string) ?? null;
+    const partnerId = (session.metadata?.partner_id as string) ?? null;
+    const planId = (session.metadata?.plan_id as string) ?? null;
     if (userId && session.subscription) {
       const sub = await stripe.subscriptions.retrieve(session.subscription as string);
       const item = sub.items.data[0];
-      const existing = await prisma.subscription.findFirst({
-        where: { userId, partnerId: null },
-      });
       const data = {
         stripeCustomerId: session.customer as string,
         stripeSubscriptionId: sub.id,
         status: sub.status,
         priceId: item?.price?.id ?? undefined,
         currentPeriodEnd: new Date(sub.current_period_end * 1000),
+        planId: planId || undefined,
       };
+      const existing = await prisma.subscription.findFirst({
+        where: { userId, partnerId: partnerId || null },
+      });
       if (existing) {
         await prisma.subscription.update({ where: { id: existing.id }, data });
       } else {
         await prisma.subscription.create({
-          data: { userId, partnerId: null, ...data },
+          data: { userId, partnerId, ...data },
         });
       }
     }

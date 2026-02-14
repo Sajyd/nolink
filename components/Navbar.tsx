@@ -27,6 +27,12 @@ export default function Navbar() {
               >
                 Dashboard
               </Link>
+              <Link
+                href="/partner"
+                className="rounded-lg px-3 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 hover:text-primary-900"
+              >
+                Partenaire
+              </Link>
               <button
                 onClick={() => signOut()}
                 className="rounded-lg bg-surface-200 px-3 py-2 text-sm font-medium text-primary-700 hover:bg-surface-300 hover:text-primary-900"

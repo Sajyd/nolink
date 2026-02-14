@@ -39,7 +39,7 @@ export default function Home() {
         <div className="relative z-10 mx-auto max-w-4xl">
           <section className="flex flex-col items-center py-16 text-center">
             <h1 className="text-balance text-3xl font-semibold tracking-tight text-primary-900 sm:text-4xl md:text-5xl">
-              Un seul compte Nolink, accès immédiat à tous vos SaaS.
+              Un seul compte. Accès immédiat à tous vos SaaS.
             </h1>
             <p className="mt-5 text-lg text-muted sm:text-xl">
               Connexion unique, paiement centralisé, accès en un clic.

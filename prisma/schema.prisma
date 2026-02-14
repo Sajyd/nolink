@@ -24,6 +24,7 @@ model User {
   transactions  Transaction[]
   usages        Usage[]
   accessTokens  AccessToken[]
+  partners      Partner[] // SaaS qu'il possède (dashboard partenaire)
 }
 
 model Account {
@@ -85,9 +86,13 @@ model Partner {
   features         Json?     // bullets features
   stripeAccountId  String?   @map("stripe_account_id") // Stripe Connect
   url              String?   // URL du site du SaaS (redirection accès)
+  callbackUrl      String?   @map("callback_url") // endpoint callback POST après paiement/login
+  userId           String?   @map("user_id") // owner (dashboard partenaire)
+  tags             String?   // catégories/tags (AI ou manuel)
   createdAt        DateTime  @default(now()) @map("created_at")
 
-  plans         Plan[]
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  plans   Plan[]
   subscriptions Subscription[]
   transactions  Transaction[]
   accessTokens  AccessToken[]

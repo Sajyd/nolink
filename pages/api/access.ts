@@ -1,7 +1,7 @@
 /**
  * POST /api/access
- * Crée un accès au SaaS : vérifie session, limite freemium/pro, incrémente usage, retourne l’URL du partenaire.
- * Body: { serviceId } (id partenaire) ou { slug } (slug partenaire).
+ * Vérifie abonnement → génère JWT → optionnel callback POST vers SaaS → retourne url avec token.
+ * Body: { serviceId } ou { slug }. Si pas abonné: 402 + needSubscription + slug pour rediriger vers /s/[slug].
  */
 
 import type { NextApiRequest, NextApiResponse } from "next";
@@ -9,6 +9,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { signAccessToken } from "@/lib/jwt";
 
 const FREE_DAILY_LIMIT = 1;
 
@@ -16,7 +17,7 @@ async function isProForPartner(userId: string, partnerId: string): Promise<boole
   const sub = await prisma.subscription.findFirst({
     where: {
       userId,
-      partner: { id: partnerId },
+      partnerId,
       status: "active",
     },
   });
@@ -52,12 +53,35 @@ async function incrementUsage(userId: string): Promise<void> {
   });
 }
 
+/** POST vers callback URL du partenaire avec user_id, subscription_status, token (JWT) */
+async function notifyCallback(
+  callbackUrl: string,
+  payload: { user_id: string; subscription_status: string; token: string }
+): Promise<void> {
+  try {
+    await fetch(callbackUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    console.error("Callback SaaS failed:", e);
+  }
+}
+
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<{ url?: string; error?: string }>
+  res: NextApiResponse<{
+    url?: string;
+    error?: string;
+    needSubscription?: boolean;
+    slug?: string;
+  }>
 ) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-  if (!checkRateLimit(req)) return res.status(429).json({ error: "Trop de requêtes. Réessayez plus tard." });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
+  if (!checkRateLimit(req))
+    return res.status(429).json({ error: "Trop de requêtes. Réessayez plus tard." });
   const session = await getServerSession(req, res, authOptions);
   if (!session?.user?.id) return res.status(401).json({ error: "Non connecté" });
 
@@ -65,20 +89,35 @@ export default async function handler(
   const partner = await prisma.partner.findFirst({
     where: serviceId ? { id: serviceId } : slug ? { slug } : undefined,
   });
-  if (!partner?.url) return res.status(400).json({ error: "Service inconnu" });
+  if (!partner?.url)
+    return res.status(400).json({ error: "Service inconnu" });
 
   const userId = session.user.id;
-  const pro = await isProForPartner(userId, partner.id) || await isProLegacy(userId);
+  const pro =
+    (await isProForPartner(userId, partner.id)) || (await isProLegacy(userId));
   if (!pro) {
     const used = await getTodayUsage(userId);
     if (used >= FREE_DAILY_LIMIT) {
       return res.status(402).json({
         error:
           "Limite freemium atteinte (1 test/jour). Passez Pro pour un accès illimité.",
+        needSubscription: true,
+        slug: partner.slug,
       });
     }
   }
 
   await incrementUsage(userId);
-  return res.status(200).json({ url: partner.url });
+  const token = await signAccessToken(userId, partner.id);
+  const redirectUrl = `${partner.url}${partner.url.includes("?") ? "&" : "?"}nolink_token=${encodeURIComponent(token)}`;
+
+  if (partner.callbackUrl) {
+    await notifyCallback(partner.callbackUrl, {
+      user_id: userId,
+      subscription_status: pro ? "active" : "freemium",
+      token,
+    });
+  }
+
+  return res.status(200).json({ url: redirectUrl });
 }

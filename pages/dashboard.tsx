@@ -83,6 +83,7 @@ export default function Dashboard({
   usageToday,
 }: DashboardProps) {
   const [services, setServices] = useState<Service[]>([]);
+  const [recommendations, setRecommendations] = useState<Service[]>([]);
   const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
@@ -91,6 +92,17 @@ export default function Dashboard({
       .then(setServices)
       .catch(() => setServices([]));
   }, []);
+
+  useEffect(() => {
+    if (services.length === 0) return;
+    const slug = subscriptions.find((s) => s.partner?.slug)?.partner?.slug ?? services[0]?.slug;
+    if (slug) {
+      fetch(`/api/ai/recommend?slug=${encodeURIComponent(slug)}`)
+        .then((r) => r.json())
+        .then(setRecommendations)
+        .catch(() => setRecommendations([]));
+    }
+  }, [services, subscriptions]);
 
   async function handleManagePayments() {
     setPortalLoading(true);
@@ -174,6 +186,17 @@ export default function Dashboard({
               ))}
             </div>
           </section>
+
+          {recommendations.length > 0 && (
+            <section className="mt-8">
+              <h2 className="text-sm font-semibold text-primary-800">SaaS recommandés pour vous</h2>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {recommendations.map((s) => (
+                  <ServiceCard key={s.id} service={s} />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       </main>
     </>
