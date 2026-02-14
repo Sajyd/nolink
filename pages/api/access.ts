@@ -9,7 +9,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { signAccessToken } from "@/lib/jwt";
+import { signAccessToken } from "../../lib/jwt";
 
 const FREE_DAILY_LIMIT = 1;
 
