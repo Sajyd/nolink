@@ -30,14 +30,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const payload = await verifyAccessToken(token);
   if (!payload) return res.status(401).json({ error: "Invalid or expired token" });
 
-  const sub = await prisma.subscription.findFirst({
-    where: {
-      userId: payload.userId,
-      partnerId: payload.partnerId,
-      status: "active",
-    },
+  const subs = await prisma.subscription.findMany({
+    where: { userId: payload.userId, status: "active" },
+    select: { partnerId: true },
   });
-  const subscription_status = sub ? "active" : "freemium";
+  const subscription_status = subs.some((s) => s.partnerId === payload.partnerId) ? "active" : "freemium";
 
   return res.status(200).json({
     user_id: payload.userId,

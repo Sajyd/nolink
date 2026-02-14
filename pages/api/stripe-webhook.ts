@@ -48,14 +48,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         currentPeriodEnd: new Date(sub.current_period_end * 1000),
         planId: planId || undefined,
       };
-      const existing = await prisma.subscription.findFirst({
-        where: { userId, partnerId: partnerId || null },
+      const subs = await prisma.subscription.findMany({
+        where: { userId },
+        select: { id: true, partnerId: true },
       });
+      const existing = subs.find((s) => s.partnerId === (partnerId || null));
       if (existing) {
         await prisma.subscription.update({ where: { id: existing.id }, data });
       } else {
         await prisma.subscription.create({
-          data: { userId, partnerId, ...data },
+          data: { userId, partnerId: partnerId ?? undefined, ...data },
         });
       }
     }

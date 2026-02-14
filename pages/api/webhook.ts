@@ -58,9 +58,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           update: data,
         });
       } else {
-        const existing = await prisma.subscription.findFirst({
-          where: { userId, partnerId: null },
+        const subs = await prisma.subscription.findMany({
+          where: { userId },
+          select: { id: true, partnerId: true },
         });
+        const existing = subs.find((s) => s.partnerId === null);
         if (existing) {
           await prisma.subscription.update({ where: { id: existing.id }, data });
         } else {
