@@ -6,12 +6,23 @@
 
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
+import { SignJWT } from "jose";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { signAccessToken } from "../../lib/jwt";
 
 const FREE_DAILY_LIMIT = 1;
+const JWT_EXPIRY_SEC = 15 * 60; // 15 min
+
+async function signAccessToken(userId: string, partnerId: string): Promise<string> {
+  const secret = new TextEncoder().encode(
+    process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || "nolink-dev-secret"
+  );
+  return new SignJWT({ userId, partnerId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime(Math.floor(Date.now() / 1000) + JWT_EXPIRY_SEC)
+    .sign(secret);
+}
 
 async function isProForPartner(userId: string, partnerId: string): Promise<boolean> {
   const sub = await prisma.subscription.findFirst({
