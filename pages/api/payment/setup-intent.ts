@@ -23,9 +23,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     let user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { stripeCustomerId: true },
+      select: { stripeCustomerId: true } as any,
     });
-    let customerId = user?.stripeCustomerId ?? null;
+    let customerId: string | null = (user as { stripeCustomerId?: string | null } | null)?.stripeCustomerId ?? null;
 
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -35,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       customerId = customer.id;
       await prisma.user.update({
         where: { id: userId },
-        data: { stripeCustomerId: customerId },
+        data: { stripeCustomerId: customerId } as any,
       });
     }
 
