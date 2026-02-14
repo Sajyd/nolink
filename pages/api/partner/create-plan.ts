@@ -72,7 +72,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  const plan = await prisma.plan.create({
+  const plan = await (
+    prisma as unknown as {
+      plan: {
+        create: (arg: {
+          data: {
+            partnerId: string;
+            name: string;
+            amount: number;
+            interval: string | null;
+            stripePriceId: string | null;
+            features?: string[];
+            isBestChoice: boolean;
+          };
+        }) => Promise<{ id: string; name: string; amount: number; interval: string | null; stripePriceId: string | null; isBestChoice: boolean }>;
+      };
+    }
+  ).plan.create({
     data: {
       partnerId,
       name: name.trim(),
