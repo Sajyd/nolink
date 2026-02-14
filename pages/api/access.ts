@@ -27,6 +27,7 @@ async function signAccessToken(userId: string, partnerId: string): Promise<strin
 async function isProForPartner(userId: string, partnerId: string): Promise<boolean> {
   const subs = await prisma.subscription.findMany({
     where: { userId, status: "active" },
+    select: { partnerId: true },
   });
   return subs.some((s) => s.partnerId === partnerId);
 }
@@ -34,6 +35,7 @@ async function isProForPartner(userId: string, partnerId: string): Promise<boole
 async function isProLegacy(userId: string): Promise<boolean> {
   const subs = await prisma.subscription.findMany({
     where: { userId, status: "active" },
+    select: { partnerId: true },
   });
   return subs.some((s) => s.partnerId === null);
 }
