@@ -46,6 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const existing = await partnerApi.partner.findUnique({ where: { slug } });
   if (existing) return res.status(400).json({ error: "Ce slug est déjà pris" });
 
+  // ctaLabel omitted from create: ensure Prisma client is generated from current schema (prisma generate) to include it
   const partner = await partnerApi.partner.create({
     data: {
       name,
@@ -56,7 +57,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       callbackUrl: body.callbackUrl?.trim() || null,
       description: body.description?.trim() || null,
       primaryColor: body.primaryColor?.trim() || null,
-      ctaLabel: body.ctaLabel?.trim() || null,
       features: body.features ?? undefined,
       tags: body.tags?.trim() || null,
     },
