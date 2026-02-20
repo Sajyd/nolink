@@ -1,8 +1,15 @@
 /**
  * POST /api/payment/confirm
- * Webhook Stripe pour : setup_intent.succeeded (sauvegarde PaymentMethod) et payment_intent.succeeded (création abo + token).
- * Configurer dans Stripe : Webhook endpoint URL = https://votredomaine.com/api/payment/confirm
- * Signature vérifiée avec STRIPE_WEBHOOK_SECRET_PAYMENT (ou STRIPE_WEBHOOK_SECRET si un seul webhook).
+ *
+ * Webhook Stripe pour le flow paiement Nolink.
+ * Configurer dans Stripe Dashboard : Webhook endpoint = https://votredomaine.com/api/payment/confirm
+ * Signing secret : STRIPE_WEBHOOK_SECRET_PAYMENT ou STRIPE_WEBHOOK_SECRET.
+ *
+ * Événements gérés :
+ * - setup_intent.succeeded : sauvegarde du PaymentMethod ID sur User (stripePaymentMethodId).
+ * - payment_intent.succeeded : création Transaction, upsert Subscription active, génération
+ *   JWT d'accès (signAccessToken) et enregistrement AccessToken pour accès immédiat au SaaS.
+ * Sécurité : body brut pour vérification signature Stripe (CSRF non applicable aux webhooks).
  */
 import type { NextApiRequest, NextApiResponse } from "next";
 import stripe from "@/lib/stripe";
@@ -27,7 +34,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const sig = req.headers["stripe-signature"];
   const secret =
     process.env.STRIPE_WEBHOOK_SECRET_PAYMENT || process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret || !stripe) return res.status(500).end();
+  if (!secret?.trim() || !process.env.STRIPE_SECRET_KEY?.trim()) {
+    return res.status(500).end();
+  }
 
   let event: Stripe.Event;
   try {
@@ -43,7 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (userId && paymentMethodId) {
       await prisma.user.update({
         where: { id: userId },
-        data: { stripePaymentMethodId: String(paymentMethodId) } as any,
+        data: { stripePaymentMethodId: String(paymentMethodId) },
       });
     }
     return res.status(200).json({ received: true });
@@ -58,9 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ received: true });
     }
 
-    const db = prisma as any;
-
-    await db.transaction.create({
+    await prisma.transaction.create({
       data: {
         userId,
         partnerId,
@@ -70,7 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     });
 
-    await db.subscription.upsert({
+    await prisma.subscription.upsert({
       where: { userId_partnerId: { userId, partnerId } },
       create: { userId, partnerId, planId, status: "active" },
       update: { planId, status: "active" },
@@ -78,7 +85,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const token = await signAccessToken(userId, partnerId);
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-    await db.accessToken.create({
+    await prisma.accessToken.create({
       data: {
         userId,
         partnerId,

@@ -1,113 +1,136 @@
-/**
- * Inscription : formulaire nom, email, mot de passe ; POST /api/auth/register puis signin et redirection dashboard.
- */
-import Link from "next/link";
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/router";
+import Link from "next/link";
+import Head from "next/head";
+import { Zap, User, Mail, Lock, ArrowRight } from "lucide-react";
+import toast from "react-hot-toast";
 
 export default function Register() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: email.trim(),
+
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Registration failed");
+      }
+
+      const result = await signIn("credentials", {
+        email,
         password,
-        name: name.trim() || undefined,
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    setLoading(false);
+        redirect: false,
+      });
 
-    if (!res.ok) {
-      setError((data as { error?: string }).error ?? "Erreur lors de l'inscription");
-      return;
+      if (result?.ok) {
+        toast.success("Welcome to nolink.ai! You start with 100 free Nolinks.");
+        router.push("/dashboard");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setLoading(false);
     }
-
-    const signInRes = await signIn("credentials", {
-      email: email.trim(),
-      password,
-      redirect: false,
-    });
-
-    if (signInRes?.error) {
-      router.push("/auth/signin?registered=1");
-      return;
-    }
-
-    router.push("/dashboard");
-  }
+  };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <Link href="/" className="mb-8 block text-center text-xl font-semibold text-gray-900">
-          nolink.ai
-        </Link>
+    <>
+      <Head>
+        <title>Sign Up — nolink.ai</title>
+      </Head>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h1 className="text-center text-lg font-semibold text-gray-900">Créer un compte Nolink</h1>
-          <p className="mt-1 text-center text-sm text-gray-500">
-            Un seul compte pour tous vos SaaS
-          </p>
+      <div className="min-h-[80vh] flex items-center justify-center px-4">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <div className="w-12 h-12 rounded-xl bg-brand-600 flex items-center justify-center mx-auto mb-4">
+              <Zap className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold">Create your account</h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Start with 100 free Nolinks credits
+            </p>
+          </div>
 
-          {error && (
-            <div className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-          )}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Name</label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="input-field pl-10"
+                  placeholder="Your name"
+                />
+              </div>
+            </div>
 
-          <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-            <input
-              type="text"
-              placeholder="Nom (optionnel)"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
-            />
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
-              required
-            />
-            <input
-              type="password"
-              placeholder="Mot de passe (min. 8 caractères)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={8}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
-              required
-            />
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="input-field pl-10"
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-field pl-10"
+                  placeholder="••••••••"
+                  required
+                  minLength={6}
+                />
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+              className="btn-primary w-full gap-2"
             >
-              {loading ? "Création…" : "Créer mon compte"}
+              {loading ? "Creating account..." : "Create Account"}
+              <ArrowRight className="w-4 h-4" />
             </button>
           </form>
-        </div>
 
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Déjà un compte ?{" "}
-          <Link href="/auth/signin" className="font-medium text-gray-900 hover:underline">
-            Se connecter
-          </Link>
-        </p>
+          <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
+            Already have an account?{" "}
+            <Link
+              href="/auth/signin"
+              className="text-brand-600 hover:text-brand-700 font-medium"
+            >
+              Sign in
+            </Link>
+          </p>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

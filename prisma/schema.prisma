@@ -1,53 +1,33 @@
-// PostgreSQL (Neon). DATABASE_URL dans .env
-// Schema nolink.ai : utilisateurs, partenaires SaaS, plans, abonnements, transactions.
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-}
-
-// --- NextAuth + Credentials ---
-model User {
-  id                   String    @id @default(cuid())
-  name                 String?
-  email                String?   @unique
-  emailVerified        DateTime?
-  image                String?
-  password             String?
-  stripeCustomerId     String?   @map("stripe_customer_id")
-  stripePaymentMethodId String?  @map("stripe_payment_method_id")
-  accounts             Account[]
-  sessions             Session[]
-  subscriptions        Subscription[]
-  transactions         Transaction[]
-  usages               Usage[]
-  accessTokens         AccessToken[]
-  partners             Partner[] // SaaS qu'il possède (dashboard partenaire)
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Account {
+  id                String  @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?
-  access_token      String?
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?
+  id_token          String? @db.Text
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([provider, providerAccountId])
+  @@unique([provider, providerAccountId])
 }
 
 model Session {
+  id           String   @id @default(cuid())
   sessionToken String   @unique
   userId       String
   expires      DateTime
@@ -60,117 +40,171 @@ model VerificationToken {
   token      String   @unique
   expires    DateTime
 
-  @@id([identifier, token])
+  @@unique([identifier, token])
 }
 
-// --- Usage (limite freemium) ---
-model Usage {
+enum SubscriptionTier {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+model User {
+  id                     String           @id @default(cuid())
+  name                   String?
+  email                  String           @unique
+  emailVerified          DateTime?
+  image                  String?
+  hashedPassword         String?
+  purchasedBalance       Int              @default(100)
+  earnedBalance          Int              @default(0)
+  subscription           SubscriptionTier @default(FREE)
+  stripeCustomerId       String?
+  stripeConnectId        String?
+  stripeConnectOnboarded Boolean          @default(false)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  accounts   Account[]
+  sessions   Session[]
+  workflows  Workflow[]
+  executions Execution[]
+  payouts    Payout[]
+}
+
+enum IOType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+}
+
+enum WorkflowCategory {
+  CONTENT
+  MARKETING
+  DEVELOPMENT
+  DESIGN
+  AUDIO_VIDEO
+  DATA
+  EDUCATION
+  OTHER
+}
+
+model Workflow {
+  id             String           @id @default(cuid())
+  creatorId      String
+  name           String
+  description    String           @db.Text
+  category       WorkflowCategory @default(OTHER)
+  priceInNolinks Int              @default(0)
+  isPublic       Boolean          @default(true)
+  totalUses      Int              @default(0)
+  totalEarnings  Int              @default(0)
+  slug           String           @unique
+  thumbnail      String?
+  tags           String[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  creator    User               @relation(fields: [creatorId], references: [id])
+  steps      Step[]
+  executions Execution[]
+  analytics  WorkflowAnalytics[]
+}
+
+enum StepType {
+  INPUT
+  OUTPUT
+  BASIC
+  FAL_AI
+}
+
+model Step {
+  id         String   @id @default(cuid())
+  workflowId String
+  order      Int
+  name       String
+  stepType   StepType @default(BASIC)
+  aiModel    String?
+  inputType  IOType
+  outputType IOType
+  prompt     String   @db.Text
+  config     Json?
+  params     Json?
+  acceptTypes String[]
+  positionX  Float    @default(0)
+  positionY  Float    @default(0)
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, order])
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model Execution {
+  id           String          @id @default(cuid())
+  workflowId   String
+  userId       String
+  status       ExecutionStatus @default(PENDING)
+  inputs       Json
+  outputs      Json?
+  stepResults  Json?
+  creditsUsed  Int             @default(0)
+  errorMessage String?
+  startedAt    DateTime        @default(now())
+  completedAt  DateTime?
+
+  workflow Workflow @relation(fields: [workflowId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+}
+
+model CreditTransaction {
   id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  date      DateTime @db.Date
-  count     Int      @default(0)
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, date])
-  @@map("usage")
+  userId    String
+  amount    Int
+  type      String
+  wallet    String   @default("purchased")
+  reason    String
+  createdAt DateTime @default(now())
 }
 
-// --- Partenaires SaaS (ex. Notion, Slack, Figma) ---
-model Partner {
-  id               String    @id @default(cuid())
-  name             String
-  slug             String    @unique
-  logoUrl          String?   @map("logo_url")
-  primaryColor     String?   @map("primary_color")
-  ctaLabel         String?   @map("cta_label") // "Accès immédiat" ou personnalisé
-  description      String?
-  features         Json?     // bullets features
-  stripeAccountId  String?   @map("stripe_account_id") // Stripe Connect
-  url              String?   // URL du site du SaaS (redirection accès)
-  callbackUrl      String?   @map("callback_url") // endpoint callback POST après paiement/login
-  userId           String?   @map("user_id") // owner (dashboard partenaire)
-  tags             String?   // catégories/tags (AI ou manuel)
-  createdAt        DateTime  @default(now()) @map("created_at")
-
-  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-  plans   Plan[]
-  subscriptions Subscription[]
-  transactions  Transaction[]
-  accessTokens  AccessToken[]
-
-  @@map("partners")
+enum PayoutStatus {
+  PENDING
+  COMPLETED
+  FAILED
 }
 
-// --- Plans par partenaire (Freemium, Pro, add-ons) ---
-model Plan {
-  id            String   @id @default(cuid())
-  partnerId     String   @map("partner_id")
-  name          String   // "Freemium" | "Pro" | add-on
-  stripePriceId String?  @map("stripe_price_id")
-  amount        Int      @default(0) // centimes, 0 = gratuit
-  interval      String?  // "month" | "year"
-  features      Json?    // bullet points
-  isBestChoice  Boolean  @default(false) @map("is_best_choice") // badge "Meilleur choix"
+model Payout {
+  id               String       @id @default(cuid())
+  userId           String
+  amountNL         Int
+  amountCents      Int
+  stripeTransferId String?
+  status           PayoutStatus @default(PENDING)
+  failureReason    String?
+  createdAt        DateTime     @default(now())
+  completedAt      DateTime?
 
-  partner      Partner       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  subscriptions Subscription[]
-
-  @@map("plans")
+  user User @relation(fields: [userId], references: [id])
 }
 
-// --- Abonnement : un par (user, partner) ; partnerId null = abo global legacy ---
-// En API Prisma (TypeScript) on utilise toujours "partnerId" ; en base la colonne est "partner_id" (@map).
-model Subscription {
-  id                   String    @id @default(cuid())
-  userId               String    @map("user_id")
-  partnerId            String?   @map("partner_id")
-  planId               String?   @map("plan_id")
-  stripeCustomerId     String?   @map("stripe_customer_id")
-  stripeSubscriptionId String?   @map("stripe_subscription_id")
-  status               String?
-  priceId              String?   @map("price_id")
-  currentPeriodEnd     DateTime? @map("current_period_end")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
+model WorkflowAnalytics {
+  id          String   @id @default(cuid())
+  workflowId  String
+  date        DateTime @db.Date
+  runs        Int      @default(0)
+  revenueNL   Int      @default(0)
+  uniqueUsers Int      @default(0)
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  partner Partner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  plan    Plan?   @relation(fields: [planId], references: [id], onDelete: SetNull)
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, partnerId])
-  @@map("subscriptions")
-}
-
-// --- Historique des transactions (dashboard) ---
-model Transaction {
-  id                   String   @id @default(cuid())
-  userId               String   @map("user_id")
-  partnerId            String   @map("partner_id")
-  stripePaymentIntentId String? @map("stripe_payment_intent_id")
-  stripeInvoiceId     String?   @map("stripe_invoice_id")
-  amount               Int      // centimes
-  status               String
-  createdAt            DateTime @default(now()) @map("created_at")
-
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-
-  @@map("transactions")
-}
-
-// --- Token temporaire pour accès sécurisé au SaaS (optionnel) ---
-model AccessToken {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  partnerId String   @map("partner_id")
-  token     String   @unique
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-
-  @@map("access_tokens")
+  @@unique([workflowId, date])
 }

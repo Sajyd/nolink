@@ -1,7 +1,12 @@
 /**
  * POST /api/payment/setup-intent
- * Crée un SetupIntent pour enregistrer une carte (première fois). Retourne client_secret pour Stripe Elements.
- * PCI compliant : la carte n'est jamais envoyée à notre serveur.
+ *
+ * Crée un SetupIntent pour enregistrer une carte (première utilisation).
+ * Retourne client_secret pour Stripe Elements (PaymentElement).
+ * - Crée un Stripe Customer si l'utilisateur n'en a pas (metadata nolink_user_id).
+ * - usage: "off_session" pour paiements ultérieurs sans présence du client.
+ * PCI compliant : la carte n'est jamais envoyée à notre serveur (Stripe Elements).
+ * Auth : session NextAuth obligatoire. Rate limit appliqué.
  */
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
@@ -17,15 +22,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!session?.user?.id || !session?.user?.email) {
     return res.status(401).json({ error: "Non connecté" });
   }
-  if (!stripe) return res.status(500).json({ error: "Stripe non configuré" });
+  if (!process.env.STRIPE_SECRET_KEY?.trim()) {
+    return res.status(500).json({ error: "Stripe non configuré" });
+  }
 
   const userId = session.user.id;
   try {
-    let user = await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { stripeCustomerId: true } as any,
+      select: { stripeCustomerId: true },
     });
-    let customerId: string | null = (user as { stripeCustomerId?: string | null } | null)?.stripeCustomerId ?? null;
+    let customerId: string | null =
+      (user as { stripeCustomerId?: string | null } | null)?.stripeCustomerId ?? null;
 
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -35,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       customerId = customer.id;
       await prisma.user.update({
         where: { id: userId },
-        data: { stripeCustomerId: customerId } as any,
+        data: { stripeCustomerId: customerId },
       });
     }
 

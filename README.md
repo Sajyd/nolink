@@ -1,97 +1,114 @@
-# nolink.ai — MVP
+# nolink.ai — AI Workflow Marketplace
 
-**Un seul compte. Accès immédiat à tous vos SaaS.**
+Build, share, and monetize multi-step AI workflows. Chain text, image, audio, video, and document AI models together with a visual drag-and-drop builder.
 
-Plateforme centralisant les abonnements SaaS : login unique, paiement centralisé Stripe, accès immédiat aux services. Deux espaces : **utilisateur** (client final) et **partenaire** (développeur SaaS).
+## Features
 
-## Setup (shippable en 24h)
+- **Visual Workflow Builder** — Drag-and-drop whiteboard with React Flow for chaining AI steps
+- **Multi-Model Support** — GPT-4, DALL·E 3, Whisper, Stable Diffusion, Runway, ElevenLabs, and more
+- **Marketplace** — Publish workflows publicly and browse community creations
+- **Pay-Per-Use Credits (Nolinks)** — Subscribe monthly or buy credit packs via Stripe
+- **Creator Earnings** — 70% commission on paid workflow runs via Stripe Connect
+- **Light/Dark Mode** — Minimalist UI with theme toggle
+- **Workflow Execution** — Submit input, watch steps execute sequentially, see results
+
+## Tech Stack
+
+- **Frontend:** Next.js 14 + TailwindCSS + Framer Motion
+- **Backend:** Next.js API Routes
+- **Database:** PostgreSQL via Prisma
+- **Auth:** NextAuth.js (credentials)
+- **Payments:** Stripe + Stripe Connect
+- **AI:** OpenAI (GPT-4, DALL·E 3, Whisper) + pluggable model system
+- **State:** Zustand
+- **Workflow Builder:** @xyflow/react (React Flow)
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- PostgreSQL database
+- Stripe account (for payments)
+- OpenAI API key (for AI execution)
+
+### Setup
+
+1. **Clone and install:**
+
+```bash
+git clone <repo>
+cd nolink-ai
+npm install
+```
+
+2. **Configure environment:**
 
 ```bash
 cp .env.local.example .env.local
-# Renseigner : NEXTAUTH_*, GOOGLE_*, DATABASE_URL, STRIPE_*, optionnel OPENAI_API_KEY
-npm install
-npx prisma generate
+# Edit .env.local with your credentials
+```
+
+3. **Set up database:**
+
+```bash
 npx prisma db push
-npx prisma db seed   # optionnel : partenaires Notion, Slack, Figma
+npm run db:seed
+```
+
+4. **Start development server:**
+
+```bash
 npm run dev
 ```
 
-## Structure des pages
+5. **Open** http://localhost:3000
 
-| Page | Description |
-|------|-------------|
-| `/` | Landing SaaS — « Connectez votre SaaS et débloquez l'accès premium instantané » |
-| `/login`, `/signup` | Redirections vers `/auth/signin`, `/auth/register` |
-| `/dashboard` | Dashboard utilisateur (abonnements, services) |
-| `/partner` | Dashboard SaaS (Accueil, Mes services, Intégration, Analytics) |
-| `/partner/new` | Création d'un service SaaS |
-| `/partner/[id]` | Détail service : Stripe Connect, plans, intégration |
-| `/services/[id]` | Redirection vers `/partner/[id]` |
-| `/plans/[id]` | Édition d'un plan |
-| `/s/[slug]` | Page abonnement publique (plans, CTA) |
+### Demo Accounts
 
-## Architecture
+After seeding:
 
-### 1) Espace utilisateur (client final)
+| Account  | Email               | Password     | Balance   |
+|----------|---------------------|--------------|-----------|
+| Creator  | creator@nolink.ai   | demo123456   | 5,000 NL  |
+| User     | demo@nolink.ai      | demo123456   | 500 NL    |
 
-- **Landing** : tagline, 3 étapes (créer compte → choisir SaaS → accès immédiat), CTA.
-- **Auth** : NextAuth — email/mot de passe + Google OAuth, session JWT.
-- **Dashboard** : liste des SaaS (logo, description, prix), bouton « Accès immédiat » ; abonnements actifs ; factures / moyen de paiement via Stripe Customer Portal.
-- **Flow accès** : clic → vérif abonnement → si pas abonné → page abonnement `/s/[slug]` → paiement Stripe → activation → JWT → redirection vers le SaaS avec `?nolink_token=...`. Optionnel : POST callback vers l’endpoint du partenaire (`user_id`, `subscription_status`, `token`).
+## Pages
 
-### 2) Espace partenaire (SaaS)
+| Route              | Description                        |
+|--------------------|------------------------------------|
+| `/`                | Landing page                       |
+| `/marketplace`     | Browse public workflows            |
+| `/create-workflow` | Drag-and-drop workflow builder     |
+| `/workflow/[id]`   | View and execute a workflow        |
+| `/dashboard`       | User dashboard, credits, history   |
+| `/auth/signin`     | Sign in                            |
+| `/auth/register`   | Create account                     |
 
-- **Dashboard SaaS** (`/partner`) : onglets Accueil (stats), Mes services, Intégration (snippet JS/iframe), Analytics (abonnements, revenus, AI recommendations).
-- **Création SaaS** : nom, slug, logo, URL service, endpoint callback, description, couleurs, ctaLabel (ex. « Accès immédiat »), tags.
-- **Stripe Connect** : onboarding Express pour recevoir les paiements.
-- **Plans** : création de plans (nom, prix mensuel/annuel, features en bullet points, badge « Meilleur choix »). Stripe Connect : Product + Price créés automatiquement sur le compte partenaire.
-- **Intégration** :
-  - **Widget** : `<script src="https://nolink.ai/widget.js" data-slug="mon-saas"></script>`
-  - **iframe** : `<iframe src="https://nolink.ai/s/mon-saas?embed=1" sandbox="..."></iframe>`
-- **Callback** : après paiement/login, POST vers l’URL configurée avec `user_id`, `subscription_status`, `token` (JWT). Vérification du token : `GET /api/access/verify?token=xxx`.
+## API Routes
 
-### 3) AI (optionnel, avec `OPENAI_API_KEY`)
+| Route                           | Method | Description              |
+|---------------------------------|--------|--------------------------|
+| `/api/auth/[...nextauth]`       | *      | NextAuth.js endpoints    |
+| `/api/auth/register`            | POST   | Register new user        |
+| `/api/workflows`                | GET    | List public workflows    |
+| `/api/workflows`                | POST   | Create workflow          |
+| `/api/workflows/[id]`           | GET    | Get workflow details     |
+| `/api/workflows/[id]`           | PUT    | Update workflow          |
+| `/api/workflows/[id]`           | DELETE | Delete workflow          |
+| `/api/workflows/[id]/execute`   | POST   | Execute workflow         |
+| `/api/credits/balance`          | GET    | Get credit balance       |
+| `/api/credits/purchase`         | POST   | Purchase credits         |
+| `/api/stripe/webhook`           | POST   | Stripe webhook handler   |
 
-- **Génération** : description + tags depuis l’URL du site (formulaire partenaire).
-- **Recommandations** : SaaS similaires sur le dashboard utilisateur.
-- **Friction** : analyse conversion / abandon checkout et suggestions pour le partenaire.
+## Currency System
 
-## API principales
+- **Nolinks (NL)** — Platform credits used to run workflows
+- New users start with **100 NL** free
+- Credit packs: 100 NL ($4.99), 500 NL ($19.99), 1,200 NL ($39.99)
+- Subscription tiers: Free, Starter, Pro, Enterprise
+- Creators earn **70%** commission on paid workflow runs
 
-| Route | Description |
-|-------|-------------|
-| `GET /api/services` | Liste des SaaS (public) |
-| `POST /api/access` | Accès SaaS → JWT + url de redirection (user) |
-| `GET /api/access/verify` | Vérification JWT (côté SaaS) |
-| `POST /api/create-subscription` | Création abonnement (partnerId, planId) |
-| `POST /api/stripe-webhook` | Webhook Stripe (checkout, subscription) |
-| `GET /api/partner/analytics` | Stats dashboard (services, abonnements, revenus) |
-| `GET/POST/PATCH /api/partner/*` | CRUD partenaire (services, plans, Connect, update-plan) |
-| `POST /api/ai/generate-service` | Génération description/tags depuis URL |
-| `GET /api/ai/recommend?slug=` | Recommandations SaaS |
-| `GET /api/ai/friction?partnerId=` | Analyse friction partenaire |
+## License
 
-## Base de données (PostgreSQL / Neon)
-
-- **Modèles** : User, Account, Session, Partner, Plan, Subscription, Transaction, Usage, AccessToken.
-- **Partner** : `callbackUrl`, `userId` (owner), `tags` pour le dashboard partenaire et l’AI.
-- Après changement de schéma : `npx prisma generate` puis `npx prisma db push`.
-
-## Stripe
-
-- **Checkout** : un prix Stripe par plan payant (`stripePriceId` sur Plan). Metadata : `user_id`, `partner_id`, `plan_id` pour le webhook.
-- **Connect** : onboarding Express pour les partenaires (dashboard partenaire).
-- **Webhook** : `https://votredomaine.com/api/stripe-webhook` — `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`.
-
-## Sécurité
-
-- JWT signés (NEXTAUTH_SECRET / jose) pour les tokens d’accès.
-- Rate limiting (API) en mémoire.
-- HTTPS only en production.
-- CSP `frame-ancestors` : `*` pour `/s/*?embed=1`, `'self'` sinon.
-- iframe `sandbox` sur le widget.
-- Headers : `X-Content-Type-Options: nosniff`, `Referrer-Policy`.
-
-## Déploiement (Vercel)
-
-Connecter le repo, ajouter les variables d’env (NEXTAUTH_URL en prod, Stripe, DB, optionnel OPENAI), déployer. Configurer le webhook Stripe sur l’URL de production.
+MIT

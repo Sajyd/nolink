@@ -1,1 +1,0 @@
-import{a,b,c,d,e,f,g,h,i}from"./chunk-4UQZADGV.mjs";export{i as getConfig,h as getEmbedUrl,e as handleReturnToken,a as init,d as onAccessError,c as onSubscriptionSuccess,f as recommendNextServices,b as showAccessButton,g as verifyToken};

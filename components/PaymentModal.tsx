@@ -1,6 +1,13 @@
 /**
- * Modal de paiement Nolink : première saisie de carte (SetupIntent + Stripe Elements) ou confirmation 3DS.
- * Résumé : plan, montant, SaaS. Callback onSuccess(token) pour accès immédiat.
+ * PaymentModal — Flow paiement centralisé Nolink
+ *
+ * Deux cas d'usage :
+ * 1) Première utilisation (pas de carte) : formulaire Stripe Elements (SetupIntent).
+ *    Après confirmSetup → create-payment avec paymentMethodId → si 3DS on confirme puis poll status.
+ *    Callback onSuccess(token) pour accès immédiat au SaaS.
+ * 2) Confirmation 3DS uniquement : paymentIntentClientSecret fourni (paiement déjà initié avec carte enregistrée).
+ *    confirmCardPayment puis poll /api/payment/status pour récupérer le token.
+ * UI : résumé plan, montant, partenaire. Responsive, modal centré. PCI compliant via Stripe.
  */
 import React, { useState, useEffect } from "react";
 import { loadStripe } from "@stripe/stripe-js";
@@ -237,6 +244,11 @@ export default function PaymentModal({
         <p className="mb-2 text-sm text-gray-600">
           {planName} — €{(amount / 100).toFixed(2)}
         </p>
+        {!paymentIntentClientSecret && setupClientSecret && (
+          <p className="mb-3 text-xs text-gray-500">
+            Enregistrez votre carte pour les prochains paiements en 1 clic.
+          </p>
+        )}
 
         {paymentIntentClientSecret ? (
           <p className="py-8 text-center text-gray-600">

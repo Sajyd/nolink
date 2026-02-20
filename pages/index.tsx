@@ -1,113 +1,209 @@
-/**
- * Landing page nolink.ai
- * Double CTA : utilisateurs finaux ET développeurs SaaS.
- * Tagline principal pour SaaS : "Connectez votre SaaS et débloquez l'accès premium instantané."
- */
-
-import Navbar from "@/components/Navbar";
 import Link from "next/link";
+import Head from "next/head";
 import { useSession } from "next-auth/react";
+import Logo from "../components/Logo";
+import {
+  Zap,
+  ArrowRight,
+  Layers,
+  CreditCard,
+  Globe,
+  Sparkles,
+  Play,
+  Shield,
+} from "lucide-react";
+import { motion } from "framer-motion";
 
-const STEPS = [
+const FEATURES = [
   {
-    title: "Connectez votre SaaS",
-    description: "Inscrivez-vous et connectez Stripe en quelques clics.",
-    step: 1,
+    icon: Layers,
+    title: "Visual Workflow Builder",
+    description:
+      "Drag-and-drop whiteboard to chain AI models together. Text, image, audio, video, documents — all connected.",
   },
   {
-    title: "Créez vos services et plans",
-    description: "Définissez Free, Pro, Premium avec un seul formulaire.",
-    step: 2,
+    icon: Sparkles,
+    title: "Multi-Model AI",
+    description:
+      "GPT-4, DALL·E 3, Whisper, Stable Diffusion, Runway, ElevenLabs — pick the right model for each step.",
   },
   {
-    title: "Intégrez le SDK",
-    description: "Copiez un snippet JS — bouton « Accès immédiat » prêt à l'emploi.",
-    step: 3,
+    icon: CreditCard,
+    title: "Pay-Per-Use Credits",
+    description:
+      "Buy Nolinks credits or subscribe monthly. Run any workflow for a transparent, predictable cost.",
+  },
+  {
+    icon: Globe,
+    title: "Marketplace",
+    description:
+      "Publish your workflows and earn commissions. Discover automation built by the community.",
+  },
+  {
+    icon: Play,
+    title: "One-Click Execution",
+    description:
+      "Submit your input and watch the workflow run step-by-step. Results appear in real time.",
+  },
+  {
+    icon: Shield,
+    title: "Creator Earnings",
+    description:
+      "Creators earn 70% commission on every paid workflow run via Stripe Connect. Automatic payouts.",
   },
 ];
 
+const WORKFLOW_EXAMPLES = [
+  { name: "Blog → Social Media", steps: 3, category: "Content", price: 8 },
+  { name: "Audio Transcription + Summary", steps: 2, category: "Audio", price: 5 },
+  { name: "Product Image + Description", steps: 3, category: "Marketing", price: 12 },
+  { name: "Code Review Pipeline", steps: 2, category: "Development", price: 6 },
+  { name: "PDF Analysis Report", steps: 3, category: "Data", price: 10 },
+];
+
 export default function Home() {
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
 
   return (
     <>
-      <Navbar />
-      <main className="relative min-h-screen overflow-hidden px-4 pt-14 pb-20">
-        <div
-          className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary-50/80 via-surface-50 to-primary-100/40"
-          aria-hidden
-        />
-        <div className="relative z-10 mx-auto max-w-4xl">
-          <section className="flex flex-col items-center py-16 text-center">
-            <h1 className="text-balance text-3xl font-semibold tracking-tight text-primary-900 sm:text-4xl md:text-5xl">
-              Connectez votre SaaS et débloquez l&apos;accès premium instantané pour vos utilisateurs
+      <Head>
+        <title>nolink.ai — AI Workflow Marketplace</title>
+      </Head>
+
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-brand-50/50 to-transparent dark:from-brand-950/30 dark:to-transparent" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-brand-200/20 via-transparent to-transparent dark:from-brand-800/10" />
+
+        <div className="relative max-w-5xl mx-auto px-4 pt-24 pb-20 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 text-sm font-medium mb-6">
+              <Zap className="w-3.5 h-3.5" />
+              AI Workflow Marketplace
+            </div>
+
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.1]">
+              Chain AI models.
+              <br />
+              <span className="gradient-text">Ship automations.</span>
             </h1>
-            <p className="mt-5 text-lg text-muted sm:text-xl">
-              Stripe Connect, SDK en 5 minutes, paiement centralisé — un seul bouton à intégrer.
+
+            <p className="mt-6 text-lg sm:text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto leading-relaxed">
+              Build multi-step AI workflows with a visual editor. Combine text,
+              image, audio, video, and document models — then publish to the
+              marketplace or keep them private.
             </p>
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-              {status === "loading" ? (
-                <span className="rounded-xl bg-surface-200/60 px-5 py-2.5 text-sm font-medium text-muted">
-                  Chargement…
-                </span>
-              ) : session ? (
+
+            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+              {session ? (
                 <>
-                  <Link
-                    href="/partner"
-                    className="rounded-xl bg-primary-600 px-6 py-3.5 text-sm font-medium text-white shadow-soft hover:bg-primary-500 hover:shadow-glow focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
-                  >
-                    Dashboard SaaS
+                  <Link href="/create-workflow" className="btn-primary text-base px-8 py-3 gap-2">
+                    Create Workflow
+                    <ArrowRight className="w-4 h-4" />
                   </Link>
-                  <Link
-                    href="/dashboard"
-                    className="rounded-xl border border-primary-300 bg-white px-6 py-3.5 text-sm font-medium text-primary-700 hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
-                  >
-                    Mon compte
+                  <Link href="/marketplace" className="btn-secondary text-base px-8 py-3">
+                    Browse Marketplace
                   </Link>
                 </>
               ) : (
                 <>
-                  <Link
-                    href="/auth/register"
-                    className="rounded-xl bg-primary-600 px-6 py-3.5 text-sm font-medium text-white shadow-soft hover:bg-primary-500 hover:shadow-glow focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
-                  >
-                    Créer mon compte
+                  <Link href="/auth/register" className="btn-primary text-base px-8 py-3 gap-2">
+                    Get Started Free
+                    <ArrowRight className="w-4 h-4" />
                   </Link>
-                  <Link
-                    href="/auth/signin"
-                    className="rounded-xl border border-primary-300 bg-white px-6 py-3.5 text-sm font-medium text-primary-700 hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
-                  >
-                    Se connecter
+                  <Link href="/marketplace" className="btn-secondary text-base px-8 py-3">
+                    Explore Workflows
                   </Link>
                 </>
               )}
             </div>
-          </section>
+          </motion.div>
 
-          <section className="border-t border-surface-200/80 pt-16">
-            <h2 className="text-center text-2xl font-semibold text-primary-900">
-              Comment ça marche
-            </h2>
-            <div className="mt-10 grid gap-8 sm:grid-cols-3">
-              {STEPS.map(({ title, description, step }) => (
-                <div
-                  key={step}
-                  className="flex flex-col items-center rounded-2xl border border-surface-200/80 bg-white/80 p-6 text-center shadow-soft"
-                >
-                  <span
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-lg font-semibold text-primary-700"
-                    aria-hidden
-                  >
-                    {step}
-                  </span>
-                  <h3 className="mt-4 font-semibold text-primary-900">{title}</h3>
-                  <p className="mt-2 text-sm text-muted">{description}</p>
-                </div>
-              ))}
-            </div>
-          </section>
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="mt-16 grid grid-cols-2 sm:grid-cols-5 gap-3 max-w-3xl mx-auto"
+          >
+            {WORKFLOW_EXAMPLES.map((w) => (
+              <div
+                key={w.name}
+                className="card p-3 text-center hover:scale-105 transition-transform cursor-default"
+              >
+                <p className="text-[10px] text-brand-500 font-medium">{w.category}</p>
+                <p className="text-xs font-semibold mt-1 truncate">{w.name}</p>
+                <p className="text-[10px] text-gray-400 mt-1">
+                  {w.steps} steps · {w.price} NL
+                </p>
+              </div>
+            ))}
+          </motion.div>
         </div>
-      </main>
+      </section>
+
+      <section className="max-w-6xl mx-auto px-4 py-24">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl sm:text-4xl font-bold">
+            Everything you need to{" "}
+            <span className="gradient-text">automate with AI</span>
+          </h2>
+          <p className="mt-4 text-gray-600 dark:text-gray-400 max-w-xl mx-auto">
+            Build, share, and monetize multi-step AI workflows.
+          </p>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {FEATURES.map((feature, i) => (
+            <motion.div
+              key={feature.title}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4, delay: i * 0.1 }}
+              className="card p-6 hover:border-brand-200 dark:hover:border-brand-800 transition-colors"
+            >
+              <div className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center mb-4">
+                <feature.icon className="w-5 h-5 text-brand-600" />
+              </div>
+              <h3 className="font-semibold text-lg">{feature.title}</h3>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                {feature.description}
+              </p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      <section className="max-w-4xl mx-auto px-4 py-24 text-center">
+        <div className="card p-10 sm:p-16 bg-gradient-to-br from-brand-600 to-violet-600 !border-0 text-white">
+          <h2 className="text-3xl sm:text-4xl font-bold">Ready to build?</h2>
+          <p className="mt-4 text-brand-100 text-lg max-w-lg mx-auto">
+            Start with 100 free Nolinks. Create your first workflow in minutes.
+          </p>
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              href={session ? "/create-workflow" : "/auth/register"}
+              className="inline-flex items-center gap-2 px-8 py-3 rounded-xl bg-white text-brand-700 font-semibold hover:bg-brand-50 transition-colors"
+            >
+              {session ? "Create Workflow" : "Sign Up Free"}
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-gray-200 dark:border-gray-800 py-8">
+        <div className="max-w-6xl mx-auto px-4 flex items-center justify-between text-sm text-gray-500">
+          <div className="flex items-center gap-2">
+            <Logo size={24} />
+            <span>nolink.ai</span>
+          </div>
+          <p>&copy; {new Date().getFullYear()} nolink.ai. All rights reserved.</p>
+        </div>
+      </footer>
     </>
   );
 }

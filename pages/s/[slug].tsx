@@ -40,6 +40,8 @@ type PartnerPageProps = {
     plans: Plan[];
   } | null;
   session: { user?: { id: string } } | null;
+  /** True si l'utilisateur a déjà une carte enregistrée (paiement instantané). */
+  hasPaymentMethod: boolean;
 };
 
 export const getServerSideProps: GetServerSideProps<PartnerPageProps> = async (context) => {
@@ -56,6 +58,17 @@ export const getServerSideProps: GetServerSideProps<PartnerPageProps> = async (c
 
   if (!partner) {
     return { notFound: true };
+  }
+
+  let hasPaymentMethod = false;
+  if (session?.user?.id) {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { stripePaymentMethodId: true },
+    });
+    hasPaymentMethod = Boolean(
+      (user as { stripePaymentMethodId?: string | null } | null)?.stripePaymentMethodId
+    );
   }
 
   const plans: Plan[] = partner.plans.map((p) => ({
@@ -85,11 +98,12 @@ export const getServerSideProps: GetServerSideProps<PartnerPageProps> = async (c
         plans,
       },
       session: session ? { user: { id: session.user?.id } } : null,
+      hasPaymentMethod,
     },
   };
 };
 
-export default function PartnerPage({ partner, embed, session }: PartnerPageProps) {
+export default function PartnerPage({ partner, embed, session, hasPaymentMethod }: PartnerPageProps) {
   const router = useRouter();
   const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
   const [paymentModal, setPaymentModal] = useState<{
@@ -248,6 +262,11 @@ export default function PartnerPage({ partner, embed, session }: PartnerPageProp
                   ))}
                 </ul>
               ) : null}
+              {plan.amount > 0 && hasPaymentMethod && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Paiement instantané avec votre carte enregistrée
+                </p>
+              )}
               <button
                 type="button"
                 onClick={() => handlePlanClick(plan.id, plan.amount)}

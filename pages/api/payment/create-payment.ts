@@ -1,10 +1,14 @@
 /**
  * POST /api/payment/create-payment
- * Crée un PaymentIntent pour paiement instantané (carte déjà enregistrée ou après SetupIntent).
+ *
+ * Crée un PaymentIntent off_session pour paiement instantané (carte déjà enregistrée
+ * ou paymentMethodId venant d'un SetupIntent fraîchement confirmé).
  * Body: { partnerId, planId, paymentMethodId? }.
- * Si paymentMethodId fourni (après SetupIntent), on l'attache au customer et on charge.
- * Sinon on utilise le stripePaymentMethodId de l'utilisateur (paiement transparent).
- * Split vers le compte Stripe Connect du partenaire via transfer_data.destination.
+ * - Si paymentMethodId fourni (après confirmSetup côté client) : on le persiste sur le user puis on charge.
+ * - Sinon : on utilise stripePaymentMethodId de l'utilisateur (paiement en 1 clic).
+ * Revenue split : transfer_data.destination = Stripe Connect Account ID du partenaire (Partner.stripeAccountId).
+ * SCA/3DS : si status requires_action, le client doit confirmer avec client_secret (PaymentModal).
+ * Auth : session NextAuth. Rate limit.
  */
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
@@ -18,7 +22,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!checkRateLimit(req)) return res.status(429).json({ error: "Trop de requêtes." });
   const session = await getServerSession(req, res, authOptions);
   if (!session?.user?.id) return res.status(401).json({ error: "Non connecté" });
-  if (!stripe) return res.status(500).json({ error: "Stripe non configuré" });
+  if (!process.env.STRIPE_SECRET_KEY?.trim()) {
+    return res.status(500).json({ error: "Stripe non configuré" });
+  }
 
   const { partnerId, planId, paymentMethodId } = (req.body ?? {}) as {
     partnerId?: string;
@@ -29,17 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: "partnerId et planId requis" });
   }
 
-  const plan = await (
-    prisma as unknown as {
-      plan: {
-        findFirst: (arg: { where: { id: string; partnerId: string }; include: { partner: true } }) => Promise<{
-          id: string;
-          amount: number;
-          partner: { stripeAccountId: string | null };
-        } | null>;
-      };
-    }
-  ).plan.findFirst({
+  const plan = await prisma.plan.findFirst({
     where: { id: planId, partnerId },
     include: { partner: true },
   });
@@ -53,16 +49,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const userId = session.user.id;
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { stripeCustomerId: true, stripePaymentMethodId: true } as any,
+    select: { stripeCustomerId: true, stripePaymentMethodId: true },
   });
 
-  let customerId: string | null = (user as { stripeCustomerId?: string | null } | null)?.stripeCustomerId ?? null;
-  let paymentMethodToUse: string | null = paymentMethodId ?? (user as { stripePaymentMethodId?: string | null } | null)?.stripePaymentMethodId ?? null;
+  let customerId: string | null =
+    (user as { stripeCustomerId?: string | null } | null)?.stripeCustomerId ?? null;
+  let paymentMethodToUse: string | null =
+    paymentMethodId ??
+    (user as { stripePaymentMethodId?: string | null } | null)?.stripePaymentMethodId ??
+    null;
 
-  if (paymentMethodId && !user?.stripePaymentMethodId) {
+  if (paymentMethodId && !(user as { stripePaymentMethodId?: string | null })?.stripePaymentMethodId) {
     await prisma.user.update({
       where: { id: userId },
-      data: { stripePaymentMethodId: paymentMethodId } as any,
+      data: { stripePaymentMethodId: paymentMethodId },
     });
   }
 
@@ -74,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const amount = plan.amount;
-  const stripeAccountId = plan.partner.stripeAccountId ?? undefined;
+  const stripeAccountId = (plan.partner as { stripeAccountId: string | null }).stripeAccountId ?? undefined;
 
   const paymentIntentParams: {
     amount: number;
@@ -84,13 +84,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     confirm: boolean;
     off_session: boolean;
     metadata: { nolink_user_id: string; partner_id: string; plan_id: string };
-    automatic_payment_methods?: { enabled: boolean };
     transfer_data?: { destination: string };
   } = {
     amount,
     currency: "eur",
-    customer: customerId as string,
-    payment_method: paymentMethodToUse as string,
+    customer: customerId,
+    payment_method: paymentMethodToUse,
     confirm: true,
     off_session: true,
     metadata: { nolink_user_id: userId, partner_id: partnerId, plan_id: plan.id },
