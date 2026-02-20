@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       name: name || email.split("@")[0],
       email,
       hashedPassword,
-      purchasedBalance: 100,
+      purchasedBalance: 50,
     },
   });
 

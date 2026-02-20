@@ -180,7 +180,7 @@ export default function Home() {
         <div className="card p-10 sm:p-16 bg-gradient-to-br from-brand-600 to-violet-600 !border-0 text-white">
           <h2 className="text-3xl sm:text-4xl font-bold">Ready to build?</h2>
           <p className="mt-4 text-brand-100 text-lg max-w-lg mx-auto">
-            Start with 100 free Nolinks. Create your first workflow in minutes.
+            Start with 50 free Nolinks. Create your first workflow in minutes.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link

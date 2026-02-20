@@ -57,7 +57,7 @@ model User {
   emailVerified          DateTime?
   image                  String?
   hashedPassword         String?
-  purchasedBalance       Int              @default(100)
+  purchasedBalance       Int              @default(50)
   earnedBalance          Int              @default(0)
   subscription           SubscriptionTier @default(FREE)
   stripeCustomerId       String?

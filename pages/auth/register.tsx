@@ -60,7 +60,7 @@ export default function Register() {
       });
 
       if (result?.ok) {
-        toast.success("Welcome to nolink.ai! You start with 100 free Nolinks.");
+        toast.success("Welcome to nolink.ai! You start with 50 free Nolinks.");
         router.push("/dashboard");
       }
     } catch (err) {
@@ -89,7 +89,7 @@ export default function Register() {
             </div>
             <h1 className="text-2xl font-bold">Create your account</h1>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Start with 100 free Nolinks credits
+              Start with 50 free Nolinks credits
             </p>
           </div>
 
