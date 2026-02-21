@@ -12,6 +12,8 @@ import {
   Shield,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import type { GetServerSideProps } from "next";
+import prisma from "@/lib/prisma";
 
 const FEATURES = [
   {
@@ -52,16 +54,29 @@ const FEATURES = [
   },
 ];
 
-const WORKFLOW_EXAMPLES = [
-  { name: "Blog → Social Media", steps: 3, category: "Content", price: 8 },
-  { name: "Audio Transcription + Summary", steps: 2, category: "Audio", price: 5 },
-  { name: "Product Image + Description", steps: 3, category: "Marketing", price: 12 },
-  { name: "Code Review Pipeline", steps: 2, category: "Development", price: 6 },
-  { name: "PDF Analysis Report", steps: 3, category: "Data", price: 10 },
+const FALLBACK_EXAMPLES = [
+  { name: "Blog → Social Media", steps: 3, category: "Content", price: 8, slug: "" },
+  { name: "Audio Transcription + Summary", steps: 2, category: "Audio", price: 5, slug: "" },
+  { name: "Product Image + Description", steps: 3, category: "Marketing", price: 12, slug: "" },
+  { name: "Code Review Pipeline", steps: 2, category: "Development", price: 6, slug: "" },
+  { name: "PDF Analysis Report", steps: 3, category: "Data", price: 10, slug: "" },
 ];
 
-export default function Home() {
+interface WorkflowExample {
+  name: string;
+  steps: number;
+  category: string;
+  price: number;
+  slug: string;
+}
+
+function formatCategory(cat: string) {
+  return cat.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowExample[] }) {
   const { data: session } = useSession();
+  const examples = popularWorkflows.length > 0 ? popularWorkflows : FALLBACK_EXAMPLES;
 
   return (
     <div className="dark:bg-gradient-to-b dark:from-[#0a1628] dark:via-[#060f1f] dark:to-black">
@@ -127,18 +142,33 @@ export default function Home() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="mt-16 grid grid-cols-2 sm:grid-cols-5 gap-3 max-w-3xl mx-auto"
           >
-            {WORKFLOW_EXAMPLES.map((w) => (
-              <div
-                key={w.name}
-                className="card p-3 text-center hover:scale-105 transition-transform cursor-default"
-              >
-                <p className="text-[10px] text-brand-500 font-medium">{w.category}</p>
-                <p className="text-xs font-semibold mt-1 truncate">{w.name}</p>
-                <p className="text-[10px] text-gray-400 mt-1">
-                  {w.steps} steps · {w.price} NL
-                </p>
-              </div>
-            ))}
+            {examples.map((w) => {
+              const inner = (
+                <>
+                  <p className="text-[10px] text-brand-500 font-medium">{formatCategory(w.category)}</p>
+                  <p className="text-xs font-semibold mt-1 truncate">{w.name}</p>
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    {w.steps} steps · {w.price} NL
+                  </p>
+                </>
+              );
+              return w.slug ? (
+                <Link
+                  key={w.name}
+                  href={`/workflow/${w.slug}`}
+                  className="card p-3 text-center hover:scale-105 transition-transform"
+                >
+                  {inner}
+                </Link>
+              ) : (
+                <div
+                  key={w.name}
+                  className="card p-3 text-center hover:scale-105 transition-transform cursor-default"
+                >
+                  {inner}
+                </div>
+              );
+            })}
           </motion.div>
         </div>
       </section>
@@ -208,3 +238,26 @@ export default function Home() {
     </div>
   );
 }
+
+export const getServerSideProps: GetServerSideProps = async () => {
+  try {
+    const workflows = await prisma.workflow.findMany({
+      where: { isPublic: true },
+      include: { steps: { select: { id: true } } },
+      orderBy: { totalUses: "desc" },
+      take: 5,
+    });
+
+    const popularWorkflows: WorkflowExample[] = workflows.map((w) => ({
+      name: w.name,
+      steps: w.steps.length,
+      category: w.category,
+      price: w.priceInNolinks,
+      slug: w.slug,
+    }));
+
+    return { props: { popularWorkflows } };
+  } catch {
+    return { props: { popularWorkflows: [] } };
+  }
+};
