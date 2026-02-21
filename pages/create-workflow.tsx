@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import dynamic from "next/dynamic";
-import { ArrowLeft, Crown, Loader2 } from "lucide-react";
+import { ArrowLeft, Crown, Loader2, Zap } from "lucide-react";
 import AppLogo from "@/components/AppLogo";
 import Link from "next/link";
 import toast from "react-hot-toast";

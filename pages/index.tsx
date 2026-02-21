@@ -9,6 +9,7 @@ import {
   Sparkles,
   Play,
   Shield,
+  Zap,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import AppLogo from "@/components/AppLogo";
