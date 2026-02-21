@@ -208,39 +208,3 @@ model WorkflowAnalytics {
 
   @@unique([workflowId, date])
 }
-
-enum PromoType {
-  CREDITS
-  PERCENT_OFF
-  FIXED_OFF
-}
-
-model PromoCode {
-  id            String    @id @default(cuid())
-  code          String    @unique
-  type          PromoType @default(CREDITS)
-  value         Int       // credits amount, percent (0-100), or fixed cents off
-  maxUses       Int?      // null = unlimited
-  timesUsed     Int       @default(0)
-  perUserLimit  Int       @default(1)
-  minPurchase   Int?      // minimum purchase in cents (for PERCENT_OFF / FIXED_OFF)
-  applicableTo  String[]  // empty = all; e.g. ["subscription","credits"]
-  expiresAt     DateTime?
-  active        Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-
-  redemptions PromoCodeRedemption[]
-}
-
-model PromoCodeRedemption {
-  id          String   @id @default(cuid())
-  promoCodeId String
-  userId      String
-  appliedTo   String   // "credits", "subscription", "direct"
-  discount    Int      // credits granted or cents discounted
-  createdAt   DateTime @default(now())
-
-  promoCode PromoCode @relation(fields: [promoCodeId], references: [id])
-
-  @@index([userId, promoCodeId])
-}
