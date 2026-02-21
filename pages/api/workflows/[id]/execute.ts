@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
-import { executeStep, type StepDefinition, type FileInput, type StepResult } from "@/lib/ai-engine";
+import { executeStep, type StepDefinition, type StepCustomParam, type FileInput, type StepResult } from "@/lib/ai-engine";
 import { deductCredits, checkBalance } from "@/lib/credits";
 import { estimateWorkflowCost } from "@/lib/ai-engine";
 import { getModelById } from "@/lib/models";
@@ -70,18 +70,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     },
   });
 
-  const stepDefs: StepDefinition[] = workflow.steps.map((s) => ({
-    id: s.id,
-    order: s.order,
-    name: s.name,
-    stepType: s.stepType,
-    aiModel: s.aiModel,
-    inputType: s.inputType,
-    outputType: s.outputType,
-    prompt: s.prompt,
-    params: s.params as Record<string, unknown> | null,
-    acceptTypes: s.acceptTypes,
-  }));
+  const stepDefs: StepDefinition[] = workflow.steps.map((s) => {
+    const config = (s.config as Record<string, unknown>) || {};
+    return {
+      id: s.id,
+      order: s.order,
+      name: s.name,
+      stepType: s.stepType,
+      aiModel: s.aiModel,
+      inputType: s.inputType,
+      outputType: s.outputType,
+      prompt: s.prompt,
+      params: s.params as Record<string, unknown> | null,
+      acceptTypes: s.acceptTypes,
+      customParams: (config.customParams as StepCustomParam[] | undefined) || undefined,
+      customFalEndpoint: (config.customFalEndpoint as string | undefined) || undefined,
+      customFalParams: (config.customFalParams as { key: string; value: string }[] | undefined) || undefined,
+    };
+  });
 
   const sortedSteps = [...stepDefs].sort((a, b) => a.order - b.order);
   const visibleSteps = sortedSteps.filter(
@@ -107,9 +113,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const allResults: StepResult[] = [];
   let visibleIndex = 0;
   let failed = false;
+  const customParamMap: Record<string, string> = {};
+
+  const resolveCP = (text: string) =>
+    text.replace(/\{\{(\w+)\}\}/g, (m, name) =>
+      name === "input" ? m : customParamMap[name] !== undefined ? customParamMap[name] : m
+    );
 
   for (const step of sortedSteps) {
     if (aborted) break;
+
+    if (step.customParams) {
+      for (const cp of step.customParams) {
+        if (cp.name) customParamMap[cp.name] = cp.value;
+      }
+    }
+
+    const resolvedStep = { ...step };
+    if (resolvedStep.prompt) resolvedStep.prompt = resolveCP(resolvedStep.prompt);
+    if (resolvedStep.params) {
+      resolvedStep.params = { ...resolvedStep.params };
+      for (const [k, v] of Object.entries(resolvedStep.params)) {
+        if (typeof v === "string") {
+          (resolvedStep.params as Record<string, unknown>)[k] = resolveCP(v);
+        }
+      }
+    }
 
     const isVisible = step.stepType !== "INPUT" && step.stepType !== "OUTPUT";
 
@@ -128,7 +157,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-      const result = await executeStep(step, currentInput);
+      const result = await executeStep(resolvedStep, currentInput);
       const { _nextInput, ...stepResult } = result;
       allResults.push(stepResult);
       currentInput = _nextInput;

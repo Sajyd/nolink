@@ -56,6 +56,8 @@ export default function CreateWorkflow() {
           category: store.workflowCategory,
           priceInNolinks: store.workflowPrice,
           isPublic: store.isPublic,
+          exampleInput: store.exampleInput || null,
+          exampleOutput: store.exampleOutput || null,
           steps: store.nodes.map((n) => {
             const stepTypeMap: Record<string, string> = {
               inputNode: "INPUT",
@@ -71,6 +73,13 @@ export default function CreateWorkflow() {
                 mergedParams[key] = binding;
               }
             }
+            const validCustomParams = (n.data.customParams || []).filter(
+              (p: { name: string; value: string }) => p.name.trim() !== ""
+            );
+            const isCustomFal = n.data.aiModel === "fal-custom";
+            const validFalParams = (n.data.customFalParams || []).filter(
+              (p: { key: string; value: string }) => p.key.trim() !== ""
+            );
             return {
               order: n.data.order,
               name: n.data.label,
@@ -80,6 +89,9 @@ export default function CreateWorkflow() {
               outputType: n.data.outputType || "TEXT",
               prompt: n.data.prompt || "",
               modelParams: Object.keys(mergedParams).length > 0 ? mergedParams : null,
+              customParams: validCustomParams.length > 0 ? validCustomParams : null,
+              customFalEndpoint: isCustomFal ? (n.data.customFalEndpoint || null) : null,
+              customFalParams: isCustomFal && validFalParams.length > 0 ? validFalParams : null,
               acceptTypes: n.data.acceptTypes || [],
               positionX: n.position.x,
               positionY: n.position.y,

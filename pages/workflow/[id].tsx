@@ -27,6 +27,8 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Lightbulb,
+  Pencil,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -50,6 +52,8 @@ interface Workflow {
   priceInNolinks: number;
   totalUses: number;
   slug: string;
+  exampleInput: string | null;
+  exampleOutput: string | null;
   creator: { id: string; name: string; image: string | null };
   steps: Step[];
 }
@@ -464,6 +468,16 @@ export default function WorkflowPage() {
               </span>
             </div>
 
+            {session?.user?.id === workflow.creator.id && (
+              <Link
+                href={`/edit-workflow/${workflow.id}`}
+                className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-brand-600 bg-gray-100 dark:bg-gray-800 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
+              >
+                <Pencil className="w-3 h-3" />
+                Edit Workflow
+              </Link>
+            )}
+
             {acceptsFiles && (
               <div className="flex items-center gap-2 mt-3">
                 <span className="text-xs text-gray-400">Accepts:</span>
@@ -539,6 +553,66 @@ export default function WorkflowPage() {
             </div>
           )}
         </div>
+
+        {/* Examples */}
+        {(workflow.exampleInput || workflow.exampleOutput) && (
+          <div className="card p-6 mb-6 border-amber-200 dark:border-amber-800/50 bg-amber-50/30 dark:bg-amber-900/10">
+            <h2 className="font-semibold mb-4 flex items-center gap-2 text-amber-700 dark:text-amber-300">
+              <Lightbulb className="w-5 h-5" />
+              Example
+            </h2>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {workflow.exampleInput && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Input</p>
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-amber-100 dark:border-amber-900/30">
+                    <pre className="text-sm whitespace-pre-wrap font-mono text-gray-700 dark:text-gray-300 leading-relaxed">
+                      {workflow.exampleInput}
+                    </pre>
+                  </div>
+                </div>
+              )}
+              {workflow.exampleOutput && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Output</p>
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-amber-100 dark:border-amber-900/30">
+                    {isUrl(workflow.exampleOutput.trim()) ? (
+                      looksLikeImage(workflow.exampleOutput.trim()) ? (
+                        <img
+                          src={workflow.exampleOutput.trim()}
+                          alt="Example output"
+                          className="rounded-lg max-h-48 object-contain"
+                        />
+                      ) : looksLikeVideo(workflow.exampleOutput.trim()) ? (
+                        <video
+                          src={workflow.exampleOutput.trim()}
+                          controls
+                          className="rounded-lg max-h-48 w-full"
+                        />
+                      ) : looksLikeAudio(workflow.exampleOutput.trim()) ? (
+                        <audio src={workflow.exampleOutput.trim()} controls className="w-full" />
+                      ) : (
+                        <a
+                          href={workflow.exampleOutput.trim()}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-brand-600 hover:underline flex items-center gap-1"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          View example output
+                        </a>
+                      )
+                    ) : (
+                      <pre className="text-sm whitespace-pre-wrap font-mono text-gray-700 dark:text-gray-300 leading-relaxed">
+                        {workflow.exampleOutput}
+                      </pre>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Run Workflow */}
         <div className="card p-6 mb-6">

@@ -13,6 +13,7 @@ import {
   Play,
   Trash2,
   ExternalLink,
+  Pencil,
   Package,
   CreditCard,
   Crown,
@@ -458,8 +459,9 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <Link href={`/workflow/${wf.id}`} className="btn-ghost p-2"><ExternalLink className="w-4 h-4" /></Link>
-                      <button onClick={() => handleDelete(wf.id)} className="btn-ghost p-2 text-red-500 hover:!bg-red-50 dark:hover:!bg-red-900/20"><Trash2 className="w-4 h-4" /></button>
+                      <Link href={`/edit-workflow/${wf.id}`} className="btn-ghost p-2" title="Edit workflow"><Pencil className="w-4 h-4" /></Link>
+                      <Link href={`/workflow/${wf.id}`} className="btn-ghost p-2" title="View workflow"><ExternalLink className="w-4 h-4" /></Link>
+                      <button onClick={() => handleDelete(wf.id)} className="btn-ghost p-2 text-red-500 hover:!bg-red-50 dark:hover:!bg-red-900/20" title="Delete workflow"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
                 ))}

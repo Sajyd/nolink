@@ -24,6 +24,9 @@ export interface AIModel {
   params: ModelParam[];
   isFal?: boolean;
   falEndpoint?: string;
+  comingSoon?: boolean;
+  proOnly?: boolean;
+  isCustom?: boolean;
 }
 
 // ─── Text Models ───────────────────────────────────────────────
@@ -284,15 +287,322 @@ export const FAL_IMAGE_MODELS: AIModel[] = [
 // ─── Video Models ──────────────────────────────────────────────
 
 export const FAL_VIDEO_MODELS: AIModel[] = [
+
+  // ── Seedance (ByteDance) ────────────────────────────────────
+
   {
-    id: "fal-kling-1.6",
-    name: "Kling 1.6",
+    id: "fal-seedance-1.5-pro-t2v",
+    name: "Seedance 1.5 Pro — Text to Video",
     provider: "fal",
     category: "video",
-    costPerUse: 20,
+    costPerUse: 12,
     isFal: true,
-    falEndpoint: "fal-ai/kling-video/v1.6/standard/text-to-video",
-    description: "High-quality video generation with motion control",
+    falEndpoint: "fal-ai/bytedance/seedance/v1.5/pro/text-to-video",
+    description: "Dual-branch diffusion with synchronized audio-video generation (720p)",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "4s", value: "4" },
+        { label: "5s", value: "5" },
+        { label: "8s", value: "8" },
+        { label: "12s", value: "12" },
+      ]},
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+        { label: "1:1", value: "1:1" },
+        { label: "4:3", value: "4:3" },
+        { label: "3:4", value: "3:4" },
+      ]},
+      { key: "seed", label: "Seed", type: "number" },
+    ],
+  },
+  {
+    id: "fal-seedance-1.5-pro-i2v",
+    name: "Seedance 1.5 Pro — Image to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 12,
+    isFal: true,
+    falEndpoint: "fal-ai/bytedance/seedance/v1.5/pro/image-to-video",
+    description: "Animate images with start/end frame support and lip-sync audio",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image_url", label: "Input Image URL", type: "text", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "4s", value: "4" },
+        { label: "5s", value: "5" },
+        { label: "8s", value: "8" },
+        { label: "12s", value: "12" },
+      ]},
+      { key: "seed", label: "Seed", type: "number" },
+    ],
+  },
+  {
+    id: "fal-seedance-1.5-fast-t2v",
+    name: "Seedance 1.5 Fast — Text to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 8,
+    isFal: true,
+    falEndpoint: "fal-ai/bytedance/seedance/v1/pro/fast/text-to-video",
+    description: "Fast and affordable video generation (up to 1080p)",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "2s", value: "2" },
+        { label: "5s", value: "5" },
+        { label: "8s", value: "8" },
+        { label: "12s", value: "12" },
+      ]},
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "21:9", value: "21:9" },
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+        { label: "1:1", value: "1:1" },
+        { label: "4:3", value: "4:3" },
+        { label: "3:4", value: "3:4" },
+      ]},
+      { key: "seed", label: "Seed", type: "number" },
+    ],
+  },
+  {
+    id: "fal-seedance-2.0",
+    name: "Seedance 2.0",
+    provider: "fal",
+    category: "video",
+    costPerUse: 25,
+    isFal: true,
+    comingSoon: true,
+    falEndpoint: "fal-ai/bytedance/seedance/v2/pro/text-to-video",
+    description: "Next-gen cinematic audio-video with director-level camera control — Coming Feb 24",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "5s", value: "5" },
+        { label: "10s", value: "10" },
+        { label: "15s", value: "15" },
+      ]},
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+        { label: "1:1", value: "1:1" },
+      ]},
+    ],
+  },
+
+  // ── Kling 3 / V3 (Kuaishou) ─────────────────────────────────
+
+  {
+    id: "fal-kling-v3-t2v",
+    name: "Kling 3 — Text to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 18,
+    isFal: true,
+    falEndpoint: "fal-ai/kling-video/v3/standard/text-to-video",
+    description: "Multi-shot storyboarding with native audio and 1080p output",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "3s", value: "3" },
+        { label: "5s", value: "5" },
+        { label: "8s", value: "8" },
+        { label: "10s", value: "10" },
+        { label: "15s", value: "15" },
+      ]},
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+        { label: "1:1", value: "1:1" },
+      ]},
+      { key: "seed", label: "Seed", type: "number" },
+    ],
+  },
+  {
+    id: "fal-kling-v3-i2v",
+    name: "Kling 3 — Image to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 18,
+    isFal: true,
+    falEndpoint: "fal-ai/kling-video/v3/standard/image-to-video",
+    description: "Animate images with element referencing and native audio",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image_url", label: "Input Image URL", type: "text", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "3s", value: "3" },
+        { label: "5s", value: "5" },
+        { label: "8s", value: "8" },
+        { label: "10s", value: "10" },
+        { label: "15s", value: "15" },
+      ]},
+      { key: "seed", label: "Seed", type: "number" },
+    ],
+  },
+  {
+    id: "fal-kling-v3-pro-t2v",
+    name: "Kling 3 Pro — Text to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 25,
+    isFal: true,
+    falEndpoint: "fal-ai/kling-video/v3/pro/text-to-video",
+    description: "Pro-tier Kling 3 with enhanced detail, audio, and multi-shot",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "3s", value: "3" },
+        { label: "5s", value: "5" },
+        { label: "8s", value: "8" },
+        { label: "10s", value: "10" },
+        { label: "15s", value: "15" },
+      ]},
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+        { label: "1:1", value: "1:1" },
+      ]},
+      { key: "seed", label: "Seed", type: "number" },
+    ],
+  },
+  {
+    id: "fal-kling-v3-pro-i2v",
+    name: "Kling 3 Pro — Image to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 25,
+    isFal: true,
+    falEndpoint: "fal-ai/kling-video/v3/pro/image-to-video",
+    description: "Pro-tier image-to-video with custom element support and audio",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image_url", label: "Input Image URL", type: "text", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "3s", value: "3" },
+        { label: "5s", value: "5" },
+        { label: "8s", value: "8" },
+        { label: "10s", value: "10" },
+        { label: "15s", value: "15" },
+      ]},
+      { key: "seed", label: "Seed", type: "number" },
+    ],
+  },
+
+  // ── Kling O3 Omni (Kuaishou) ────────────────────────────────
+
+  {
+    id: "fal-kling-o3-std-t2v",
+    name: "Kling O3 Standard — Text to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 18,
+    isFal: true,
+    falEndpoint: "fal-ai/kling-video/o3/standard/text-to-video",
+    description: "Omni model with multi-image elements and native audio ($0.17/s)",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "3s", value: "3" },
+        { label: "5s", value: "5" },
+        { label: "8s", value: "8" },
+        { label: "10s", value: "10" },
+        { label: "15s", value: "15" },
+      ]},
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+        { label: "1:1", value: "1:1" },
+      ]},
+      { key: "seed", label: "Seed", type: "number" },
+    ],
+  },
+  {
+    id: "fal-kling-o3-pro-t2v",
+    name: "Kling O3 Pro — Text to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 25,
+    isFal: true,
+    falEndpoint: "fal-ai/kling-video/o3/pro/text-to-video",
+    description: "Pro omni model with multi-character coreference and voice input",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "3s", value: "3" },
+        { label: "5s", value: "5" },
+        { label: "8s", value: "8" },
+        { label: "10s", value: "10" },
+        { label: "15s", value: "15" },
+      ]},
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+        { label: "1:1", value: "1:1" },
+      ]},
+      { key: "seed", label: "Seed", type: "number" },
+    ],
+  },
+  {
+    id: "fal-kling-o3-pro-i2v",
+    name: "Kling O3 Pro — Image to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 25,
+    isFal: true,
+    falEndpoint: "fal-ai/kling-video/o3/pro/image-to-video",
+    description: "Pro omni image-to-video with 1080p output and native audio",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image_url", label: "Input Image URL", type: "text", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "3s", value: "3" },
+        { label: "5s", value: "5" },
+        { label: "8s", value: "8" },
+        { label: "10s", value: "10" },
+        { label: "15s", value: "15" },
+      ]},
+      { key: "seed", label: "Seed", type: "number" },
+    ],
+  },
+  {
+    id: "fal-kling-o3-pro-v2v",
+    name: "Kling O3 Pro — Video Editing",
+    provider: "fal",
+    category: "video",
+    costPerUse: 30,
+    isFal: true,
+    falEndpoint: "fal-ai/kling-video/o3/pro/video-to-video/edit",
+    description: "Edit videos with text prompts — element replacement and style changes",
+    params: [
+      { key: "prompt", label: "Edit Prompt", type: "textarea", required: true, bindable: true },
+      { key: "video_url", label: "Input Video URL", type: "text", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+    ],
+  },
+
+  // ── Kling 2.5 Turbo (Kuaishou) ──────────────────────────────
+
+  {
+    id: "fal-kling-2.5-turbo-t2v",
+    name: "Kling 2.5 Turbo — Text to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 10,
+    isFal: true,
+    falEndpoint: "fal-ai/kling-video/v2.5-turbo/standard/text-to-video",
+    description: "Fast video gen with smooth motion and robust camera control",
     params: [
       { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
       { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
@@ -308,11 +618,56 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     ],
   },
   {
-    id: "fal-kling-motion",
-    name: "Kling Motion Control",
+    id: "fal-kling-2.5-turbo-i2v",
+    name: "Kling 2.5 Turbo — Image to Video",
     provider: "fal",
     category: "video",
-    costPerUse: 25,
+    costPerUse: 10,
+    isFal: true,
+    falEndpoint: "fal-ai/kling-video/v2.5-turbo/standard/image-to-video",
+    description: "Affordable image-to-video with temporal consistency",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image_url", label: "Input Image URL", type: "text", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "5s", value: "5" },
+        { label: "10s", value: "10" },
+      ]},
+    ],
+  },
+
+  // ── Kling 1.6 Legacy (Kuaishou) ─────────────────────────────
+
+  {
+    id: "fal-kling-1.6-t2v",
+    name: "Kling 1.6 — Text to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 15,
+    isFal: true,
+    falEndpoint: "fal-ai/kling-video/v1.6/standard/text-to-video",
+    description: "Reliable video generation with motion control",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "5", options: [
+        { label: "5s", value: "5" },
+        { label: "10s", value: "10" },
+      ]},
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+        { label: "1:1", value: "1:1" },
+      ]},
+    ],
+  },
+  {
+    id: "fal-kling-1.6-pro-i2v",
+    name: "Kling 1.6 Pro — Image to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 20,
     isFal: true,
     falEndpoint: "fal-ai/kling-video/v1.6/pro/image-to-video",
     description: "Image-to-video with precise motion control",
@@ -326,29 +681,128 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
       ]},
     ],
   },
+
+  // ── Sora 2 (OpenAI) ─────────────────────────────────────────
+
   {
-    id: "fal-seedance",
-    name: "Seedance",
+    id: "fal-sora-2-t2v",
+    name: "Sora 2 — Text to Video",
     provider: "fal",
     category: "video",
-    costPerUse: 18,
+    costPerUse: 15,
     isFal: true,
-    falEndpoint: "fal-ai/seedance",
-    description: "Dance and motion video generation from images",
+    falEndpoint: "fal-ai/sora-2/text-to-video",
+    description: "OpenAI's video generation with audio ($0.10/s)",
     params: [
       { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
-      { key: "image_url", label: "Input Image URL", type: "text", bindable: true },
-      { key: "duration", label: "Duration", type: "select", default: "5", options: [
-        { label: "5s", value: "5" },
-        { label: "10s", value: "10" },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "8", options: [
+        { label: "4s", value: "4" },
+        { label: "8s", value: "8" },
+        { label: "12s", value: "12" },
       ]},
-      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "9:16", options: [
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "Auto", value: "auto" },
         { label: "16:9", value: "16:9" },
         { label: "9:16", value: "9:16" },
-        { label: "1:1", value: "1:1" },
+      ]},
+      { key: "resolution", label: "Resolution", type: "select", default: "auto", options: [
+        { label: "Auto", value: "auto" },
+        { label: "720p", value: "720p" },
       ]},
     ],
   },
+  {
+    id: "fal-sora-2-i2v",
+    name: "Sora 2 — Image to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 15,
+    isFal: true,
+    falEndpoint: "fal-ai/sora-2/image-to-video",
+    description: "Animate images into video with OpenAI Sora 2",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image_url", label: "Input Image URL", type: "text", required: true, bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "8", options: [
+        { label: "4s", value: "4" },
+        { label: "8s", value: "8" },
+        { label: "12s", value: "12" },
+      ]},
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "Auto", value: "auto" },
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+      ]},
+    ],
+  },
+  {
+    id: "fal-sora-2-v2v",
+    name: "Sora 2 — Video Remix",
+    provider: "fal",
+    category: "video",
+    costPerUse: 15,
+    isFal: true,
+    falEndpoint: "fal-ai/sora-2/video-to-video/remix",
+    description: "Transform existing videos with style changes and creative edits",
+    params: [
+      { key: "prompt", label: "Edit Prompt", type: "textarea", required: true, bindable: true },
+      { key: "video_url", label: "Input Video URL", type: "text", required: true, bindable: true },
+    ],
+  },
+  {
+    id: "fal-sora-2-pro-t2v",
+    name: "Sora 2 Pro — Text to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 25,
+    isFal: true,
+    falEndpoint: "fal-ai/sora-2/text-to-video/pro",
+    description: "Premium-quality Sora 2 with higher fidelity output",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "8", options: [
+        { label: "4s", value: "4" },
+        { label: "8s", value: "8" },
+        { label: "12s", value: "12" },
+      ]},
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "Auto", value: "auto" },
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+      ]},
+      { key: "resolution", label: "Resolution", type: "select", default: "auto", options: [
+        { label: "Auto", value: "auto" },
+        { label: "720p", value: "720p" },
+      ]},
+    ],
+  },
+  {
+    id: "fal-sora-2-pro-i2v",
+    name: "Sora 2 Pro — Image to Video",
+    provider: "fal",
+    category: "video",
+    costPerUse: 25,
+    isFal: true,
+    falEndpoint: "fal-ai/sora-2/image-to-video/pro",
+    description: "Premium image-to-video with Sora 2 Pro quality",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image_url", label: "Input Image URL", type: "text", required: true, bindable: true },
+      { key: "duration", label: "Duration (seconds)", type: "select", default: "8", options: [
+        { label: "4s", value: "4" },
+        { label: "8s", value: "8" },
+        { label: "12s", value: "12" },
+      ]},
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "Auto", value: "auto" },
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+      ]},
+    ],
+  },
+
+  // ── Other ───────────────────────────────────────────────────
+
   {
     id: "fal-veo-3.1",
     name: "Veo 3.1",
@@ -393,6 +847,21 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     ],
   },
 ];
+
+// ─── Custom fal.ai Model (Pro users only) ─────────────────────
+
+export const CUSTOM_FAL_MODEL: AIModel = {
+  id: "fal-custom",
+  name: "Custom fal.ai Model / Workflow",
+  provider: "fal",
+  category: "video",
+  costPerUse: 0,
+  isFal: true,
+  isCustom: true,
+  proOnly: true,
+  description: "Enter any fal.ai model endpoint and configure parameters manually",
+  params: [],
+};
 
 // ─── Audio Models ──────────────────────────────────────────────
 
@@ -512,6 +981,7 @@ export const ALL_MODELS: AIModel[] = [
   ...FAL_VIDEO_MODELS,
   ...AUDIO_MODELS,
   ...DOCUMENT_MODELS,
+  CUSTOM_FAL_MODEL,
 ];
 
 export function getModelById(id: string): AIModel | undefined {
@@ -523,7 +993,11 @@ export function getModelsByCategory(category: ModelCategory): AIModel[] {
 }
 
 export function getFalModels(): AIModel[] {
-  return ALL_MODELS.filter((m) => m.isFal);
+  return ALL_MODELS.filter((m) => m.isFal && !m.isCustom);
+}
+
+export function getCustomFalModel(): AIModel {
+  return CUSTOM_FAL_MODEL;
 }
 
 export function getBasicModels(): AIModel[] {

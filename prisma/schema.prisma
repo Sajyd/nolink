@@ -105,6 +105,8 @@ model Workflow {
   slug           String           @unique
   thumbnail      String?
   tags           String[]
+  exampleInput   String?          @db.Text
+  exampleOutput  String?          @db.Text
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 

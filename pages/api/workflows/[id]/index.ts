@@ -41,7 +41,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    const { name, description, category, priceInNolinks, isPublic } = req.body;
+    const { name, description, category, priceInNolinks, isPublic, exampleInput, exampleOutput, steps } = req.body;
+
+    if (steps && Array.isArray(steps)) {
+      const stepsData = steps.map((step: any) => {
+        const config: Record<string, unknown> = { ...(step.config || {}) };
+        if (step.customParams) config.customParams = step.customParams;
+        if (step.customFalEndpoint) config.customFalEndpoint = step.customFalEndpoint;
+        if (step.customFalParams) config.customFalParams = step.customFalParams;
+        return {
+          order: step.order,
+          name: step.name || `Step ${step.order}`,
+          stepType: step.stepType || "BASIC",
+          aiModel: step.aiModel || null,
+          inputType: step.inputType || "TEXT",
+          outputType: step.outputType || "TEXT",
+          prompt: step.prompt || "",
+          config: Object.keys(config).length > 0 ? config : undefined,
+          params: step.modelParams || undefined,
+          acceptTypes: step.acceptTypes || [],
+          positionX: step.positionX || 0,
+          positionY: step.positionY || 0,
+        };
+      });
+
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.step.deleteMany({ where: { workflowId: id as string } });
+        return tx.workflow.update({
+          where: { id: id as string },
+          data: {
+            ...(name && { name }),
+            ...(description !== undefined && { description }),
+            ...(category && { category }),
+            ...(priceInNolinks !== undefined && { priceInNolinks }),
+            ...(isPublic !== undefined && { isPublic }),
+            ...(exampleInput !== undefined && { exampleInput }),
+            ...(exampleOutput !== undefined && { exampleOutput }),
+            steps: { create: stepsData },
+          },
+          include: { steps: true },
+        });
+      });
+
+      return res.json(updated);
+    }
 
     const updated = await prisma.workflow.update({
       where: { id: id as string },
@@ -51,6 +94,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ...(category && { category }),
         ...(priceInNolinks !== undefined && { priceInNolinks }),
         ...(isPublic !== undefined && { isPublic }),
+        ...(exampleInput !== undefined && { exampleInput }),
+        ...(exampleOutput !== undefined && { exampleOutput }),
       },
     });
 

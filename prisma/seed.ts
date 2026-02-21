@@ -509,7 +509,7 @@ async function main() {
             order: 3,
             name: "Animate to Video",
             stepType: "FAL_AI",
-            aiModel: "fal-kling-1.6",
+            aiModel: "fal-kling-1.6-t2v",
             inputType: "IMAGE",
             outputType: "VIDEO",
             prompt: "{{input}}",

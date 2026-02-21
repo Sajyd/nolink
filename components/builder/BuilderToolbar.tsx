@@ -252,6 +252,35 @@ export default function BuilderToolbar({ onSave, saving }: BuilderToolbarProps) 
                 )}
               </span>
             </label>
+
+            <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
+              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-2">Examples</p>
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Example Input</label>
+                  <textarea
+                    value={store.exampleInput}
+                    onChange={(e) => store.setExampleInput(e.target.value)}
+                    className="input-field text-xs"
+                    rows={2}
+                    placeholder="e.g. Write a poem about the ocean"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Example Output</label>
+                  <textarea
+                    value={store.exampleOutput}
+                    onChange={(e) => store.setExampleOutput(e.target.value)}
+                    className="input-field text-xs"
+                    rows={2}
+                    placeholder="e.g. The waves crash gently..."
+                  />
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    For media, paste a URL. Shown to users before they run the workflow.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -303,7 +332,7 @@ export default function BuilderToolbar({ onSave, saving }: BuilderToolbarProps) 
           className="btn-primary w-full gap-2"
         >
           <Save className="w-4 h-4" />
-          {saving ? "Saving..." : "Save Workflow"}
+          {saving ? "Saving..." : store.editingWorkflowId ? "Update Workflow" : "Save Workflow"}
         </button>
       </div>
     </div>

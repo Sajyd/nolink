@@ -20,6 +20,11 @@ export interface FileInput {
   mimeType?: string;
 }
 
+export interface StepCustomParam {
+  name: string;
+  value: string;
+}
+
 export interface StepDefinition {
   id: string;
   order: number;
@@ -32,6 +37,9 @@ export interface StepDefinition {
   config?: Record<string, unknown> | null;
   params?: Record<string, unknown> | null;
   acceptTypes?: string[];
+  customParams?: StepCustomParam[];
+  customFalEndpoint?: string;
+  customFalParams?: { key: string; value: string }[];
 }
 
 export interface StepResult {
@@ -475,11 +483,25 @@ async function executeFalStep(
 ): Promise<StepInput> {
   if (!step.aiModel) return input;
 
+  const isCustom = step.aiModel === "fal-custom";
   const model = getModelById(step.aiModel);
-  if (!model || !model.isFal) return { text: `[Unknown fal model: ${step.aiModel}]`, files: [] };
+  if (!isCustom && (!model || !model.isFal)) return { text: `[Unknown fal model: ${step.aiModel}]`, files: [] };
+
+  const falEndpoint = isCustom ? step.customFalEndpoint : model?.falEndpoint;
+  if (!falEndpoint) return { text: `[No fal.ai endpoint configured]`, files: [] };
 
   const resolvedParams: Record<string, unknown> = {};
-  if (step.params) {
+
+  if (isCustom && step.customFalParams) {
+    for (const { key, value } of step.customFalParams) {
+      if (!key) continue;
+      if (typeof value === "string" && value.includes("{{input}}")) {
+        resolvedParams[key] = value.replace(/\{\{input\}\}/g, input.text);
+      } else {
+        resolvedParams[key] = value;
+      }
+    }
+  } else if (step.params) {
     for (const [key, val] of Object.entries(step.params)) {
       if (typeof val === "string" && val.includes("{{input}}")) {
         resolvedParams[key] = val.replace(/\{\{input\}\}/g, input.text);
@@ -509,7 +531,7 @@ async function executeFalStep(
 
   if (process.env.FAL_KEY) {
     try {
-      const response = await fetch(`https://fal.run/${model.falEndpoint}`, {
+      const response = await fetch(`https://fal.run/${falEndpoint}`, {
         method: "POST",
         headers: {
           Authorization: `Key ${process.env.FAL_KEY}`,
@@ -556,18 +578,62 @@ async function executeFalStep(
     }
   }
 
-  const category = model.category;
+  const displayName = isCustom ? `Custom (${falEndpoint})` : model?.name || "Unknown";
+  const category = model?.category;
   if (category === "image") {
-    const url = `https://placehold.co/1024x1024/f59e0b/white?text=${encodeURIComponent(model.name)}`;
+    const url = `https://placehold.co/1024x1024/f59e0b/white?text=${encodeURIComponent(displayName)}`;
     return { text: url, files: [{ url, type: "image", name: "generated.png" }] };
   }
-  if (category === "video") {
-    return { text: `[${model.name} video – no FAL_KEY configured]`, files: [] };
+  if (category === "video" || isCustom) {
+    return { text: `[${displayName} – no FAL_KEY configured]`, files: [] };
   }
   if (category === "audio") {
-    return { text: `[${model.name} audio – no FAL_KEY configured]`, files: [] };
+    return { text: `[${displayName} audio – no FAL_KEY configured]`, files: [] };
   }
-  return { text: `[${model.name}] ${(resolvedParams.prompt as string || input.text).slice(0, 200)}`, files: [] };
+  return { text: `[${displayName}] ${(resolvedParams.prompt as string || input.text).slice(0, 200)}`, files: [] };
+}
+
+// ── Custom param resolution ─────────────────────────────────────
+
+function resolveCustomParams(
+  text: string,
+  paramMap: Record<string, string>
+): string {
+  return text.replace(/\{\{(\w+)\}\}/g, (match, name) => {
+    if (name === "input") return match;
+    return paramMap[name] !== undefined ? paramMap[name] : match;
+  });
+}
+
+function applyCustomParamsToStep(
+  step: StepDefinition,
+  paramMap: Record<string, string>
+): StepDefinition {
+  if (Object.keys(paramMap).length === 0) return step;
+
+  const resolvedPrompt = step.prompt
+    ? resolveCustomParams(step.prompt, paramMap)
+    : step.prompt;
+
+  let resolvedParams = step.params;
+  if (step.params) {
+    resolvedParams = { ...step.params };
+    for (const [key, val] of Object.entries(resolvedParams)) {
+      if (typeof val === "string") {
+        (resolvedParams as Record<string, unknown>)[key] = resolveCustomParams(val, paramMap);
+      }
+    }
+  }
+
+  let resolvedFalParams = step.customFalParams;
+  if (step.customFalParams) {
+    resolvedFalParams = step.customFalParams.map((p) => ({
+      key: p.key,
+      value: resolveCustomParams(p.value, paramMap),
+    }));
+  }
+
+  return { ...step, prompt: resolvedPrompt, params: resolvedParams, customFalParams: resolvedFalParams };
 }
 
 // ── Main execution ──────────────────────────────────────────────
@@ -617,11 +683,19 @@ export async function executeWorkflow(
 ): Promise<StepResult[]> {
   const results: StepResult[] = [];
   let currentInput: StepInput = { text: initialInput, files };
+  const customParamMap: Record<string, string> = {};
 
   const sortedSteps = [...steps].sort((a, b) => a.order - b.order);
 
   for (const step of sortedSteps) {
-    const result = await executeStep(step, currentInput);
+    if (step.customParams) {
+      for (const cp of step.customParams) {
+        if (cp.name) customParamMap[cp.name] = cp.value;
+      }
+    }
+
+    const resolvedStep = applyCustomParamsToStep(step, customParamMap);
+    const result = await executeStep(resolvedStep, currentInput);
     const { _nextInput, ...stepResult } = result;
     results.push(stepResult);
     currentInput = _nextInput;

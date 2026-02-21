@@ -3,6 +3,16 @@ import type { Node, Edge } from "@xyflow/react";
 
 export type StepNodeType = "inputNode" | "outputNode" | "basicNode" | "falAiNode";
 
+export interface CustomParam {
+  name: string;
+  value: string;
+}
+
+export interface CustomFalParam {
+  key: string;
+  value: string;
+}
+
 export interface StepNodeData {
   label: string;
   stepType: StepNodeType;
@@ -14,6 +24,9 @@ export interface StepNodeData {
   acceptTypes?: string[];       // for input nodes: which media types to accept
   modelParams?: Record<string, unknown>; // model-specific parameter values
   paramBindings?: Record<string, string>; // param key → "input_1", "input_2", or "manual"
+  customParams?: CustomParam[]; // user-defined params, referenceable as {{name}} in linked nodes
+  customFalEndpoint?: string;   // user-entered fal.ai endpoint for custom model
+  customFalParams?: CustomFalParam[]; // user-defined fal.ai API params (key/value, value can be {{variable}})
   [key: string]: unknown;
 }
 
@@ -26,6 +39,9 @@ interface WorkflowStore {
   workflowPrice: number;
   isPublic: boolean;
   selectedNodeId: string | null;
+  exampleInput: string;
+  exampleOutput: string;
+  editingWorkflowId: string | null;
 
   setNodes: (nodes: Node<StepNodeData>[]) => void;
   setEdges: (edges: Edge[]) => void;
@@ -38,6 +54,9 @@ interface WorkflowStore {
   setWorkflowCategory: (cat: string) => void;
   setWorkflowPrice: (price: number) => void;
   setIsPublic: (isPublic: boolean) => void;
+  setExampleInput: (input: string) => void;
+  setExampleOutput: (output: string) => void;
+  setEditingWorkflowId: (id: string | null) => void;
   reset: () => void;
 }
 
@@ -50,6 +69,9 @@ export const useWorkflowStore = create<WorkflowStore>((set) => ({
   workflowPrice: 0,
   isPublic: true,
   selectedNodeId: null,
+  exampleInput: "",
+  exampleOutput: "",
+  editingWorkflowId: null,
 
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),
@@ -72,6 +94,9 @@ export const useWorkflowStore = create<WorkflowStore>((set) => ({
   setWorkflowCategory: (cat) => set({ workflowCategory: cat }),
   setWorkflowPrice: (price) => set({ workflowPrice: price }),
   setIsPublic: (isPublic) => set({ isPublic }),
+  setExampleInput: (input) => set({ exampleInput: input }),
+  setExampleOutput: (output) => set({ exampleOutput: output }),
+  setEditingWorkflowId: (id) => set({ editingWorkflowId: id }),
   reset: () =>
     set({
       nodes: [],
@@ -82,5 +107,8 @@ export const useWorkflowStore = create<WorkflowStore>((set) => ({
       workflowPrice: 0,
       isPublic: true,
       selectedNodeId: null,
+      exampleInput: "",
+      exampleOutput: "",
+      editingWorkflowId: null,
     }),
 }));

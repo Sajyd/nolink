@@ -53,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const session = await getServerSession(req, res, authOptions);
     if (!session) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, description, category, priceInNolinks, isPublic, steps } = req.body;
+    const { name, description, category, priceInNolinks, isPublic, steps, exampleInput, exampleOutput } = req.body;
 
     if (!steps || steps.length === 0) {
       return res.status(400).json({ error: "At least one step is required" });
@@ -86,21 +86,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         isPublic: isPublic ?? true,
         slug: slugify(workflowName),
         creatorId: session.user.id,
+        exampleInput: exampleInput || null,
+        exampleOutput: exampleOutput || null,
         steps: {
-          create: steps.map((step: any) => ({
-            order: step.order,
-            name: step.name || `Step ${step.order}`,
-            stepType: step.stepType || "BASIC",
-            aiModel: step.aiModel || null,
-            inputType: step.inputType || "TEXT",
-            outputType: step.outputType || "TEXT",
-            prompt: step.prompt || "",
-            config: step.config || undefined,
-            params: step.modelParams || undefined,
-            acceptTypes: step.acceptTypes || [],
-            positionX: step.positionX || 0,
-            positionY: step.positionY || 0,
-          })),
+          create: steps.map((step: any) => {
+            const config: Record<string, unknown> = { ...(step.config || {}) };
+            if (step.customParams) config.customParams = step.customParams;
+            if (step.customFalEndpoint) config.customFalEndpoint = step.customFalEndpoint;
+            if (step.customFalParams) config.customFalParams = step.customFalParams;
+            return {
+              order: step.order,
+              name: step.name || `Step ${step.order}`,
+              stepType: step.stepType || "BASIC",
+              aiModel: step.aiModel || null,
+              inputType: step.inputType || "TEXT",
+              outputType: step.outputType || "TEXT",
+              prompt: step.prompt || "",
+              config: Object.keys(config).length > 0 ? config : undefined,
+              params: step.modelParams || undefined,
+              acceptTypes: step.acceptTypes || [],
+              positionX: step.positionX || 0,
+              positionY: step.positionY || 0,
+            };
+          }),
         },
       },
       include: { steps: true },

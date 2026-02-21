@@ -1,17 +1,32 @@
-import { useWorkflowStore } from "@/lib/workflow-store";
+import { useWorkflowStore, type CustomParam, type CustomFalParam } from "@/lib/workflow-store";
 import {
   ALL_MODELS,
   getModelById,
   getBasicModels,
   getFalModels,
+  getCustomFalModel,
   getModelsByCategory,
   INPUT_ACCEPT_TYPES,
   type ModelParam,
   type ModelCategory,
 } from "@/lib/models";
-import { X, Sparkles, Settings2, Upload, Download } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { X, Sparkles, Settings2, Upload, Download, Plus, Trash2, Variable, Lock, Clock, Zap, Link2 } from "lucide-react";
 
 const IO_TYPES = ["TEXT", "IMAGE", "AUDIO", "VIDEO", "DOCUMENT"];
+
+function groupFalVideoModels() {
+  const video = getFalModels().filter((m) => m.category === "video");
+  const seedance = video.filter((m) => m.id.includes("seedance"));
+  const kling3 = video.filter((m) => m.id.includes("kling-v3"));
+  const klingO3 = video.filter((m) => m.id.includes("kling-o3"));
+  const kling25 = video.filter((m) => m.id.includes("kling-2.5"));
+  const kling16 = video.filter((m) => m.id.includes("kling-1.6"));
+  const sora = video.filter((m) => m.id.includes("sora"));
+  const usedIds = new Set([...seedance, ...kling3, ...klingO3, ...kling25, ...kling16, ...sora].map((m) => m.id));
+  const other = video.filter((m) => !usedIds.has(m.id));
+  return { seedance, kling3, klingO3, kling25, kling16, sora, other };
+}
 
 export default function StepConfigPanel() {
   const { nodes, selectedNodeId, updateNodeData, setSelectedNodeId } =
@@ -201,59 +216,15 @@ export default function StepConfigPanel() {
 
         {/* ── FAL.AI NODE CONFIG ─────────────────────────── */}
         {nodeType === "falAiNode" && (
-          <>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                fal.ai Model
-              </label>
-              <select
-                value={data.aiModel}
-                onChange={(e) => {
-                  updateNodeData(selectedNodeId, {
-                    aiModel: e.target.value,
-                    modelParams: {},
-                    paramBindings: {},
-                  });
-                }}
-                className="input-field text-sm"
-              >
-                <option value="">Select fal.ai model...</option>
-                <optgroup label="Image Generation">
-                  {getFalModels().filter((m) => m.category === "image").map((m) => (
-                    <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Video Generation">
-                  {getFalModels().filter((m) => m.category === "video").map((m) => (
-                    <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Audio Generation">
-                  {getFalModels().filter((m) => m.category === "audio").map((m) => (
-                    <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
-                  ))}
-                </optgroup>
-              </select>
-            </div>
-
-            {data.aiModel && (() => {
-              const model = getModelById(data.aiModel);
-              if (!model) return null;
-              return (
-                <div className="space-y-1">
-                  <p className="text-[10px] text-gray-400">{model.description}</p>
-                  {model.falEndpoint && (
-                    <p className="text-[10px] font-mono text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">
-                      {model.falEndpoint}
-                    </p>
-                  )}
-                </div>
-              );
-            })()}
-
-            {data.aiModel && <ModelParamsEditor nodeId={selectedNodeId} data={data} inputBindOptions={inputBindOptions} isFal />}
-          </>
+          <FalAiNodeConfig
+            nodeId={selectedNodeId}
+            data={data}
+            inputBindOptions={inputBindOptions}
+          />
         )}
+
+        {/* ── CUSTOM PARAMETERS (all node types) ─────────── */}
+        <CustomParamsEditor nodeId={selectedNodeId} data={data} allNodes={nodes} />
       </div>
     </div>
   );
@@ -416,4 +387,428 @@ function ParamInput({
         />
       );
   }
+}
+
+function CustomParamsEditor({
+  nodeId,
+  data,
+  allNodes,
+}: {
+  nodeId: string;
+  data: any;
+  allNodes: any[];
+}) {
+  const { updateNodeData } = useWorkflowStore();
+  const customParams: CustomParam[] = data.customParams || [];
+
+  const addParam = () => {
+    updateNodeData(nodeId, {
+      customParams: [...customParams, { name: "", value: "" }],
+    });
+  };
+
+  const updateParam = (index: number, field: "name" | "value", val: string) => {
+    const next = customParams.map((p, i) =>
+      i === index ? { ...p, [field]: val } : p
+    );
+    updateNodeData(nodeId, { customParams: next });
+  };
+
+  const removeParam = (index: number) => {
+    updateNodeData(nodeId, {
+      customParams: customParams.filter((_, i) => i !== index),
+    });
+  };
+
+  const otherParams = allNodes
+    .filter((n) => n.id !== nodeId && (n.data.customParams?.length ?? 0) > 0)
+    .flatMap((n) =>
+      (n.data.customParams as CustomParam[])
+        .filter((p) => p.name)
+        .map((p) => ({ node: n.data.label || "Unnamed", name: p.name }))
+    );
+
+  return (
+    <div className="space-y-3 border-t border-gray-200 dark:border-gray-800 pt-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+          <Variable className="w-3.5 h-3.5" />
+          Custom Parameters
+        </h4>
+        <button
+          onClick={addParam}
+          className="flex items-center gap-1 text-[10px] font-medium text-brand-500 hover:text-brand-600 transition-colors"
+        >
+          <Plus className="w-3 h-3" />
+          Add
+        </button>
+      </div>
+
+      {customParams.length === 0 ? (
+        <p className="text-[10px] text-gray-400">
+          No custom parameters. Add one to make it available as{" "}
+          <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">
+            {"{{name}}"}
+          </code>{" "}
+          in linked nodes.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {customParams.map((param, idx) => (
+            <div key={idx} className="flex items-start gap-1.5">
+              <div className="flex-1 space-y-1">
+                <input
+                  type="text"
+                  value={param.name}
+                  onChange={(e) =>
+                    updateParam(idx, "name", e.target.value.replace(/[^a-zA-Z0-9_]/g, ""))
+                  }
+                  className="input-field text-xs font-mono"
+                  placeholder="param_name"
+                />
+                <input
+                  type="text"
+                  value={param.value}
+                  onChange={(e) => updateParam(idx, "value", e.target.value)}
+                  className="input-field text-xs"
+                  placeholder="Parameter value..."
+                />
+              </div>
+              <button
+                onClick={() => removeParam(idx)}
+                className="mt-1 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {otherParams.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[10px] font-medium text-gray-400">
+            Available from other nodes:
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {otherParams.map((p, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-[10px] font-mono"
+                title={`From: ${p.node}`}
+              >
+                {`{{${p.name}}}`}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {customParams.length > 0 && (
+        <p className="text-[10px] text-gray-400">
+          Use{" "}
+          <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">
+            {"{{param_name}}"}
+          </code>{" "}
+          in prompts of downstream nodes to reference these values.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Fal.ai Node Config (grouped models + custom) ──────────────
+
+function FalAiNodeConfig({
+  nodeId,
+  data,
+  inputBindOptions,
+}: {
+  nodeId: string;
+  data: any;
+  inputBindOptions: { value: string; label: string }[];
+}) {
+  const { data: session } = useSession();
+  const { updateNodeData } = useWorkflowStore();
+  const isPro = session?.user?.subscription === "PRO" || session?.user?.subscription === "ENTERPRISE";
+  const customFalModel = getCustomFalModel();
+  const groups = groupFalVideoModels();
+  const isCustomModel = data.aiModel === "fal-custom";
+  const selectedModel = data.aiModel ? getModelById(data.aiModel) : null;
+
+  const handleModelChange = (value: string) => {
+    const reset: Partial<any> = {
+      aiModel: value,
+      modelParams: {},
+      paramBindings: {},
+    };
+    if (value !== "fal-custom") {
+      reset.customFalEndpoint = "";
+      reset.customFalParams = [];
+    }
+    updateNodeData(nodeId, reset);
+  };
+
+  return (
+    <>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+          fal.ai Model
+        </label>
+        <select
+          value={data.aiModel}
+          onChange={(e) => handleModelChange(e.target.value)}
+          className="input-field text-sm"
+        >
+          <option value="">Select fal.ai model...</option>
+
+          <optgroup label="Image Generation">
+            {getFalModels().filter((m) => m.category === "image").map((m) => (
+              <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+            ))}
+          </optgroup>
+
+          <optgroup label="Seedance (ByteDance)">
+            {groups.seedance.map((m) => (
+              <option key={m.id} value={m.id} disabled={m.comingSoon}>
+                {m.name} {m.comingSoon ? "— Coming Soon" : `(${m.costPerUse} NL)`}
+              </option>
+            ))}
+          </optgroup>
+
+          <optgroup label="Kling 3 / V3 (Kuaishou)">
+            {groups.kling3.map((m) => (
+              <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+            ))}
+          </optgroup>
+
+          <optgroup label="Kling O3 Omni (Kuaishou)">
+            {groups.klingO3.map((m) => (
+              <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+            ))}
+          </optgroup>
+
+          <optgroup label="Kling 2.5 Turbo (Kuaishou)">
+            {groups.kling25.map((m) => (
+              <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+            ))}
+          </optgroup>
+
+          <optgroup label="Sora 2 (OpenAI)">
+            {groups.sora.map((m) => (
+              <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+            ))}
+          </optgroup>
+
+          {(groups.kling16.length > 0 || groups.other.length > 0) && (
+            <optgroup label="Other Video">
+              {groups.kling16.map((m) => (
+                <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+              ))}
+              {groups.other.map((m) => (
+                <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+              ))}
+            </optgroup>
+          )}
+
+          <optgroup label="Audio Generation">
+            {getFalModels().filter((m) => m.category === "audio").map((m) => (
+              <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+            ))}
+          </optgroup>
+
+          <optgroup label="Custom Model (Pro)">
+            <option value="fal-custom" disabled={!isPro}>
+              {customFalModel.name} {!isPro ? "— Upgrade to Pro" : ""}
+            </option>
+          </optgroup>
+        </select>
+      </div>
+
+      {/* Model info badge */}
+      {selectedModel && !isCustomModel && (
+        <div className="space-y-1">
+          {selectedModel.comingSoon && (
+            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+              <Clock className="w-3.5 h-3.5 text-amber-500" />
+              <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                Coming Soon — Available Feb 24, 2026
+              </span>
+            </div>
+          )}
+          <p className="text-[10px] text-gray-400">{selectedModel.description}</p>
+          {selectedModel.falEndpoint && (
+            <p className="text-[10px] font-mono text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">
+              {selectedModel.falEndpoint}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Standard model params (non-custom) */}
+      {data.aiModel && !isCustomModel && !selectedModel?.comingSoon && (
+        <ModelParamsEditor nodeId={nodeId} data={data} inputBindOptions={inputBindOptions} isFal />
+      )}
+
+      {/* Custom fal.ai model UI */}
+      {isCustomModel && (
+        <CustomFalModelEditor nodeId={nodeId} data={data} inputBindOptions={inputBindOptions} />
+      )}
+    </>
+  );
+}
+
+// ─── Custom fal.ai Model Editor ─────────────────────────────────
+
+function CustomFalModelEditor({
+  nodeId,
+  data,
+  inputBindOptions,
+}: {
+  nodeId: string;
+  data: any;
+  inputBindOptions: { value: string; label: string }[];
+}) {
+  const { updateNodeData } = useWorkflowStore();
+  const customFalParams: CustomFalParam[] = data.customFalParams || [];
+  const endpoint = data.customFalEndpoint || "";
+
+  const setEndpoint = (value: string) => {
+    updateNodeData(nodeId, { customFalEndpoint: value });
+  };
+
+  const addParam = () => {
+    updateNodeData(nodeId, {
+      customFalParams: [...customFalParams, { key: "", value: "" }],
+    });
+  };
+
+  const updateParam = (index: number, field: "key" | "value", val: string) => {
+    const next = customFalParams.map((p, i) =>
+      i === index ? { ...p, [field]: val } : p
+    );
+    updateNodeData(nodeId, { customFalParams: next });
+  };
+
+  const removeParam = (index: number) => {
+    updateNodeData(nodeId, {
+      customFalParams: customFalParams.filter((_, i) => i !== index),
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+        <Zap className="w-3.5 h-3.5 text-purple-500" />
+        <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400">
+          Pro Feature — Custom fal.ai Endpoint
+        </span>
+      </div>
+
+      {/* Endpoint input */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+          fal.ai Endpoint
+        </label>
+        <input
+          type="text"
+          value={endpoint}
+          onChange={(e) => setEndpoint(e.target.value)}
+          className="input-field text-xs font-mono"
+          placeholder="fal-ai/my-model/v1/text-to-video"
+        />
+        <p className="mt-1 text-[10px] text-gray-400">
+          The fal.ai model ID or workflow endpoint (e.g. <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800">fal-ai/model-name</code>)
+        </p>
+      </div>
+
+      {/* Custom parameters */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            API Parameters
+          </h4>
+          <button
+            onClick={addParam}
+            className="flex items-center gap-1 text-[10px] font-medium text-brand-500 hover:text-brand-600 transition-colors"
+          >
+            <Plus className="w-3 h-3" />
+            Add Param
+          </button>
+        </div>
+
+        {customFalParams.length === 0 ? (
+          <p className="text-[10px] text-gray-400">
+            No parameters yet. Add key-value pairs to send to the fal.ai API.
+            Use{" "}
+            <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">
+              {"{{input}}"}
+            </code>{" "}
+            to bind to the previous step&apos;s output.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {customFalParams.map((param, idx) => (
+              <div key={idx} className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={param.key}
+                    onChange={(e) =>
+                      updateParam(idx, "key", e.target.value.replace(/[^a-zA-Z0-9_]/g, ""))
+                    }
+                    className="input-field text-xs font-mono flex-1"
+                    placeholder="param_name"
+                  />
+                  <button
+                    onClick={() => removeParam(idx)}
+                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={param.value}
+                    onChange={(e) => updateParam(idx, "value", e.target.value)}
+                    className="input-field text-xs flex-1"
+                    placeholder="value or {{input}} / {{variable}}"
+                  />
+                  <select
+                    value={
+                      param.value.startsWith("{{") && param.value.endsWith("}}")
+                        ? param.value
+                        : "_manual_"
+                    }
+                    onChange={(e) => {
+                      if (e.target.value === "_manual_") return;
+                      updateParam(idx, "value", e.target.value);
+                    }}
+                    className="text-[10px] px-1.5 py-1 rounded border border-gray-200 dark:border-gray-700 bg-transparent w-24 shrink-0"
+                  >
+                    <option value="_manual_">Manual</option>
+                    <option value="{{input}}">Prev. step</option>
+                    {inputBindOptions.map((opt) => (
+                      <option key={opt.value} value={`{{${opt.value}}}`}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {param.value.startsWith("{{") && param.value.endsWith("}}") && (
+                  <div className="flex items-center gap-1 text-[10px] text-blue-500">
+                    <Link2 className="w-2.5 h-2.5" />
+                    <span className="font-mono">Bound to {param.value}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
