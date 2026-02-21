@@ -31,6 +31,8 @@ import {
   X,
   Rocket,
   Store,
+  Tag,
+  Gift,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -103,6 +105,9 @@ export default function Dashboard() {
   const [connectLoading, setConnectLoading] = useState(false);
   const [upgradeLoading, setUpgradeLoading] = useState<string | null>(null);
   const [upgradeBanner, setUpgradeBanner] = useState<string | null>(null);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoResult, setPromoResult] = useState<{ valid?: boolean; error?: string; description?: string } | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/signin");
@@ -265,6 +270,52 @@ export default function Dashboard() {
       toast.error("Something went wrong");
     }
     setUpgradeLoading(null);
+  };
+
+  const handlePromoRedeem = async () => {
+    if (!promoCode.trim()) return;
+    setPromoLoading(true);
+    setPromoResult(null);
+    try {
+      const validateRes = await fetch("/api/promo/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: promoCode }),
+      });
+      const validateData = await validateRes.json();
+
+      if (!validateRes.ok) {
+        setPromoResult({ error: validateData.error });
+        setPromoLoading(false);
+        return;
+      }
+
+      if (validateData.type !== "CREDITS") {
+        setPromoResult({ valid: true, description: `${validateData.description} — enter this code at checkout` });
+        setPromoLoading(false);
+        return;
+      }
+
+      const redeemRes = await fetch("/api/promo/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: promoCode }),
+      });
+      const redeemData = await redeemRes.json();
+
+      if (redeemRes.ok && redeemData.success) {
+        toast.success(redeemData.message);
+        setPromoCode("");
+        setPromoResult(null);
+        setPurchasedBalance((b) => b + redeemData.creditsAdded);
+        update();
+      } else {
+        setPromoResult({ error: redeemData.error || "Failed to redeem code" });
+      }
+    } catch {
+      setPromoResult({ error: "Something went wrong" });
+    }
+    setPromoLoading(false);
   };
 
   if (status === "loading" || !session) {
@@ -652,6 +703,45 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="card p-6">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2"><Tag className="w-5 h-5" />Promo Code</h3>
+              <p className="text-sm text-gray-500 mb-4">Have a promo code? Enter it below to redeem free Nolinks or get a discount.</p>
+              <div className="flex gap-3">
+                <div className="flex-1 relative">
+                  <Gift className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={promoCode}
+                    onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoResult(null); }}
+                    onKeyDown={(e) => e.key === "Enter" && handlePromoRedeem()}
+                    className="input-field pl-9 uppercase tracking-wider"
+                    placeholder="ENTER CODE"
+                    maxLength={32}
+                  />
+                </div>
+                <button
+                  onClick={handlePromoRedeem}
+                  disabled={promoLoading || !promoCode.trim()}
+                  className="btn-primary gap-2 shrink-0"
+                >
+                  {promoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Tag className="w-4 h-4" />}
+                  Redeem
+                </button>
+              </div>
+              {promoResult?.error && (
+                <p className="mt-2 text-sm text-red-500 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {promoResult.error}
+                </p>
+              )}
+              {promoResult?.valid && promoResult.description && (
+                <p className="mt-2 text-sm text-emerald-600 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  {promoResult.description}
+                </p>
+              )}
             </div>
 
             <div>

@@ -53,6 +53,7 @@ export async function createCheckoutSession(
   return stripe.checkout.sessions.create({
     customer: customerId,
     mode: "payment",
+    allow_promotion_codes: true,
     line_items: [
       {
         price_data: {
@@ -85,6 +86,7 @@ export async function createSubscriptionCheckout(
   return stripe.checkout.sessions.create({
     customer: customerId,
     mode: "subscription",
+    allow_promotion_codes: true,
     line_items: [
       {
         price_data: {

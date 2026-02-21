@@ -47,6 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     customer: customerId ?? undefined,
     mode: "payment",
     payment_method_types: ["card"],
+    allow_promotion_codes: true,
     line_items: [
       {
         price_data: {
