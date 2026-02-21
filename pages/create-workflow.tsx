@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import dynamic from "next/dynamic";
-import { ArrowLeft, Zap, Crown, Loader2 } from "lucide-react";
+import { ArrowLeft, Crown, Loader2 } from "lucide-react";
+import AppLogo from "@/components/AppLogo";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { SUBSCRIPTION_PLANS } from "@/lib/constants";
@@ -108,9 +109,7 @@ export default function CreateWorkflow() {
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center">
-              <Zap className="w-3.5 h-3.5 text-white" />
-            </div>
+            <AppLogo size={28} />
             <span className="font-semibold text-sm">Workflow Builder</span>
           </div>
         </div>

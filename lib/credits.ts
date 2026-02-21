@@ -1,6 +1,4 @@
 import prisma from "./prisma";
-import { estimateWorkflowCost, type StepDefinition } from "./ai-engine";
-import type { Step } from "@prisma/client";
 import {
   CREATOR_COMMISSION_RATE,
   NL_TO_USD_CENTS,
@@ -38,22 +36,8 @@ export async function checkBalance(userId: string, cost: number): Promise<boolea
 export async function deductCredits(
   userId: string,
   workflowId: string,
-  steps: Step[]
+  cost: number
 ) {
-  const defs: StepDefinition[] = steps.map((s) => ({
-    id: s.id,
-    order: s.order,
-    name: s.name,
-    stepType: s.stepType,
-    aiModel: s.aiModel,
-    inputType: s.inputType,
-    outputType: s.outputType,
-    prompt: s.prompt,
-    params: s.params as Record<string, unknown> | null,
-    acceptTypes: s.acceptTypes,
-  }));
-  const cost = estimateWorkflowCost(defs);
-
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || totalBalance(user.purchasedBalance, user.earnedBalance) < cost) {
     throw new Error("Insufficient Nolinks balance");
@@ -157,7 +141,7 @@ export async function requestPayout(userId: string, amountNL: number) {
   if (!user) throw new Error("User not found");
 
   if (!PAYOUT_ELIGIBLE_TIERS.includes(user.subscription as any)) {
-    throw new Error("Upgrade to Pro or Enterprise to withdraw earnings");
+    throw new Error("Upgrade to Pro or Power to withdraw earnings");
   }
 
   if (!user.stripeConnectOnboarded || !user.stripeConnectId) {

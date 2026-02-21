@@ -47,7 +47,7 @@ enum SubscriptionTier {
   FREE
   STARTER
   PRO
-  ENTERPRISE
+  POWER
 }
 
 model User {

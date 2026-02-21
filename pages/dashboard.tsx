@@ -643,7 +643,7 @@ export default function Dashboard() {
                       ))}
                     </ul>
                     {(() => {
-                      const tierOrder = ["FREE", "STARTER", "PRO", "ENTERPRISE"];
+                      const tierOrder = ["FREE", "STARTER", "PRO", "POWER"];
                       const isCurrent = session.user.subscription === plan.tier;
                       const isDowngrade = tierOrder.indexOf(plan.tier) <= tierOrder.indexOf(session.user.subscription);
                       const isFree = plan.priceInCents === 0;

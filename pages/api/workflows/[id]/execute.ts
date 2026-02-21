@@ -167,7 +167,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!aborted) {
     try {
       if (cost > 0 && !failed) {
-        await deductCredits(session.user.id, workflow.id, workflow.steps);
+        await deductCredits(session.user.id, workflow.id, cost);
       }
 
       await prisma.execution.update({

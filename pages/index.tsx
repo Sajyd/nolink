@@ -2,7 +2,6 @@ import Link from "next/link";
 import Head from "next/head";
 import { useSession } from "next-auth/react";
 import {
-  Zap,
   ArrowRight,
   Layers,
   CreditCard,
@@ -12,6 +11,7 @@ import {
   Shield,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import AppLogo from "@/components/AppLogo";
 
 const FEATURES = [
   {
@@ -197,9 +197,7 @@ export default function Home() {
       <footer className="border-t border-gray-200 dark:border-gray-800 py-8">
         <div className="max-w-6xl mx-auto px-4 flex items-center justify-between text-sm text-gray-500">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-brand-600 flex items-center justify-center">
-              <Zap className="w-3 h-3 text-white" />
-            </div>
+            <AppLogo size={24} />
             <span>nolink.ai</span>
           </div>
           <p>&copy; {new Date().getFullYear()} nolink.ai. All rights reserved.</p>

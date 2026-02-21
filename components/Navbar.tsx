@@ -3,6 +3,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/router";
 import { useState } from "react";
 import { Zap, Menu, X, LogOut, User, LayoutDashboard, Store, Plus } from "lucide-react";
+import AppLogo from "./AppLogo";
 import ThemeToggle from "./ThemeToggle";
 
 export default function Navbar() {
@@ -29,9 +30,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <Zap className="w-4 h-4 text-white" />
-            </div>
+            <AppLogo size={32} className="group-hover:scale-105 transition-transform" />
             <span className="text-lg font-bold tracking-tight">
               nolink<span className="text-brand-600">.ai</span>
             </span>

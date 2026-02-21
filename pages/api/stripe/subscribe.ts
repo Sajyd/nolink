@@ -24,7 +24,7 @@ export default async function handler(
     return res.status(400).json({ error: "Invalid plan" });
   }
 
-  const tierOrder = ["FREE", "STARTER", "PRO", "ENTERPRISE"];
+  const tierOrder = ["FREE", "STARTER", "PRO", "POWER"];
   const currentIdx = tierOrder.indexOf(session.user.subscription);
   const targetIdx = tierOrder.indexOf(tier);
 
