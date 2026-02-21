@@ -125,6 +125,18 @@ export default function Dashboard() {
   }, [router.query.upgraded]);
 
   useEffect(() => {
+    const connectParam = router.query.connect as string;
+    if (connectParam === "complete") {
+      fetchConnectStatus();
+      toast.success("Stripe account connected! Checking status…");
+      router.replace("/dashboard?tab=earnings", undefined, { shallow: true });
+    } else if (connectParam === "refresh") {
+      toast("Onboarding incomplete — please try again", { icon: "⚠️" });
+      router.replace("/dashboard?tab=earnings", undefined, { shallow: true });
+    }
+  }, [router.query.connect]);
+
+  useEffect(() => {
     if (session) fetchAll();
   }, [session]);
 
@@ -193,6 +205,15 @@ export default function Dashboard() {
       else toast.error(data.error || "Failed to start onboarding");
     } catch { toast.error("Something went wrong"); }
     setConnectLoading(false);
+  };
+
+  const handleConnectDashboard = async () => {
+    try {
+      const res = await fetch("/api/connect/dashboard", { method: "POST" });
+      const data = await res.json();
+      if (data.url) window.open(data.url, "_blank");
+      else toast.error(data.error || "Failed to open Stripe dashboard");
+    } catch { toast.error("Something went wrong"); }
   };
 
   const handlePayout = async () => {
@@ -521,12 +542,18 @@ export default function Dashboard() {
                   </div>
                 </div>
               ) : connectStatus?.onboarded ? (
-                <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                  <div>
-                    <p className="font-medium text-emerald-700 dark:text-emerald-300">Stripe Connected</p>
-                    <p className="text-sm text-emerald-600 dark:text-emerald-400">Your account is fully set up for payouts</p>
+                <div className="flex items-center justify-between gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                    <div>
+                      <p className="font-medium text-emerald-700 dark:text-emerald-300">Stripe Connected</p>
+                      <p className="text-sm text-emerald-600 dark:text-emerald-400">Your account is fully set up for payouts</p>
+                    </div>
                   </div>
+                  <button onClick={handleConnectDashboard} className="btn-ghost text-sm gap-1.5 shrink-0">
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Stripe Dashboard
+                  </button>
                 </div>
               ) : connectStatus?.connected ? (
                 <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
@@ -630,39 +657,36 @@ export default function Dashboard() {
             <div>
               <h3 className="font-semibold text-lg mb-4 flex items-center gap-2"><Crown className="w-5 h-5" />Subscription Plans</h3>
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {SUBSCRIPTION_PLANS.map((plan) => (
-                  <div key={plan.tier}
-                    className={`card p-5 ${session.user.subscription === plan.tier ? "!border-brand-500 ring-2 ring-brand-500/20" : ""}`}
-                  >
-                    <h4 className="font-semibold">{plan.name}</h4>
-                    <p className="text-2xl font-bold mt-2">{plan.priceInCents === 0 ? "Free" : `$${(plan.priceInCents / 100).toFixed(2)}/mo`}</p>
-                    <p className="text-sm text-brand-500 mt-1">{plan.monthlyNolinks} NL/month</p>
-                    <ul className="mt-4 space-y-1.5">
-                      {plan.features.map((f) => (
-                        <li key={f} className="text-xs text-gray-500 dark:text-gray-400">✓ {f}</li>
-                      ))}
-                    </ul>
-                    {(() => {
-                      const tierOrder = ["FREE", "STARTER", "PRO", "POWER"];
-                      const isCurrent = session.user.subscription === plan.tier;
-                      const isDowngrade = tierOrder.indexOf(plan.tier) <= tierOrder.indexOf(session.user.subscription);
-                      const isFree = plan.priceInCents === 0;
+                {SUBSCRIPTION_PLANS.map((plan) => {
+                  const tierOrder = ["FREE", "STARTER", "PRO", "ENTERPRISE"];
+                  const isCurrent = session.user.subscription === plan.tier;
+                  const isDowngrade = tierOrder.indexOf(plan.tier) < tierOrder.indexOf(session.user.subscription);
+                  const isFree = plan.priceInCents === 0;
+                  const isUpgrade = !isCurrent && !isDowngrade && !isFree;
 
-                      if (isCurrent) {
-                        return (
-                          <button className="mt-4 w-full btn-secondary" disabled>
-                            Current Plan
-                          </button>
-                        );
-                      }
-                      if (isFree || isDowngrade) {
-                        return (
-                          <button className="mt-4 w-full btn-secondary opacity-50" disabled>
-                            {isFree ? "Free Tier" : "Current or Lower"}
-                          </button>
-                        );
-                      }
-                      return (
+                  return (
+                    <div key={plan.tier}
+                      className={`card p-5 relative flex flex-col ${isCurrent ? "!border-brand-500 ring-2 ring-brand-500/20 bg-brand-50/50 dark:bg-brand-950/20" : ""}`}
+                    >
+                      {isCurrent && (
+                        <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-brand-600 text-white text-[11px] font-semibold">
+                          Your Plan
+                        </span>
+                      )}
+                      <h4 className="font-semibold">{plan.name}</h4>
+                      <p className="text-2xl font-bold mt-2">{plan.priceInCents === 0 ? "Free" : `$${(plan.priceInCents / 100).toFixed(2)}/mo`}</p>
+                      <p className="text-sm text-brand-500 mt-1">{plan.monthlyNolinks} NL/month</p>
+                      <ul className="mt-4 space-y-1.5 flex-1">
+                        {plan.features.map((f) => (
+                          <li key={f} className="text-xs text-gray-500 dark:text-gray-400">✓ {f}</li>
+                        ))}
+                      </ul>
+                      {isCurrent ? (
+                        <button className="mt-4 w-full btn-secondary gap-2 cursor-default" disabled>
+                          <CheckCircle2 className="w-4 h-4" />
+                          Current Plan
+                        </button>
+                      ) : isUpgrade ? (
                         <button
                           onClick={() => handleSubscribe(plan.tier)}
                           disabled={upgradeLoading === plan.tier}
@@ -675,10 +699,10 @@ export default function Dashboard() {
                           )}
                           Upgrade
                         </button>
-                      );
-                    })()}
-                  </div>
-                ))}
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

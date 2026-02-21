@@ -26,6 +26,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: "Webhook signature verification failed" });
   }
 
+  // ── Checkout completed (subscriptions & credit purchases) ──────
+
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as any;
 
@@ -64,6 +66,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
+  // ── Subscription renewal (monthly credit allocation) ───────────
+
   if (event.type === "invoice.payment_succeeded") {
     const invoice = event.data.object as any;
 
@@ -86,6 +90,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
+  // ── Subscription cancelled ─────────────────────────────────────
+
   if (event.type === "customer.subscription.deleted") {
     const subscription = event.data.object as any;
     const customerId = subscription.customer as string;
@@ -99,6 +105,115 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         where: { id: user.id },
         data: { subscription: "FREE" },
       });
+    }
+  }
+
+  // ── Stripe Connect: account updated (auto-detect onboarding) ──
+
+  if (event.type === "account.updated") {
+    const account = event.data.object as any;
+    const connectId = account.id as string;
+
+    const isOnboarded =
+      account.details_submitted === true &&
+      account.charges_enabled === true &&
+      account.payouts_enabled === true;
+
+    if (isOnboarded) {
+      const user = await prisma.user.findFirst({
+        where: { stripeConnectId: connectId },
+      });
+
+      if (user && !user.stripeConnectOnboarded) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { stripeConnectOnboarded: true },
+        });
+      }
+    }
+  }
+
+  // ── Stripe Connect: transfer reversed (refund payout) ─────────
+
+  if (event.type === "transfer.reversed") {
+    const transfer = event.data.object as any;
+    const payoutId = transfer.metadata?.payoutId as string | undefined;
+
+    if (payoutId) {
+      const payout = await prisma.payout.findUnique({ where: { id: payoutId } });
+
+      if (payout && payout.status !== "FAILED") {
+        await prisma.$transaction([
+          prisma.payout.update({
+            where: { id: payoutId },
+            data: {
+              status: "FAILED",
+              failureReason: "Transfer reversed by Stripe",
+            },
+          }),
+          prisma.user.update({
+            where: { id: payout.userId },
+            data: { earnedBalance: { increment: payout.amountNL } },
+          }),
+          prisma.creditTransaction.create({
+            data: {
+              userId: payout.userId,
+              amount: payout.amountNL,
+              type: "PAYOUT_REVERSAL",
+              wallet: "earned",
+              reason: `Payout reversed — ${payout.amountNL} NL refunded`,
+            },
+          }),
+        ]);
+      }
+    }
+  }
+
+  // ── Stripe Connect: payout to bank failed ──────────────────────
+
+  if (event.type === "payout.failed") {
+    const stripePayout = event.data.object as any;
+    const connectAccountId = event.account as string | undefined;
+
+    if (connectAccountId) {
+      const user = await prisma.user.findFirst({
+        where: { stripeConnectId: connectAccountId },
+      });
+
+      if (user) {
+        const recentPayout = await prisma.payout.findFirst({
+          where: {
+            userId: user.id,
+            status: "COMPLETED",
+          },
+          orderBy: { completedAt: "desc" },
+        });
+
+        if (recentPayout) {
+          await prisma.$transaction([
+            prisma.payout.update({
+              where: { id: recentPayout.id },
+              data: {
+                status: "FAILED",
+                failureReason: stripePayout.failure_message || "Bank payout failed",
+              },
+            }),
+            prisma.user.update({
+              where: { id: user.id },
+              data: { earnedBalance: { increment: recentPayout.amountNL } },
+            }),
+            prisma.creditTransaction.create({
+              data: {
+                userId: user.id,
+                amount: recentPayout.amountNL,
+                type: "PAYOUT_REVERSAL",
+                wallet: "earned",
+                reason: `Bank payout failed — ${recentPayout.amountNL} NL refunded`,
+              },
+            }),
+          ]);
+        }
+      }
     }
   }
 

@@ -174,6 +174,12 @@ export async function markConnectOnboarded(userId: string) {
   });
 }
 
+export async function createConnectLoginLink(accountId: string) {
+  const stripe = getStripe();
+  const loginLink = await stripe.accounts.createLoginLink(accountId);
+  return loginLink.url;
+}
+
 // ── Payouts via Stripe Transfer ─────────────────────────────────
 
 export async function executeStripePayout(

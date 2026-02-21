@@ -2,14 +2,14 @@
 export const NL_TO_USD_CENTS = 2; // 1 NL = $0.02
 export const CREATOR_COMMISSION_RATE = 0.7; // 70% to creator
 export const MINIMUM_PAYOUT_NL = 100; // minimum 100 NL ($4.00) to request payout
-export const PAYOUT_ELIGIBLE_TIERS = ["PRO", "POWER"] as const;
+export const PAYOUT_ELIGIBLE_TIERS = ["PRO", "ENTERPRISE"] as const;
 
 // Workflow limits per subscription tier
 export const WORKFLOW_LIMITS: Record<string, number> = {
   FREE: 0,
   STARTER: 10,
   PRO: 999999,
-  POWER: 999999,
+  ENTERPRISE: 999999,
 };
 
 export const CREDIT_PACKAGES = [
@@ -41,8 +41,8 @@ export const SUBSCRIPTION_PLANS = [
     features: ["2,000 Nolinks/month", "Unlimited workflows", "API access (pay per use)", "Priority execution", "Stripe Connect earnings", "Priority support"],
   },
   {
-    tier: "POWER" as const,
-    name: "Power",
+    tier: "ENTERPRISE" as const,
+    name: "Enterprise",
     monthlyNolinks: 10000,
     priceInCents: 9999,
     features: ["10,000 Nolinks/month", "Custom AI models", "API access (pay per use)", "Dedicated support", "Custom branding"],

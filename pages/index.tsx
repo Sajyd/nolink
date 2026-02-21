@@ -54,21 +54,36 @@ const FEATURES = [
   },
 ];
 
-const FALLBACK_EXAMPLES = [
-  { name: "Blog → Social Media", steps: 3, category: "Content", price: 8, slug: "" },
-  { name: "Audio Transcription + Summary", steps: 2, category: "Audio", price: 5, slug: "" },
-  { name: "Product Image + Description", steps: 3, category: "Marketing", price: 12, slug: "" },
-  { name: "Code Review Pipeline", steps: 2, category: "Development", price: 6, slug: "" },
-  { name: "PDF Analysis Report", steps: 3, category: "Data", price: 10, slug: "" },
+const FALLBACK_EXAMPLES: WorkflowExample[] = [
+  { name: "Blog → Social Media", description: "Turn a blog post into Twitter threads, LinkedIn posts, and Instagram captions automatically.", steps: 3, category: "CONTENT", price: 8, slug: "", tags: ["writing", "social"], totalUses: 0 },
+  { name: "Audio Transcription + Summary", description: "Transcribe any audio file and generate a concise summary with key takeaways.", steps: 2, category: "AUDIO_VIDEO", price: 5, slug: "", tags: ["audio", "transcription"], totalUses: 0 },
+  { name: "Product Image + Description", description: "Generate product photos and compelling copy from a simple brief.", steps: 3, category: "MARKETING", price: 12, slug: "", tags: ["images", "copywriting"], totalUses: 0 },
+  { name: "Code Review Pipeline", description: "Analyze code for bugs, security issues, and style — with actionable suggestions.", steps: 2, category: "DEVELOPMENT", price: 6, slug: "", tags: ["code", "review"], totalUses: 0 },
+  { name: "PDF Analysis Report", description: "Extract insights from PDF documents and generate structured analysis reports.", steps: 3, category: "DATA", price: 10, slug: "", tags: ["pdf", "analysis"], totalUses: 0 },
+  { name: "Lesson Plan Generator", description: "Create structured lesson plans with quizzes and activities from any topic.", steps: 3, category: "EDUCATION", price: 7, slug: "", tags: ["teaching", "AI"], totalUses: 0 },
 ];
 
 interface WorkflowExample {
   name: string;
+  description: string;
   steps: number;
   category: string;
   price: number;
   slug: string;
+  tags: string[];
+  totalUses: number;
 }
+
+const CATEGORY_COLORS: Record<string, string> = {
+  CONTENT: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  MARKETING: "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300",
+  DEVELOPMENT: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
+  DESIGN: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  AUDIO_VIDEO: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
+  DATA: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300",
+  EDUCATION: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
+  OTHER: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+};
 
 function formatCategory(cat: string) {
   return cat.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -140,35 +155,72 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="mt-16 grid grid-cols-2 sm:grid-cols-5 gap-3 max-w-3xl mx-auto"
+            className="mt-20 max-w-5xl mx-auto"
           >
-            {examples.map((w) => {
-              const inner = (
-                <>
-                  <p className="text-[10px] text-brand-500 font-medium">{formatCategory(w.category)}</p>
-                  <p className="text-xs font-semibold mt-1 truncate">{w.name}</p>
-                  <p className="text-[10px] text-gray-400 mt-1">
-                    {w.steps} steps · {w.price} NL
-                  </p>
-                </>
-              );
-              return w.slug ? (
-                <Link
+            <h2 className="text-2xl sm:text-3xl font-bold mb-2">
+              Popular <span className="gradient-text">Workflows</span>
+            </h2>
+            <p className="text-gray-500 dark:text-gray-400 mb-8">
+              Jump in and try the community&apos;s most-used automations
+            </p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 text-left">
+              {examples.map((w, i) => (
+                <motion.div
                   key={w.name}
-                  href={`/workflow/${w.slug}`}
-                  className="card p-3 text-center hover:scale-105 transition-transform"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.3 + i * 0.08 }}
                 >
-                  {inner}
-                </Link>
-              ) : (
-                <div
-                  key={w.name}
-                  className="card p-3 text-center hover:scale-105 transition-transform cursor-default"
-                >
-                  {inner}
-                </div>
-              );
-            })}
+                  <Link
+                    href={w.slug ? `/workflow/${w.slug}` : "/marketplace"}
+                    className="card p-5 h-full flex flex-col gap-3 group hover:border-brand-300 dark:hover:border-brand-700 transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className={`badge text-[11px] ${CATEGORY_COLORS[w.category] || CATEGORY_COLORS.OTHER}`}>
+                        {formatCategory(w.category)}
+                      </span>
+                      {w.price === 0 ? (
+                        <span className="badge-green">Free</span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-sm font-semibold text-brand-600 dark:text-brand-400">
+                          <Zap className="w-3.5 h-3.5" />
+                          {w.price} NL
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-base group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors line-clamp-1">
+                        {w.name}
+                      </h3>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
+                        {w.description}
+                      </p>
+                    </div>
+
+                    {w.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {w.tags.slice(0, 3).map((tag) => (
+                          <span key={tag} className="badge-gray text-[10px]">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
+                      <span className="text-xs text-gray-400 flex items-center gap-1">
+                        <Play className="w-3 h-3" />
+                        {w.totalUses > 0 ? `${w.totalUses} runs` : "New"} · {w.steps} steps
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400 group-hover:translate-x-0.5 transition-transform">
+                        Try it <ArrowRight className="w-3 h-3" />
+                      </span>
+                    </div>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
           </motion.div>
         </div>
       </section>
@@ -245,15 +297,18 @@ export const getServerSideProps: GetServerSideProps = async () => {
       where: { isPublic: true },
       include: { steps: { select: { id: true } } },
       orderBy: { totalUses: "desc" },
-      take: 5,
+      take: 6,
     });
 
     const popularWorkflows: WorkflowExample[] = workflows.map((w) => ({
       name: w.name,
+      description: w.description,
       steps: w.steps.length,
       category: w.category,
       price: w.priceInNolinks,
       slug: w.slug,
+      tags: w.tags,
+      totalUses: w.totalUses,
     }));
 
     return { props: { popularWorkflows } };
