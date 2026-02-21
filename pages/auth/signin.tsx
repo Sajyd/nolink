@@ -3,8 +3,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import Head from "next/head";
-import { Mail, Lock, ArrowRight } from "lucide-react";
-import AppLogo from "@/components/AppLogo";
+import { Zap, Mail, Lock, ArrowRight } from "lucide-react";
 import toast from "react-hot-toast";
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -69,7 +68,9 @@ export default function SignIn() {
       <div className="min-h-[80vh] flex items-center justify-center px-4">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
-            <AppLogo size={48} className="mx-auto mb-4" />
+            <div className="w-12 h-12 rounded-xl bg-brand-600 flex items-center justify-center mx-auto mb-4">
+              <Zap className="w-6 h-6 text-white" />
+            </div>
             <h1 className="text-2xl font-bold">Welcome back</h1>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Sign in to your nolink.ai account

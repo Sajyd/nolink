@@ -2,6 +2,7 @@ import Link from "next/link";
 import Head from "next/head";
 import { useSession } from "next-auth/react";
 import {
+  Zap,
   ArrowRight,
   Layers,
   CreditCard,
@@ -9,10 +10,8 @@ import {
   Sparkles,
   Play,
   Shield,
-  Zap,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import AppLogo from "@/components/AppLogo";
 
 const FEATURES = [
   {
@@ -71,8 +70,8 @@ export default function Home() {
       </Head>
 
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-brand-50/50 to-transparent dark:from-blue-950 dark:to-black" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-brand-200/20 via-transparent to-transparent dark:from-blue-900/40 dark:via-transparent dark:to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-brand-50/50 to-transparent dark:from-brand-950/30 dark:to-transparent" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-brand-200/20 via-transparent to-transparent dark:from-brand-800/10" />
 
         <div className="relative max-w-5xl mx-auto px-4 pt-24 pb-20 text-center">
           <motion.div
@@ -198,7 +197,9 @@ export default function Home() {
       <footer className="border-t border-gray-200 dark:border-gray-800 py-8">
         <div className="max-w-6xl mx-auto px-4 flex items-center justify-between text-sm text-gray-500">
           <div className="flex items-center gap-2">
-            <AppLogo size={24} />
+            <div className="w-6 h-6 rounded-md bg-brand-600 flex items-center justify-center">
+              <Zap className="w-3 h-3 text-white" />
+            </div>
             <span>nolink.ai</span>
           </div>
           <p>&copy; {new Date().getFullYear()} nolink.ai. All rights reserved.</p>
