@@ -106,7 +106,7 @@ After seeding:
 - **Nolinks (NL)** — Platform credits used to run workflows
 - New users start with **50 NL** free
 - Credit packs: 100 NL ($4.99), 500 NL ($19.99), 1,200 NL ($39.99)
-- Subscription tiers: Free, Starter, Pro, Power
+- Subscription tiers: Free, Starter, Pro, Enterprise
 - Creators earn **70%** commission on paid workflow runs
 
 ## License
