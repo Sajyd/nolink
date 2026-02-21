@@ -64,14 +64,14 @@ export default function Home() {
   const { data: session } = useSession();
 
   return (
-    <>
+    <div className="dark:bg-gradient-to-b dark:from-[#0a1628] dark:via-[#060f1f] dark:to-black">
       <Head>
         <title>nolink.ai — AI Workflow Marketplace</title>
       </Head>
 
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-brand-50/50 to-transparent dark:from-brand-950/30 dark:to-transparent" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-brand-200/20 via-transparent to-transparent dark:from-brand-800/10" />
+        <div className="absolute inset-0 bg-gradient-to-b from-brand-50/50 to-transparent dark:from-blue-950/40 dark:to-transparent" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-brand-200/20 via-transparent to-transparent dark:from-blue-900/20" />
 
         <div className="relative max-w-5xl mx-auto px-4 pt-24 pb-20 text-center">
           <motion.div
@@ -205,6 +205,6 @@ export default function Home() {
           <p>&copy; {new Date().getFullYear()} nolink.ai. All rights reserved.</p>
         </div>
       </footer>
-    </>
+    </div>
   );
 }
