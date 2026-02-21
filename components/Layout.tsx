@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import Navbar from "./Navbar";
 import { useRouter } from "next/router";
 
-const FULL_SCREEN_ROUTES = ["/create-workflow"];
+const FULL_SCREEN_ROUTES = ["/create-workflow", "/edit-workflow"];
 
 export default function Layout({ children }: { children: ReactNode }) {
   const router = useRouter();
