@@ -53,14 +53,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
     } else {
-      const { packageId, nolinks } = session.metadata || {};
-      if (packageId && nolinks) {
-        const customerId = session.customer as string;
-        const user = await prisma.user.findFirst({
-          where: { stripeCustomerId: customerId },
-        });
-        if (user) {
-          await addCredits(user.id, parseInt(nolinks), `Purchased ${packageId}`);
+      const { packageId, nolinks, userId } = session.metadata || {};
+      if (nolinks) {
+        let targetUserId = userId;
+
+        if (!targetUserId) {
+          const customerId = session.customer as string;
+          const user = await prisma.user.findFirst({
+            where: { stripeCustomerId: customerId },
+          });
+          targetUserId = user?.id;
+        }
+
+        if (targetUserId) {
+          const label = packageId ? `Purchased ${packageId}` : `Purchased ${nolinks} Nolinks`;
+          await addCredits(targetUserId, parseInt(nolinks), label);
         }
       }
     }
