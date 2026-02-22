@@ -21,6 +21,7 @@ const STEP_TYPE_TO_NODE: Record<string, string> = {
   OUTPUT: "outputNode",
   BASIC: "basicNode",
   FAL_AI: "falAiNode",
+  CUSTOM_API: "customApiNode",
 };
 
 export default function EditWorkflow() {
@@ -100,6 +101,12 @@ export default function EditWorkflow() {
           customParams: (config.customParams as any[]) || undefined,
           customFalEndpoint: (config.customFalEndpoint as string) || undefined,
           customFalParams: (config.customFalParams as CustomFalParam[]) || undefined,
+          customApiUrl: (config.customApiUrl as string) || undefined,
+          customApiMethod: (config.customApiMethod as any) || undefined,
+          customApiHeaders: (config.customApiHeaders as any[]) || undefined,
+          customApiParams: (config.customApiParams as any[]) || undefined,
+          customApiResultFields: (config.customApiResultFields as any[]) || undefined,
+          customApiPrice: (config.customApiPrice as number) ?? undefined,
         };
 
         nodes.push({
@@ -152,6 +159,7 @@ export default function EditWorkflow() {
               falAiNode: "FAL_AI",
               basicNode: "BASIC",
               stepNode: "BASIC",
+              customApiNode: "CUSTOM_API",
             };
             const mergedParams = { ...(n.data.modelParams || {}) };
             const bindings = n.data.paramBindings || {};
@@ -167,6 +175,7 @@ export default function EditWorkflow() {
             const validFalParams = (n.data.customFalParams || []).filter(
               (p: { key: string; value: string }) => p.key.trim() !== ""
             );
+            const isCustomApi = n.type === "customApiNode";
             return {
               order: n.data.order,
               name: n.data.label,
@@ -179,6 +188,12 @@ export default function EditWorkflow() {
               customParams: validCustomParams.length > 0 ? validCustomParams : null,
               customFalEndpoint: isCustomFal ? (n.data.customFalEndpoint || null) : null,
               customFalParams: isCustomFal && validFalParams.length > 0 ? validFalParams : null,
+              customApiUrl: isCustomApi ? (n.data.customApiUrl || null) : null,
+              customApiMethod: isCustomApi ? (n.data.customApiMethod || "POST") : null,
+              customApiHeaders: isCustomApi ? (n.data.customApiHeaders || []) : null,
+              customApiParams: isCustomApi ? (n.data.customApiParams || []) : null,
+              customApiResultFields: isCustomApi ? (n.data.customApiResultFields || []) : null,
+              customApiPrice: isCustomApi ? (n.data.customApiPrice ?? 0) : null,
               acceptTypes: n.data.acceptTypes || [],
               positionX: n.position.x,
               positionY: n.position.y,

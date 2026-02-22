@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { Node, Edge } from "@xyflow/react";
 
-export type StepNodeType = "inputNode" | "outputNode" | "basicNode" | "falAiNode";
+export type StepNodeType = "inputNode" | "outputNode" | "basicNode" | "falAiNode" | "customApiNode";
 
 export interface CustomParam {
   name: string;
@@ -13,6 +13,18 @@ export interface CustomFalParam {
   value: string;
 }
 
+export type CustomApiResultType = "text" | "image" | "video" | "audio" | "document" | "url";
+
+export interface CustomApiParam {
+  key: string;
+  value: string;
+}
+
+export interface CustomApiResultField {
+  key: string;
+  type: CustomApiResultType;
+}
+
 export interface StepNodeData {
   label: string;
   stepType: StepNodeType;
@@ -21,12 +33,18 @@ export interface StepNodeData {
   outputType: string;
   prompt: string;
   order: number;
-  acceptTypes?: string[];       // for input nodes: which media types to accept
-  modelParams?: Record<string, unknown>; // model-specific parameter values
-  paramBindings?: Record<string, string>; // param key → "input_1", "input_2", or "manual"
-  customParams?: CustomParam[]; // user-defined params, referenceable as {{name}} in linked nodes
-  customFalEndpoint?: string;   // user-entered fal.ai endpoint for custom model
-  customFalParams?: CustomFalParam[]; // user-defined fal.ai API params (key/value, value can be {{variable}})
+  acceptTypes?: string[];
+  modelParams?: Record<string, unknown>;
+  paramBindings?: Record<string, string>;
+  customParams?: CustomParam[];
+  customFalEndpoint?: string;
+  customFalParams?: CustomFalParam[];
+  customApiUrl?: string;
+  customApiMethod?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  customApiHeaders?: CustomApiParam[];
+  customApiParams?: CustomApiParam[];
+  customApiResultFields?: CustomApiResultField[];
+  customApiPrice?: number;
   [key: string]: unknown;
 }
 

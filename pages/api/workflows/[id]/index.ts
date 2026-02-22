@@ -49,6 +49,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (step.customParams) config.customParams = step.customParams;
         if (step.customFalEndpoint) config.customFalEndpoint = step.customFalEndpoint;
         if (step.customFalParams) config.customFalParams = step.customFalParams;
+        if (step.customApiUrl) config.customApiUrl = step.customApiUrl;
+        if (step.customApiMethod) config.customApiMethod = step.customApiMethod;
+        if (step.customApiHeaders) config.customApiHeaders = step.customApiHeaders;
+        if (step.customApiParams) config.customApiParams = step.customApiParams;
+        if (step.customApiResultFields) config.customApiResultFields = step.customApiResultFields;
+        if (step.customApiPrice != null) config.customApiPrice = step.customApiPrice;
         return {
           order: step.order,
           name: step.name || `Step ${step.order}`,

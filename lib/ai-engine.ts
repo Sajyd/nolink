@@ -40,6 +40,12 @@ export interface StepDefinition {
   customParams?: StepCustomParam[];
   customFalEndpoint?: string;
   customFalParams?: { key: string; value: string }[];
+  customApiUrl?: string;
+  customApiMethod?: string;
+  customApiHeaders?: { key: string; value: string }[];
+  customApiParams?: { key: string; value: string }[];
+  customApiResultFields?: { key: string; type: string }[];
+  customApiPrice?: number;
 }
 
 export interface StepResult {
@@ -59,7 +65,10 @@ interface StepInput {
 
 export function estimateWorkflowCost(steps: StepDefinition[]): number {
   const modelIds = steps.filter((s) => s.aiModel).map((s) => s.aiModel!);
-  return estimateCostFromModels(modelIds);
+  const apiCost = steps
+    .filter((s) => s.stepType === "CUSTOM_API")
+    .reduce((sum, s) => sum + (s.customApiPrice || 0), 0);
+  return estimateCostFromModels(modelIds) + apiCost;
 }
 
 function resolveFileUrl(fileUrl: string): string {
@@ -593,6 +602,200 @@ async function executeFalStep(
   return { text: `[${displayName}] ${(resolvedParams.prompt as string || input.text).slice(0, 200)}`, files: [] };
 }
 
+// ── Custom API execution ────────────────────────────────────────
+
+const BLOCKED_HOSTS = [
+  "localhost",
+  "127.0.0.1",
+  "0.0.0.0",
+  "::1",
+  "[::1]",
+  "metadata.google.internal",
+  "169.254.169.254",
+];
+
+function sanitizeApiUrl(raw: string): string {
+  const trimmed = raw.trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error("Invalid API URL");
+  }
+
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error("Only HTTP(S) URLs are allowed");
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  if (BLOCKED_HOSTS.includes(host) || host.endsWith(".local") || host.endsWith(".internal")) {
+    throw new Error("This host is not allowed for security reasons");
+  }
+
+  if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host)) {
+    throw new Error("Private IP ranges are not allowed");
+  }
+
+  return parsed.toString();
+}
+
+function sanitizeOutputUrl(raw: string): string {
+  if (!raw || typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+      const host = parsed.hostname.toLowerCase();
+      if (BLOCKED_HOSTS.includes(host) || host.endsWith(".local") || host.endsWith(".internal")) return "";
+      if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host)) return "";
+      return parsed.toString();
+    }
+  } catch { /* not a URL, return empty */ }
+  return "";
+}
+
+function getNestedValue(obj: unknown, path: string): unknown {
+  const parts = path.split(".");
+  let current: unknown = obj;
+  for (const part of parts) {
+    if (current == null || typeof current !== "object") return undefined;
+    const arrMatch = part.match(/^(\w+)\[(\d+)\]$/);
+    if (arrMatch) {
+      current = (current as Record<string, unknown>)[arrMatch[1]];
+      if (Array.isArray(current)) current = current[Number(arrMatch[2])];
+      else return undefined;
+    } else {
+      current = (current as Record<string, unknown>)[part];
+    }
+  }
+  return current;
+}
+
+async function executeCustomApiStep(
+  step: StepDefinition,
+  input: StepInput
+): Promise<StepInput> {
+  if (!step.customApiUrl) {
+    return { text: "[Custom API: no URL configured]", files: [] };
+  }
+
+  let url: string;
+  try {
+    url = sanitizeApiUrl(step.customApiUrl);
+  } catch (err) {
+    return { text: `[Custom API error: ${err instanceof Error ? err.message : "Invalid URL"}]`, files: [] };
+  }
+
+  const method = (step.customApiMethod || "POST").toUpperCase();
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (step.customApiHeaders) {
+    for (const { key, value } of step.customApiHeaders) {
+      if (key) headers[key] = value.replace(/\{\{input\}\}/g, input.text);
+    }
+  }
+
+  const bodyParams: Record<string, string> = {};
+  if (step.customApiParams) {
+    for (const { key, value } of step.customApiParams) {
+      if (!key) continue;
+      bodyParams[key] = value.replace(/\{\{input\}\}/g, input.text);
+    }
+  }
+
+  try {
+    const fetchOptions: RequestInit = { method, headers };
+
+    if (method === "GET" || method === "DELETE") {
+      const u = new URL(url);
+      for (const [k, v] of Object.entries(bodyParams)) {
+        u.searchParams.set(k, v);
+      }
+      url = u.toString();
+    } else {
+      fetchOptions.body = JSON.stringify(bodyParams);
+    }
+
+    const response = await fetch(url, fetchOptions);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return { text: `[Custom API error ${response.status}: ${errText.slice(0, 300)}]`, files: [] };
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    let result: unknown;
+
+    if (contentType.includes("application/json")) {
+      result = await response.json();
+    } else {
+      const text = await response.text();
+      return { text: text.slice(0, 10000), files: [] };
+    }
+
+    if (!step.customApiResultFields || step.customApiResultFields.length === 0) {
+      return { text: JSON.stringify(result).slice(0, 10000), files: [] };
+    }
+
+    const outputs: string[] = [];
+    const files: FileInput[] = [];
+
+    for (const field of step.customApiResultFields) {
+      const raw = getNestedValue(result, field.key);
+      const strVal = raw != null ? String(raw) : "";
+
+      switch (field.type) {
+        case "image": {
+          const safeUrl = sanitizeOutputUrl(strVal);
+          if (safeUrl) {
+            outputs.push(safeUrl);
+            files.push({ url: safeUrl, type: "image", name: "api-image.png" });
+          }
+          break;
+        }
+        case "video": {
+          const safeUrl = sanitizeOutputUrl(strVal);
+          if (safeUrl) {
+            outputs.push(safeUrl);
+            files.push({ url: safeUrl, type: "video", name: "api-video.mp4" });
+          }
+          break;
+        }
+        case "audio": {
+          const safeUrl = sanitizeOutputUrl(strVal);
+          if (safeUrl) {
+            outputs.push(safeUrl);
+            files.push({ url: safeUrl, type: "audio", name: "api-audio.mp3" });
+          }
+          break;
+        }
+        case "document": {
+          const safeUrl = sanitizeOutputUrl(strVal);
+          if (safeUrl) {
+            outputs.push(safeUrl);
+            files.push({ url: safeUrl, type: "document", name: "api-doc" });
+          }
+          break;
+        }
+        case "url": {
+          const safeUrl = sanitizeOutputUrl(strVal);
+          if (safeUrl) outputs.push(safeUrl);
+          break;
+        }
+        case "text":
+        default:
+          if (strVal) outputs.push(strVal.slice(0, 10000));
+          break;
+      }
+    }
+
+    return { text: outputs.join("\n"), files };
+  } catch (err) {
+    return { text: `[Custom API error: ${err instanceof Error ? err.message : "Unknown"}]`, files: [] };
+  }
+}
+
 // ── Custom param resolution ─────────────────────────────────────
 
 function resolveCustomParams(
@@ -633,7 +836,36 @@ function applyCustomParamsToStep(
     }));
   }
 
-  return { ...step, prompt: resolvedPrompt, params: resolvedParams, customFalParams: resolvedFalParams };
+  let resolvedApiParams = step.customApiParams;
+  if (step.customApiParams) {
+    resolvedApiParams = step.customApiParams.map((p) => ({
+      key: p.key,
+      value: resolveCustomParams(p.value, paramMap),
+    }));
+  }
+
+  let resolvedApiHeaders = step.customApiHeaders;
+  if (step.customApiHeaders) {
+    resolvedApiHeaders = step.customApiHeaders.map((p) => ({
+      key: p.key,
+      value: resolveCustomParams(p.value, paramMap),
+    }));
+  }
+
+  let resolvedApiUrl = step.customApiUrl;
+  if (step.customApiUrl) {
+    resolvedApiUrl = resolveCustomParams(step.customApiUrl, paramMap);
+  }
+
+  return {
+    ...step,
+    prompt: resolvedPrompt,
+    params: resolvedParams,
+    customFalParams: resolvedFalParams,
+    customApiParams: resolvedApiParams,
+    customApiHeaders: resolvedApiHeaders,
+    customApiUrl: resolvedApiUrl,
+  };
 }
 
 // ── Main execution ──────────────────────────────────────────────
@@ -655,6 +887,9 @@ export async function executeStep(
         break;
       case "FAL_AI":
         stepOutput = await executeFalStep(step, input);
+        break;
+      case "CUSTOM_API":
+        stepOutput = await executeCustomApiStep(step, input);
         break;
       case "BASIC":
       default:

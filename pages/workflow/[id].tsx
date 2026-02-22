@@ -614,6 +614,24 @@ export default function WorkflowPage() {
           </div>
         )}
 
+        {/* Custom API Disclaimer */}
+        {workflow.steps.some((s) => s.stepType === "CUSTOM_API") && (
+          <div className="flex items-start gap-2.5 px-4 py-3 mb-6 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+                Third-party API disclaimer
+              </p>
+              <p className="text-xs text-amber-600/80 dark:text-amber-400/80 leading-relaxed mt-0.5">
+                This workflow connects to one or more external APIs that are not
+                verified or endorsed by Nolink. Your data may be processed by
+                third-party services. Do not submit sensitive or personal information
+                unless you trust the workflow creator and the APIs used.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Run Workflow */}
         <div className="card p-6 mb-6">
           <h2 className="font-semibold mb-3">Run this workflow</h2>

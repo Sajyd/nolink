@@ -8,6 +8,7 @@ import {
   Download,
   Cpu,
   Sparkles,
+  Globe,
   Save,
   Eye,
   EyeOff,
@@ -84,6 +85,28 @@ const NODE_TEMPLATES: {
     },
   },
   {
+    type: "customApiNode",
+    rfType: "customApiNode",
+    label: "Custom API",
+    icon: Globe,
+    color: "text-rose-500 bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800",
+    description: "Connect any external REST API (Pro only)",
+    defaults: {
+      label: "",
+      stepType: "customApiNode",
+      aiModel: "",
+      inputType: "TEXT",
+      outputType: "TEXT",
+      prompt: "",
+      customApiUrl: "",
+      customApiMethod: "POST",
+      customApiHeaders: [],
+      customApiParams: [],
+      customApiResultFields: [],
+      customApiPrice: 0,
+    },
+  },
+  {
     type: "outputNode",
     rfType: "outputNode",
     label: "Final Output",
@@ -134,7 +157,10 @@ export default function BuilderToolbar({ onSave, saving }: BuilderToolbarProps) 
   const modelIds = store.nodes
     .filter((n) => n.data.aiModel)
     .map((n) => n.data.aiModel);
-  const estimatedCost = estimateCostFromModels(modelIds);
+  const customApiCost = store.nodes
+    .filter((n) => n.type === "customApiNode")
+    .reduce((sum, n) => sum + (n.data.customApiPrice ?? 0), 0);
+  const estimatedCost = estimateCostFromModels(modelIds) + customApiCost;
 
   return (
     <div className="w-72 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col overflow-y-auto">
@@ -297,11 +323,13 @@ export default function BuilderToolbar({ onSave, saving }: BuilderToolbarProps) 
               const typeLabel =
                 node.type === "inputNode" ? "IN" :
                 node.type === "outputNode" ? "OUT" :
-                node.type === "falAiNode" ? "FAL" : "AI";
+                node.type === "falAiNode" ? "FAL" :
+                node.type === "customApiNode" ? "API" : "AI";
               const typeColor =
                 node.type === "inputNode" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" :
                 node.type === "outputNode" ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" :
                 node.type === "falAiNode" ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" :
+                node.type === "customApiNode" ? "bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400" :
                 "bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400";
 
               return (

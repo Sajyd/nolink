@@ -19,6 +19,7 @@ import BasicNode from "./StepNode";
 import InputNode from "./InputNode";
 import OutputNode from "./OutputNode";
 import FalAiNode from "./FalAiNode";
+import CustomApiNode from "./CustomApiNode";
 import { useWorkflowStore, type StepNodeData } from "@/lib/workflow-store";
 import { playNodeClick, playConnect } from "@/lib/sounds";
 
@@ -36,6 +37,7 @@ export default function WorkflowCanvas() {
       inputNode: InputNode,
       outputNode: OutputNode,
       falAiNode: FalAiNode,
+      customApiNode: CustomApiNode,
     }),
     []
   );
@@ -79,6 +81,7 @@ export default function WorkflowCanvas() {
       case "inputNode": return "#10b981";
       case "outputNode": return "#8b5cf6";
       case "falAiNode": return "#f59e0b";
+      case "customApiNode": return "#f43f5e";
       default: return "#4c6ef5";
     }
   };

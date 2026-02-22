@@ -65,6 +65,7 @@ export default function CreateWorkflow() {
               falAiNode: "FAL_AI",
               basicNode: "BASIC",
               stepNode: "BASIC",
+              customApiNode: "CUSTOM_API",
             };
             const mergedParams = { ...(n.data.modelParams || {}) };
             const bindings = n.data.paramBindings || {};
@@ -80,6 +81,7 @@ export default function CreateWorkflow() {
             const validFalParams = (n.data.customFalParams || []).filter(
               (p: { key: string; value: string }) => p.key.trim() !== ""
             );
+            const isCustomApi = n.type === "customApiNode";
             return {
               order: n.data.order,
               name: n.data.label,
@@ -92,6 +94,12 @@ export default function CreateWorkflow() {
               customParams: validCustomParams.length > 0 ? validCustomParams : null,
               customFalEndpoint: isCustomFal ? (n.data.customFalEndpoint || null) : null,
               customFalParams: isCustomFal && validFalParams.length > 0 ? validFalParams : null,
+              customApiUrl: isCustomApi ? (n.data.customApiUrl || null) : null,
+              customApiMethod: isCustomApi ? (n.data.customApiMethod || "POST") : null,
+              customApiHeaders: isCustomApi ? (n.data.customApiHeaders || []) : null,
+              customApiParams: isCustomApi ? (n.data.customApiParams || []) : null,
+              customApiResultFields: isCustomApi ? (n.data.customApiResultFields || []) : null,
+              customApiPrice: isCustomApi ? (n.data.customApiPrice ?? 0) : null,
               acceptTypes: n.data.acceptTypes || [],
               positionX: n.position.x,
               positionY: n.position.y,

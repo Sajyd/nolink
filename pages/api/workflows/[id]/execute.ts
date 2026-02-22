@@ -86,6 +86,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       customParams: (config.customParams as StepCustomParam[] | undefined) || undefined,
       customFalEndpoint: (config.customFalEndpoint as string | undefined) || undefined,
       customFalParams: (config.customFalParams as { key: string; value: string }[] | undefined) || undefined,
+      customApiUrl: (config.customApiUrl as string | undefined) || undefined,
+      customApiMethod: (config.customApiMethod as string | undefined) || undefined,
+      customApiHeaders: (config.customApiHeaders as { key: string; value: string }[] | undefined) || undefined,
+      customApiParams: (config.customApiParams as { key: string; value: string }[] | undefined) || undefined,
+      customApiResultFields: (config.customApiResultFields as { key: string; type: string }[] | undefined) || undefined,
+      customApiPrice: (config.customApiPrice as number | undefined) ?? undefined,
     };
   });
 
@@ -138,6 +144,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           (resolvedStep.params as Record<string, unknown>)[k] = resolveCP(v);
         }
       }
+    }
+    if (resolvedStep.customApiUrl) {
+      resolvedStep.customApiUrl = resolveCP(resolvedStep.customApiUrl);
+    }
+    if (resolvedStep.customApiParams) {
+      resolvedStep.customApiParams = resolvedStep.customApiParams.map((p) => ({
+        key: p.key,
+        value: resolveCP(p.value),
+      }));
+    }
+    if (resolvedStep.customApiHeaders) {
+      resolvedStep.customApiHeaders = resolvedStep.customApiHeaders.map((h) => ({
+        key: h.key,
+        value: resolveCP(h.value),
+      }));
     }
 
     const isVisible = step.stepType !== "INPUT" && step.stepType !== "OUTPUT";

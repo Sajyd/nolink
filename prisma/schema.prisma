@@ -121,6 +121,7 @@ enum StepType {
   OUTPUT
   BASIC
   FAL_AI
+  CUSTOM_API
 }
 
 model Step {
