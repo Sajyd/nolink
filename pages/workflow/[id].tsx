@@ -29,6 +29,8 @@ import {
   ExternalLink,
   Lightbulb,
   Pencil,
+  Sparkles,
+  LogIn,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -131,6 +133,9 @@ export default function WorkflowPage() {
   const [showSteps, setShowSteps] = useState(true);
   const [error, setError] = useState("");
   const [finished, setFinished] = useState(false);
+
+  const [isTrialRun, setIsTrialRun] = useState(false);
+  const [trialExpired, setTrialExpired] = useState(false);
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -239,10 +244,6 @@ export default function WorkflowPage() {
   );
 
   const handleExecute = async () => {
-    if (!session) {
-      router.push("/auth/signin");
-      return;
-    }
     if (!input.trim() && uploadedFiles.length === 0) {
       toast.error("Please provide input");
       return;
@@ -253,6 +254,8 @@ export default function WorkflowPage() {
     setError("");
     setCreditsUsed(0);
     setFinished(false);
+    setIsTrialRun(false);
+    setTrialExpired(false);
 
     try {
       const res = await fetch(`/api/workflows/${id}/execute`, {
@@ -271,6 +274,11 @@ export default function WorkflowPage() {
 
       if (!res.ok && res.headers.get("content-type")?.includes("application/json")) {
         const data = await res.json();
+        if (data.error === "signup_required") {
+          setTrialExpired(true);
+          setExecuting(false);
+          return;
+        }
         if (res.status === 402) {
           setError(`Insufficient Nolinks. Required: ${data.required} NL`);
         } else {
@@ -329,7 +337,7 @@ export default function WorkflowPage() {
     } finally {
       setExecuting(false);
       setFinished(true);
-      updateSession();
+      if (session) updateSession();
     }
   };
 
@@ -393,6 +401,7 @@ export default function WorkflowPage() {
       }
       case "workflow_complete": {
         setCreditsUsed(data.creditsUsed || 0);
+        if (data.isTrialRun) setIsTrialRun(true);
         break;
       }
     }
@@ -763,9 +772,11 @@ export default function WorkflowPage() {
 
           <div className="flex items-center justify-between mt-4">
             <p className="text-xs text-gray-400">
-              {workflow.priceInNolinks > 0
-                ? `This will cost ${workflow.priceInNolinks} Nolinks`
-                : "This workflow is free to run"}
+              {!session
+                ? "Try it free — no account needed"
+                : workflow.priceInNolinks > 0
+                  ? `This will cost ${workflow.priceInNolinks} Nolinks`
+                  : "This workflow is free to run"}
             </p>
             <button
               onClick={handleExecute}
@@ -777,6 +788,11 @@ export default function WorkflowPage() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Executing...
                 </>
+              ) : !session ? (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Try it Free
+                </>
               ) : (
                 <>
                   <Play className="w-4 h-4" />
@@ -786,6 +802,40 @@ export default function WorkflowPage() {
             </button>
           </div>
         </div>
+
+        {/* Trial expired — signup CTA */}
+        {trialExpired && (
+          <div className="card p-6 mb-6 border-brand-200 dark:border-brand-800 bg-gradient-to-br from-brand-50 to-purple-50 dark:from-brand-950/40 dark:to-purple-950/30">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-brand-100 dark:bg-brand-900/40 flex items-center justify-center">
+                <Sparkles className="w-7 h-7 text-brand-600 dark:text-brand-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                  You've used your free run
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-md">
+                  Create a free account to keep running workflows. You'll get <strong>50 free Nolinks</strong> to start — no credit card required.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/auth/signup"
+                  className="btn-primary gap-2 px-6"
+                >
+                  <LogIn className="w-4 h-4" />
+                  Sign Up Free
+                </Link>
+                <Link
+                  href="/auth/signin"
+                  className="text-sm text-gray-500 hover:text-brand-600 transition-colors"
+                >
+                  Already have an account? Sign in
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error */}
         {error && (
@@ -844,6 +894,29 @@ export default function WorkflowPage() {
               ))}
               <div ref={resultsEndRef} />
             </div>
+
+            {/* Post-trial signup nudge */}
+            {isTrialRun && finished && !executing && (
+              <div className="mt-6 card p-5 border-brand-200 dark:border-brand-800 bg-gradient-to-r from-brand-50/80 to-purple-50/80 dark:from-brand-950/30 dark:to-purple-950/20">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-900/40 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                      Liked the result? There's more where that came from.
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      Sign up for free and get 50 Nolinks to run any workflow.
+                    </p>
+                  </div>
+                  <Link href="/auth/signup" className="btn-primary text-sm gap-1.5 shrink-0">
+                    <LogIn className="w-3.5 h-3.5" />
+                    Sign Up Free
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

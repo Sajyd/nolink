@@ -155,7 +155,7 @@ enum ExecutionStatus {
 model Execution {
   id           String          @id @default(cuid())
   workflowId   String
-  userId       String
+  userId       String?
   status       ExecutionStatus @default(PENDING)
   inputs       Json
   outputs      Json?
@@ -166,7 +166,7 @@ model Execution {
   completedAt  DateTime?
 
   workflow Workflow @relation(fields: [workflowId], references: [id])
-  user     User     @relation(fields: [userId], references: [id])
+  user     User?    @relation(fields: [userId], references: [id])
 }
 
 model CreditTransaction {

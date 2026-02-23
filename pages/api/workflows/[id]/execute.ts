@@ -6,6 +6,7 @@ import { executeStep, type StepDefinition, type StepCustomParam, type FileInput,
 import { deductCredits, checkBalance } from "@/lib/credits";
 import { estimateWorkflowCost } from "@/lib/ai-engine";
 import { getModelById } from "@/lib/models";
+import { serialize } from "cookie";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -13,7 +14,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const session = await getServerSession(req, res, authOptions);
-  if (!session) return res.status(401).json({ error: "Unauthorized" });
+
+  const isAnonymous = !session;
+  let trialCookie: string | undefined;
+
+  if (isAnonymous) {
+    trialCookie = req.cookies["nolink_trial"];
+    if (trialCookie) {
+      return res.status(401).json({
+        error: "signup_required",
+        message: "Sign up to keep running workflows — your free trial run has been used.",
+      });
+    }
+  }
 
   const { id } = req.query;
   const { input, files } = req.body;
@@ -28,14 +41,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
 
   if (!workflow) return res.status(404).json({ error: "Workflow not found" });
+  if (!workflow.isPublic && isAnonymous) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
   const cost = workflow.priceInNolinks > 0
     ? workflow.priceInNolinks
     : estimateWorkflowCost(workflow.steps as unknown as StepDefinition[]);
 
-  const canAfford = await checkBalance(session.user.id, cost);
-  if (!canAfford) {
-    return res.status(402).json({ error: "Insufficient Nolinks balance", required: cost });
+  if (!isAnonymous) {
+    const canAfford = await checkBalance(session.user.id, cost);
+    if (!canAfford) {
+      return res.status(402).json({ error: "Insufficient Nolinks balance", required: cost });
+    }
   }
 
   const fileInputs: FileInput[] = (files || []).map((f: any) => ({
@@ -45,13 +63,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     mimeType: f.mimeType,
   }));
 
-  // Set up SSE streaming
-  res.writeHead(200, {
+  const sseHeaders: Record<string, string> = {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
-  });
+  };
+
+  if (isAnonymous) {
+    sseHeaders["Set-Cookie"] = serialize("nolink_trial", "1", {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  }
+
+  res.writeHead(200, sseHeaders);
 
   const send = (event: string, data: unknown) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -63,10 +91,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const execution = await prisma.execution.create({
     data: {
       workflowId: workflow.id,
-      userId: session.user.id,
+      userId: isAnonymous ? null : session.user.id,
       status: "RUNNING",
       inputs: { text: input || "", files: fileInputs.map((f) => ({ ...f })) } as any,
-      creditsUsed: cost,
+      creditsUsed: isAnonymous ? 0 : cost,
     },
   });
 
@@ -216,8 +244,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (!aborted) {
     try {
-      if (cost > 0 && !failed) {
+      if (!isAnonymous && cost > 0 && !failed) {
         await deductCredits(session.user.id, workflow.id, cost);
+      }
+
+      if (isAnonymous && !failed) {
+        await prisma.workflow.update({
+          where: { id: workflow.id },
+          data: { totalUses: { increment: 1 } },
+        });
       }
 
       await prisma.execution.update({
@@ -234,8 +269,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } catch {}
 
     send("workflow_complete", {
-      creditsUsed: failed ? 0 : cost,
+      creditsUsed: isAnonymous ? 0 : (failed ? 0 : cost),
       status: failed ? "FAILED" : "COMPLETED",
+      isTrialRun: isAnonymous,
     });
   }
 
