@@ -192,12 +192,16 @@ export default function WorkflowPage() {
 
       setUploading(true);
       try {
-        const formData = new FormData();
-        fileArray.forEach((f) => formData.append("file", f));
+        const fileMeta = fileArray.map((f) => ({
+          name: f.name,
+          mimeType: f.type,
+          size: f.size,
+        }));
 
         const res = await fetch("/api/upload", {
           method: "POST",
-          body: formData,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ files: fileMeta }),
         });
 
         if (!res.ok) {
@@ -207,9 +211,25 @@ export default function WorkflowPage() {
         }
 
         const data = await res.json();
+
+        await Promise.all(
+          data.files.map(async (f: any, i: number) => {
+            const putRes = await fetch(f.uploadUrl, {
+              method: "PUT",
+              headers: { "Content-Type": f.mimeType },
+              body: fileArray[i],
+            });
+            if (!putRes.ok) throw new Error(`Failed to upload ${f.name}`);
+          })
+        );
+
         const newFiles: UploadedFile[] = data.files.map(
           (f: UploadedFile, i: number) => ({
-            ...f,
+            url: f.url,
+            name: f.name,
+            type: f.type,
+            mimeType: f.mimeType,
+            size: f.size,
             preview:
               f.type === "image" ? URL.createObjectURL(fileArray[i]) : undefined,
           })
