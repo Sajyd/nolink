@@ -1,6 +1,8 @@
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getModelById, estimateCostFromModels, type AIModel } from "./models";
 
 function getOpenAI() {
@@ -90,6 +92,112 @@ function fileToBase64(fileUrl: string): string | null {
 
 function getFilesByType(files: FileInput[], type: string): FileInput[] {
   return files.filter((f) => f.type === type);
+}
+
+// ── fal.ai file URL resolution ──────────────────────────────────
+// S3 "public" URLs are not actually public; fal.ai cannot download them.
+// For S3 files we generate a short-lived presigned GET URL.
+// For local /uploads/ files we push the bytes into fal.ai's own storage.
+
+function isS3Url(url: string): boolean {
+  return /\.s3[.\-].*amazonaws\.com/.test(url);
+}
+
+function extractS3Key(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return decodeURIComponent(parsed.pathname.slice(1));
+  } catch {
+    return null;
+  }
+}
+
+async function uploadToFalStorage(
+  fileBuffer: Buffer,
+  contentType: string,
+  fileName: string
+): Promise<string> {
+  const falKey = process.env.FAL_KEY;
+  if (!falKey) throw new Error("FAL_KEY not configured");
+
+  const initResp = await fetch(
+    "https://rest.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Key ${falKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        content_type: contentType,
+        file_name: fileName,
+      }),
+    }
+  );
+
+  if (!initResp.ok) {
+    throw new Error(`fal.ai upload initiate failed: ${await initResp.text()}`);
+  }
+
+  const { file_url, upload_url } = (await initResp.json()) as {
+    file_url: string;
+    upload_url: string;
+  };
+
+  const putResp = await fetch(upload_url, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: fileBuffer,
+  });
+
+  if (!putResp.ok) {
+    throw new Error(`fal.ai file upload failed: ${putResp.status}`);
+  }
+
+  return file_url;
+}
+
+async function resolveFileUrlForFal(
+  fileUrl: string,
+  mimeType?: string
+): Promise<string> {
+  // S3 URLs → presigned GET URL (valid 1 hour)
+  if (isS3Url(fileUrl)) {
+    const key = extractS3Key(fileUrl);
+    const bucket = process.env.S3_BUCKET;
+    const accessKey = process.env.AWS_ACCESS_KEY_ID;
+    const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
+
+    if (key && bucket && accessKey && secretKey) {
+      const s3 = new S3Client({
+        region: process.env.S3_REGION || "eu-west-1",
+        credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+      });
+      return getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+        { expiresIn: 3600 }
+      );
+    }
+  }
+
+  // Local /uploads/ files → upload to fal.ai storage
+  if (fileUrl.startsWith("/uploads/") && process.env.FAL_KEY) {
+    const filePath = path.join(process.cwd(), "public", fileUrl);
+    if (fs.existsSync(filePath)) {
+      const fileBuffer = fs.readFileSync(filePath);
+      const contentType = mimeType || "application/octet-stream";
+      const fileName = path.basename(fileUrl);
+      try {
+        return await uploadToFalStorage(fileBuffer, contentType, fileName);
+      } catch (err) {
+        console.error("Failed to upload to fal.ai storage:", err);
+      }
+    }
+    return resolveFileUrl(fileUrl);
+  }
+
+  return fileUrl;
 }
 
 function ensureUploadsDir(): string {
@@ -529,13 +637,23 @@ async function executeFalStep(
   const videoFiles = getFilesByType(input.files, "video");
 
   if (imageFiles.length > 0 && !resolvedParams.image_url) {
-    resolvedParams.image_url = resolveFileUrl(imageFiles[0].url);
+    resolvedParams.image_url = await resolveFileUrlForFal(imageFiles[0].url, imageFiles[0].mimeType);
   }
   if (audioFiles.length > 0 && !resolvedParams.audio_url) {
-    resolvedParams.audio_url = resolveFileUrl(audioFiles[0].url);
+    resolvedParams.audio_url = await resolveFileUrlForFal(audioFiles[0].url, audioFiles[0].mimeType);
   }
   if (videoFiles.length > 0 && !resolvedParams.video_url) {
-    resolvedParams.video_url = resolveFileUrl(videoFiles[0].url);
+    resolvedParams.video_url = await resolveFileUrlForFal(videoFiles[0].url, videoFiles[0].mimeType);
+  }
+
+  // Resolve any remaining S3/local file URLs in custom params
+  for (const [key, val] of Object.entries(resolvedParams)) {
+    if (
+      typeof val === "string" &&
+      (isS3Url(val) || val.startsWith("/uploads/"))
+    ) {
+      resolvedParams[key] = await resolveFileUrlForFal(val);
+    }
   }
 
   if (process.env.FAL_KEY) {
