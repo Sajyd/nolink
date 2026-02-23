@@ -31,6 +31,8 @@ import {
   Pencil,
   Sparkles,
   LogIn,
+  Code2,
+  Terminal,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -136,6 +138,8 @@ export default function WorkflowPage() {
 
   const [isTrialRun, setIsTrialRun] = useState(false);
   const [trialExpired, setTrialExpired] = useState(false);
+
+  const [showApiModal, setShowApiModal] = useState(false);
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -477,15 +481,24 @@ export default function WorkflowPage() {
               </span>
             </div>
 
-            {session?.user?.id === workflow.creator.id && (
-              <Link
-                href={`/edit-workflow/${workflow.id}`}
-                className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-brand-600 bg-gray-100 dark:bg-gray-800 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
+              {session?.user?.id === workflow.creator.id && (
+                <Link
+                  href={`/edit-workflow/${workflow.id}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-brand-600 bg-gray-100 dark:bg-gray-800 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
+                >
+                  <Pencil className="w-3 h-3" />
+                  Edit Workflow
+                </Link>
+              )}
+              <button
+                onClick={() => setShowApiModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-brand-600 bg-gray-100 dark:bg-gray-800 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
               >
-                <Pencil className="w-3 h-3" />
-                Edit Workflow
-              </Link>
-            )}
+                <Code2 className="w-3 h-3" />
+                Use it in your app
+              </button>
+            </div>
 
             {acceptsFiles && (
               <div className="flex items-center gap-2 mt-3">
@@ -920,7 +933,330 @@ export default function WorkflowPage() {
           </div>
         )}
       </div>
+
+      {showApiModal && (
+        <ApiIntegrationModal
+          workflow={workflow}
+          onClose={() => setShowApiModal(false)}
+        />
+      )}
     </>
+  );
+}
+
+// ── API Integration Modal ───────────────────────────────────────
+
+function ApiIntegrationModal({
+  workflow,
+  onClose,
+}: {
+  workflow: Workflow;
+  onClose: () => void;
+}) {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"curl" | "javascript" | "python">("curl");
+
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://nolink.ai";
+  const apiUrl = `${baseUrl}/api/workflows/${workflow.id}/execute`;
+
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {}
+  };
+
+  const inputStep = workflow.steps.find((s) => s.stepType === "INPUT");
+  const acceptsFiles = inputStep?.acceptTypes?.some((t) => t !== "text");
+
+  const curlSnippet = `curl -X POST "${apiUrl}" \\
+  -H "Content-Type: application/json" \\
+  -H "Cookie: next-auth.session-token=YOUR_SESSION_TOKEN" \\
+  -d '{
+    "input": "Your text input here"${acceptsFiles ? `,
+    "files": [
+      {
+        "url": "https://example.com/file.png",
+        "type": "image",
+        "name": "file.png",
+        "mimeType": "image/png"
+      }
+    ]` : ""}
+  }'`;
+
+  const jsSnippet = `const response = await fetch("${apiUrl}", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    // Include session cookie or use credentials
+  },
+  credentials: "include",
+  body: JSON.stringify({
+    input: "Your text input here",${acceptsFiles ? `
+    files: [
+      {
+        url: "https://example.com/file.png",
+        type: "image",
+        name: "file.png",
+        mimeType: "image/png",
+      },
+    ],` : ""}
+  }),
+});
+
+// The response is a Server-Sent Events (SSE) stream
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+let buffer = "";
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+
+  buffer += decoder.decode(value, { stream: true });
+  const parts = buffer.split("\\n\\n");
+  buffer = parts.pop() || "";
+
+  for (const part of parts) {
+    if (!part.trim()) continue;
+    let event = "", data = "";
+    for (const line of part.split("\\n")) {
+      if (line.startsWith("event: ")) event = line.slice(7);
+      else if (line.startsWith("data: ")) data = line.slice(6);
+    }
+    if (event && data) {
+      const parsed = JSON.parse(data);
+      switch (event) {
+        case "workflow_start":
+          console.log("Workflow started:", parsed.totalSteps, "steps");
+          break;
+        case "step_start":
+          console.log(\`Step \${parsed.index} started: \${parsed.stepName}\`);
+          break;
+        case "step_complete":
+          console.log(\`Step \${parsed.index} done:\`, parsed.output);
+          break;
+        case "step_error":
+          console.error(\`Step \${parsed.index} failed:\`, parsed.output);
+          break;
+        case "workflow_complete":
+          console.log("Workflow finished. Credits used:", parsed.creditsUsed);
+          break;
+      }
+    }
+  }
+}`;
+
+  const pythonSnippet = `import requests
+import json
+
+url = "${apiUrl}"
+headers = {
+    "Content-Type": "application/json",
+    "Cookie": "next-auth.session-token=YOUR_SESSION_TOKEN"
+}
+payload = {
+    "input": "Your text input here",${acceptsFiles ? `
+    "files": [
+        {
+            "url": "https://example.com/file.png",
+            "type": "image",
+            "name": "file.png",
+            "mimeType": "image/png"
+        }
+    ]` : ""}
+}
+
+# The response is a Server-Sent Events (SSE) stream
+response = requests.post(url, json=payload, headers=headers, stream=True)
+
+for line in response.iter_lines(decode_unicode=True):
+    if not line:
+        continue
+    if line.startswith("event: "):
+        event = line[7:]
+    elif line.startswith("data: "):
+        data = json.loads(line[6:])
+        if event == "step_complete":
+            print(f"Step {data['index']} done: {data['output'][:100]}")
+        elif event == "workflow_complete":
+            print(f"Workflow finished. Credits used: {data['creditsUsed']}")
+        elif event == "step_error":
+            print(f"Step {data['index']} failed: {data['output']}")`;
+
+  const snippets = { curl: curlSnippet, javascript: jsSnippet, python: pythonSnippet };
+  const tabLabels = { curl: "cURL", javascript: "JavaScript", python: "Python" };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 rounded-t-2xl">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center">
+              <Code2 className="w-4.5 h-4.5 text-brand-600 dark:text-brand-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                Use it in your app
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Integrate <span className="font-medium">{workflow.name}</span> via the Nolink API
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* API Endpoint */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+              API Endpoint
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 font-mono text-sm overflow-x-auto">
+                <span className="shrink-0 px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
+                  POST
+                </span>
+                <span className="text-gray-700 dark:text-gray-300 truncate">
+                  {apiUrl}
+                </span>
+              </div>
+              <button
+                onClick={() => copyToClipboard(apiUrl, "url")}
+                className="shrink-0 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                title="Copy URL"
+              >
+                {copiedId === "url" ? (
+                  <Check className="w-4 h-4 text-emerald-500" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Quick info */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Auth</p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
+                Session cookie
+              </p>
+            </div>
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Response</p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
+                SSE stream
+              </p>
+            </div>
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Cost</p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
+                {workflow.priceInNolinks === 0 ? "Free" : `${workflow.priceInNolinks} NL / run`}
+              </p>
+            </div>
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Steps</p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
+                {workflow.steps.length} steps
+              </p>
+            </div>
+          </div>
+
+          {/* SSE Events */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+              SSE Events
+            </label>
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3 space-y-1.5">
+              {[
+                { event: "workflow_start", desc: "Workflow initialized with step list" },
+                { event: "step_start", desc: "A step begins processing" },
+                { event: "step_complete", desc: "A step finished — output in data.output" },
+                { event: "step_error", desc: "A step failed — error in data.output" },
+                { event: "workflow_complete", desc: "All done — creditsUsed in data" },
+              ].map((e) => (
+                <div key={e.event} className="flex items-start gap-2">
+                  <code className="shrink-0 text-[11px] font-mono px-1.5 py-0.5 rounded bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400">
+                    {e.event}
+                  </code>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                    {e.desc}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Code snippets */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+              Code Example
+            </label>
+
+            {/* Tabs */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-gray-100 dark:bg-gray-800 mb-3">
+              {(Object.keys(tabLabels) as Array<keyof typeof tabLabels>).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    activeTab === tab
+                      ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                  }`}
+                >
+                  {tabLabels[tab]}
+                </button>
+              ))}
+            </div>
+
+            {/* Code block */}
+            <div className="relative group">
+              <pre className="rounded-xl bg-gray-900 dark:bg-gray-950 border border-gray-800 p-4 overflow-x-auto text-[13px] leading-relaxed font-mono text-gray-300 max-h-80 overflow-y-auto">
+                <code>{snippets[activeTab]}</code>
+              </pre>
+              <button
+                onClick={() => copyToClipboard(snippets[activeTab], "code")}
+                className="absolute top-3 right-3 p-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700 transition-all opacity-0 group-hover:opacity-100"
+                title="Copy code"
+              >
+                {copiedId === "code" ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Tip */}
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-brand-50/50 dark:bg-brand-900/10 border border-brand-100 dark:border-brand-800/40">
+            <Terminal className="w-4 h-4 text-brand-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+              Authenticate by including your session cookie. The response streams as{" "}
+              <strong>Server-Sent Events</strong> — parse each event to track step progress
+              and collect the final output.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
