@@ -10,7 +10,13 @@ const REGION = process.env.S3_REGION || "eu-west-1";
 const PRESIGN_EXPIRES = 300; // 5 minutes
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
-const s3 = new S3Client({ region: REGION });
+const s3 = new S3Client({
+  region: REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+});
 
 const ALLOWED_MIMES: Record<string, string> = {
   "image/jpeg": "image",
@@ -106,7 +112,6 @@ export default async function handler(
       Bucket: BUCKET,
       Key: key,
       ContentType: mimeType,
-      ContentLength: size,
     });
 
     const uploadUrl = await getSignedUrl(s3, command, {
