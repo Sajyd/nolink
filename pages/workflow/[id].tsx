@@ -957,7 +957,8 @@ function ApiIntegrationModal({
   const [activeTab, setActiveTab] = useState<"curl" | "javascript" | "python">("curl");
 
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://nolink.ai";
-  const apiUrl = `${baseUrl}/api/workflows/${workflow.id}/execute`;
+  const runUrl = `${baseUrl}/api/workflows/${workflow.id}/run`;
+  const pollUrl = `${baseUrl}/api/jobs/{jobId}`;
 
   const copyToClipboard = async (text: string, id: string) => {
     try {
@@ -970,11 +971,8 @@ function ApiIntegrationModal({
   const inputStep = workflow.steps.find((s) => s.stepType === "INPUT");
   const acceptsFiles = inputStep?.acceptTypes?.some((t) => t !== "text");
 
-  const curlSnippet = `curl -X POST "${apiUrl}" \\
-  -H "Content-Type: application/json" \\
-  -H "Cookie: next-auth.session-token=YOUR_SESSION_TOKEN" \\
-  -d '{
-    "input": "Your text input here"${acceptsFiles ? `,
+  const filesPayload = acceptsFiles
+    ? `,
     "files": [
       {
         "url": "https://example.com/file.png",
@@ -982,16 +980,36 @@ function ApiIntegrationModal({
         "name": "file.png",
         "mimeType": "image/png"
       }
-    ]` : ""}
-  }'`;
+    ]`
+    : "";
 
-  const jsSnippet = `const response = await fetch("${apiUrl}", {
+  const curlSnippet = `# Step 1: Start the workflow — returns a jobId
+curl -X POST "${runUrl}" \\
+  -H "Content-Type: application/json" \\
+  -H "Cookie: next-auth.session-token=YOUR_SESSION_TOKEN" \\
+  -d '{
+    "input": "Your text input here"${filesPayload}
+  }'
+
+# Response (202):
+# { "jobId": "clx...", "status": "RUNNING", ... }
+
+# Step 2: Poll for results
+curl "${baseUrl}/api/jobs/YOUR_JOB_ID" \\
+  -H "Cookie: next-auth.session-token=YOUR_SESSION_TOKEN"
+
+# Poll until status is "COMPLETED" or "FAILED"
+# Response includes: status, progress, steps[], result`;
+
+  const jsSnippet = `const SESSION_COOKIE = "YOUR_SESSION_TOKEN";
+
+// Step 1: Start the workflow
+const run = await fetch("${runUrl}", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    // Include session cookie or use credentials
+    "Cookie": \`next-auth.session-token=\${SESSION_COOKIE}\`,
   },
-  credentials: "include",
   body: JSON.stringify({
     input: "Your text input here",${acceptsFiles ? `
     files: [
@@ -1005,58 +1023,46 @@ function ApiIntegrationModal({
   }),
 });
 
-// The response is a Server-Sent Events (SSE) stream
-const reader = response.body.getReader();
-const decoder = new TextDecoder();
-let buffer = "";
+const { jobId } = await run.json();
+console.log("Job started:", jobId);
 
+// Step 2: Poll until complete
+let result;
 while (true) {
-  const { done, value } = await reader.read();
-  if (done) break;
+  const poll = await fetch(\`${baseUrl}/api/jobs/\${jobId}\`, {
+    headers: {
+      "Cookie": \`next-auth.session-token=\${SESSION_COOKIE}\`,
+    },
+  });
+  const job = await poll.json();
 
-  buffer += decoder.decode(value, { stream: true });
-  const parts = buffer.split("\\n\\n");
-  buffer = parts.pop() || "";
+  console.log(\`Progress: \${job.progress.completed}/\${job.progress.total} steps\`);
 
-  for (const part of parts) {
-    if (!part.trim()) continue;
-    let event = "", data = "";
-    for (const line of part.split("\\n")) {
-      if (line.startsWith("event: ")) event = line.slice(7);
-      else if (line.startsWith("data: ")) data = line.slice(6);
-    }
-    if (event && data) {
-      const parsed = JSON.parse(data);
-      switch (event) {
-        case "workflow_start":
-          console.log("Workflow started:", parsed.totalSteps, "steps");
-          break;
-        case "step_start":
-          console.log(\`Step \${parsed.index} started: \${parsed.stepName}\`);
-          break;
-        case "step_complete":
-          console.log(\`Step \${parsed.index} done:\`, parsed.output);
-          break;
-        case "step_error":
-          console.error(\`Step \${parsed.index} failed:\`, parsed.output);
-          break;
-        case "workflow_complete":
-          console.log("Workflow finished. Credits used:", parsed.creditsUsed);
-          break;
-      }
-    }
+  if (job.status === "COMPLETED") {
+    result = job.result;
+    console.log("Final output:", result);
+    break;
   }
+  if (job.status === "FAILED") {
+    console.error("Workflow failed:", job.error);
+    break;
+  }
+
+  // Wait 2 seconds before polling again
+  await new Promise((r) => setTimeout(r, 2000));
 }`;
 
   const pythonSnippet = `import requests
-import json
+import time
 
-url = "${apiUrl}"
+SESSION_COOKIE = "YOUR_SESSION_TOKEN"
 headers = {
     "Content-Type": "application/json",
-    "Cookie": "next-auth.session-token=YOUR_SESSION_TOKEN"
+    "Cookie": f"next-auth.session-token={SESSION_COOKIE}"
 }
-payload = {
+
+# Step 1: Start the workflow
+run = requests.post("${runUrl}", json={
     "input": "Your text input here",${acceptsFiles ? `
     "files": [
         {
@@ -1066,24 +1072,29 @@ payload = {
             "mimeType": "image/png"
         }
     ]` : ""}
-}
+}, headers=headers)
 
-# The response is a Server-Sent Events (SSE) stream
-response = requests.post(url, json=payload, headers=headers, stream=True)
+job_id = run.json()["jobId"]
+print(f"Job started: {job_id}")
 
-for line in response.iter_lines(decode_unicode=True):
-    if not line:
-        continue
-    if line.startswith("event: "):
-        event = line[7:]
-    elif line.startswith("data: "):
-        data = json.loads(line[6:])
-        if event == "step_complete":
-            print(f"Step {data['index']} done: {data['output'][:100]}")
-        elif event == "workflow_complete":
-            print(f"Workflow finished. Credits used: {data['creditsUsed']}")
-        elif event == "step_error":
-            print(f"Step {data['index']} failed: {data['output']}")`;
+# Step 2: Poll until complete
+while True:
+    poll = requests.get(
+        f"${baseUrl}/api/jobs/{job_id}",
+        headers={"Cookie": f"next-auth.session-token={SESSION_COOKIE}"}
+    )
+    job = poll.json()
+
+    print(f"Progress: {job['progress']['completed']}/{job['progress']['total']} steps")
+
+    if job["status"] == "COMPLETED":
+        print("Final output:", job["result"])
+        break
+    if job["status"] == "FAILED":
+        print("Workflow failed:", job.get("error"))
+        break
+
+    time.sleep(2)  # Wait 2 seconds before polling again`;
 
   const snippets = { curl: curlSnippet, javascript: jsSnippet, python: pythonSnippet };
   const tabLabels = { curl: "cURL", javascript: "JavaScript", python: "Python" };
@@ -1122,31 +1133,56 @@ for line in response.iter_lines(decode_unicode=True):
         </div>
 
         <div className="px-6 py-5 space-y-5">
-          {/* API Endpoint */}
+          {/* API Endpoints */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-              API Endpoint
+              API Endpoints
             </label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 font-mono text-sm overflow-x-auto">
-                <span className="shrink-0 px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
-                  POST
-                </span>
-                <span className="text-gray-700 dark:text-gray-300 truncate">
-                  {apiUrl}
-                </span>
+            <div className="space-y-2">
+              {/* Run endpoint */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 font-mono text-sm overflow-x-auto">
+                  <span className="shrink-0 px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
+                    POST
+                  </span>
+                  <span className="text-gray-700 dark:text-gray-300 truncate">
+                    {runUrl}
+                  </span>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(runUrl, "run-url")}
+                  className="shrink-0 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                  title="Copy URL"
+                >
+                  {copiedId === "run-url" ? (
+                    <Check className="w-4 h-4 text-emerald-500" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
               </div>
-              <button
-                onClick={() => copyToClipboard(apiUrl, "url")}
-                className="shrink-0 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                title="Copy URL"
-              >
-                {copiedId === "url" ? (
-                  <Check className="w-4 h-4 text-emerald-500" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </button>
+              {/* Poll endpoint */}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 font-mono text-sm overflow-x-auto">
+                  <span className="shrink-0 px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] font-bold">
+                    GET
+                  </span>
+                  <span className="text-gray-700 dark:text-gray-300 truncate">
+                    {pollUrl}
+                  </span>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(`${baseUrl}/api/jobs/`, "poll-url")}
+                  className="shrink-0 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                  title="Copy URL"
+                >
+                  {copiedId === "poll-url" ? (
+                    <Check className="w-4 h-4 text-emerald-500" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1159,9 +1195,9 @@ for line in response.iter_lines(decode_unicode=True):
               </p>
             </div>
             <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Response</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Pattern</p>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
-                SSE stream
+                Start + Poll
               </p>
             </div>
             <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3">
@@ -1178,28 +1214,33 @@ for line in response.iter_lines(decode_unicode=True):
             </div>
           </div>
 
-          {/* SSE Events */}
+          {/* How it works */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-              SSE Events
+              How it works
             </label>
-            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3 space-y-1.5">
-              {[
-                { event: "workflow_start", desc: "Workflow initialized with step list" },
-                { event: "step_start", desc: "A step begins processing" },
-                { event: "step_complete", desc: "A step finished — output in data.output" },
-                { event: "step_error", desc: "A step failed — error in data.output" },
-                { event: "workflow_complete", desc: "All done — creditsUsed in data" },
-              ].map((e) => (
-                <div key={e.event} className="flex items-start gap-2">
-                  <code className="shrink-0 text-[11px] font-mono px-1.5 py-0.5 rounded bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400">
-                    {e.event}
-                  </code>
-                  <span className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                    {e.desc}
-                  </span>
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3 space-y-2.5">
+              <div className="flex items-start gap-2.5">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-[10px] font-bold text-brand-700 dark:text-brand-400">1</span>
+                <div>
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300">POST to start the workflow</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Returns <code className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-[10px]">jobId</code> immediately (HTTP 202)</p>
                 </div>
-              ))}
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-[10px] font-bold text-brand-700 dark:text-brand-400">2</span>
+                <div>
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300">GET to poll for progress</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Returns <code className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-[10px]">status</code>, <code className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-[10px]">progress</code>, and per-step results</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-[10px] font-bold text-emerald-700 dark:text-emerald-400">3</span>
+                <div>
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Collect the result</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">When status is <code className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-[10px]">COMPLETED</code>, the <code className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-[10px]">result</code> field contains the final output</p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1249,9 +1290,9 @@ for line in response.iter_lines(decode_unicode=True):
           <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-brand-50/50 dark:bg-brand-900/10 border border-brand-100 dark:border-brand-800/40">
             <Terminal className="w-4 h-4 text-brand-500 shrink-0 mt-0.5" />
             <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-              Authenticate by including your session cookie. The response streams as{" "}
-              <strong>Server-Sent Events</strong> — parse each event to track step progress
-              and collect the final output.
+              Start the workflow with a <strong>POST</strong>, then poll the job endpoint
+              every 2-3 seconds with <strong>GET</strong> until the status
+              is <code className="px-1 py-0.5 rounded bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 text-[11px]">COMPLETED</code> or <code className="px-1 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-[11px]">FAILED</code>.
             </p>
           </div>
         </div>
