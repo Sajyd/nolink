@@ -55,15 +55,16 @@ const FEATURES = [
 ];
 
 const FALLBACK_EXAMPLES: WorkflowExample[] = [
-  { name: "Blog → Social Media", description: "Turn a blog post into Twitter threads, LinkedIn posts, and Instagram captions automatically.", steps: 3, category: "CONTENT", price: 8, slug: "", tags: ["writing", "social"], totalUses: 0 },
-  { name: "Audio Transcription + Summary", description: "Transcribe any audio file and generate a concise summary with key takeaways.", steps: 2, category: "AUDIO_VIDEO", price: 5, slug: "", tags: ["audio", "transcription"], totalUses: 0 },
-  { name: "Product Image + Description", description: "Generate product photos and compelling copy from a simple brief.", steps: 3, category: "MARKETING", price: 12, slug: "", tags: ["images", "copywriting"], totalUses: 0 },
-  { name: "Code Review Pipeline", description: "Analyze code for bugs, security issues, and style — with actionable suggestions.", steps: 2, category: "DEVELOPMENT", price: 6, slug: "", tags: ["code", "review"], totalUses: 0 },
-  { name: "PDF Analysis Report", description: "Extract insights from PDF documents and generate structured analysis reports.", steps: 3, category: "DATA", price: 10, slug: "", tags: ["pdf", "analysis"], totalUses: 0 },
-  { name: "Lesson Plan Generator", description: "Create structured lesson plans with quizzes and activities from any topic.", steps: 3, category: "EDUCATION", price: 7, slug: "", tags: ["teaching", "AI"], totalUses: 0 },
+  { id: "cmlxuvirh001w1v138prhvgmv", name: "30 TikTok Hooks from One Topic", description: "Enter any topic and instantly get 30 scroll-stopping TikTok hooks organized by style — curiosity, controversy, storytelling, authority, and more.", steps: 4, category: "CONTENT", price: 6, slug: "tiktok-hooks-generator", tags: ["tiktok", "hooks", "viral", "content creation"], totalUses: 488 },
+  { id: "cmlxuvhhv00091v13mdgigtlc", name: "AI Image Generator", description: "Generate stunning images from text prompts using FLUX.1 Pro. Describe what you want and get a high-quality AI-generated image.", steps: 3, category: "DESIGN", price: 5, slug: "ai-image-generator", tags: ["image", "art", "design", "ai-art"], totalUses: 389 },
+  { id: "cmlxuvivx00221v13a8ju71bl", name: "CV → Tailored Job Application", description: "Paste your CV and the job description to get a tailored cover letter, optimized resume bullet points, and interview prep talking points.", steps: 4, category: "CONTENT", price: 10, slug: "cv-to-job-application", tags: ["cv", "resume", "job application", "cover letter"], totalUses: 312 },
+  { id: "cmlxuvimz001q1v139spgq654", name: "YouTube → Viral Twitter Thread", description: "Paste any YouTube video URL or transcript and get a viral-ready Twitter/X thread with hooks, key insights, and engagement-optimized formatting.", steps: 4, category: "CONTENT", price: 8, slug: "youtube-to-twitter-thread", tags: ["youtube", "twitter", "thread", "viral"], totalUses: 263 },
+  { id: "cmlxuvhna000e1v13lesw4nnx", name: "Audio Transcription + Summary", description: "Upload audio from meetings, podcasts, or lectures. Whisper transcribes it, then GPT-4o extracts key points and action items.", steps: 4, category: "AUDIO_VIDEO", price: 8, slug: "audio-transcribe-summarize", tags: ["audio", "transcription", "summary", "podcast"], totalUses: 217 },
+  { id: "cmlxuvj0d00281v13h04swe89", name: "Cold Email Personalization at Scale", description: "Provide your product/service info and target prospect details to get highly personalized cold email sequences with subject lines, follow-ups, and A/B variants.", steps: 4, category: "MARKETING", price: 10, slug: "cold-email-personalization", tags: ["cold email", "sales", "outreach", "personalization"], totalUses: 198 },
 ];
 
 interface WorkflowExample {
+  id: string;
   name: string;
   description: string;
   steps: number;
@@ -172,7 +173,7 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
                   transition={{ duration: 0.4, delay: 0.3 + i * 0.08 }}
                 >
                   <Link
-                    href={w.slug ? `/workflow/${w.slug}` : "/marketplace"}
+                    href={w.id ? `/workflow/${w.id}` : "/marketplace"}
                     className="card p-5 h-full flex flex-col gap-3 group hover:border-brand-300 dark:hover:border-brand-700 transition-all"
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -301,6 +302,7 @@ export const getServerSideProps: GetServerSideProps = async () => {
     });
 
     const popularWorkflows: WorkflowExample[] = workflows.map((w) => ({
+      id: w.id,
       name: w.name,
       description: w.description,
       steps: w.steps.length,
