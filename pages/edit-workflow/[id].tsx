@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
+import Head from "next/head";
 import dynamic from "next/dynamic";
-import { ArrowLeft, Zap, Loader2 } from "lucide-react";
+import { ArrowLeft, Zap, Loader2, Check, CloudUpload } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import BuilderToolbar from "@/components/builder/BuilderToolbar";
@@ -32,14 +33,23 @@ export default function EditWorkflow() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const loadedIdRef = useRef<string | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialLoadDoneRef = useRef(false);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/signin");
   }, [status, router]);
 
   useEffect(() => {
-    if (id && session) loadWorkflow();
-    return () => { store.reset(); };
+    const workflowId = typeof id === "string" ? id : undefined;
+    if (workflowId && session && loadedIdRef.current !== workflowId) {
+      loadedIdRef.current = workflowId;
+      loadWorkflow();
+    }
+    return () => { store.reset(); loadedIdRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, session]);
 
   const loadWorkflow = async () => {
@@ -130,76 +140,88 @@ export default function EditWorkflow() {
     } catch {
       setLoadError("Failed to load workflow");
     }
+    initialLoadDoneRef.current = true;
     setLoading(false);
   };
 
-  const handleSave = async () => {
-    if (store.nodes.length === 0) {
-      toast.error("Add at least one step");
+  const buildSavePayload = useCallback(() => {
+    const s = useWorkflowStore.getState();
+    return {
+      name: s.workflowName || "Untitled Workflow",
+      description: s.workflowDescription,
+      category: s.workflowCategory,
+      priceInNolinks: s.workflowPrice,
+      isPublic: s.isPublic,
+      exampleInput: s.exampleInput || null,
+      exampleOutput: s.exampleOutput || null,
+      steps: s.nodes.map((n) => {
+        const stepTypeMap: Record<string, string> = {
+          inputNode: "INPUT",
+          outputNode: "OUTPUT",
+          falAiNode: "FAL_AI",
+          basicNode: "BASIC",
+          stepNode: "BASIC",
+          customApiNode: "CUSTOM_API",
+        };
+        const mergedParams = { ...(n.data.modelParams || {}) };
+        const bindings = n.data.paramBindings || {};
+        for (const [key, binding] of Object.entries(bindings)) {
+          if (binding && binding !== "manual") {
+            mergedParams[key] = binding;
+          }
+        }
+        const validCustomParams = (n.data.customParams || []).filter(
+          (p: { name: string; value: string }) => p.name.trim() !== ""
+        );
+        const isCustomFal = n.data.aiModel === "fal-custom";
+        const validFalParams = (n.data.customFalParams || []).filter(
+          (p: { key: string; value: string }) => p.key.trim() !== ""
+        );
+        const isCustomApi = n.type === "customApiNode";
+        return {
+          order: n.data.order,
+          name: n.data.label,
+          stepType: stepTypeMap[n.type || "basicNode"] || "BASIC",
+          aiModel: n.data.aiModel || null,
+          inputType: n.data.inputType || "TEXT",
+          outputType: n.data.outputType || "TEXT",
+          prompt: n.data.prompt || "",
+          modelParams: Object.keys(mergedParams).length > 0 ? mergedParams : null,
+          customParams: validCustomParams.length > 0 ? validCustomParams : null,
+          customFalEndpoint: isCustomFal ? (n.data.customFalEndpoint || null) : null,
+          customFalParams: isCustomFal && validFalParams.length > 0 ? validFalParams : null,
+          customApiUrl: isCustomApi ? (n.data.customApiUrl || null) : null,
+          customApiMethod: isCustomApi ? (n.data.customApiMethod || "POST") : null,
+          customApiHeaders: isCustomApi ? (n.data.customApiHeaders || []) : null,
+          customApiParams: isCustomApi ? (n.data.customApiParams || []) : null,
+          customApiResultFields: isCustomApi ? (n.data.customApiResultFields || []) : null,
+          customApiPrice: isCustomApi ? (n.data.customApiPrice ?? 0) : null,
+          acceptTypes: n.data.acceptTypes || [],
+          positionX: n.position.x,
+          positionY: n.position.y,
+        };
+      }),
+    };
+  }, []);
+
+  const performSave = useCallback(async (silent: boolean) => {
+    const s = useWorkflowStore.getState();
+    if (s.nodes.length === 0) {
+      if (!silent) toast.error("Add at least one step");
       return;
     }
 
-    setSaving(true);
+    if (silent) {
+      setAutoSaveStatus("saving");
+    } else {
+      setSaving(true);
+    }
+
     try {
       const res = await fetch(`/api/workflows/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: store.workflowName || "Untitled Workflow",
-          description: store.workflowDescription,
-          category: store.workflowCategory,
-          priceInNolinks: store.workflowPrice,
-          isPublic: store.isPublic,
-          exampleInput: store.exampleInput || null,
-          exampleOutput: store.exampleOutput || null,
-          steps: store.nodes.map((n) => {
-            const stepTypeMap: Record<string, string> = {
-              inputNode: "INPUT",
-              outputNode: "OUTPUT",
-              falAiNode: "FAL_AI",
-              basicNode: "BASIC",
-              stepNode: "BASIC",
-              customApiNode: "CUSTOM_API",
-            };
-            const mergedParams = { ...(n.data.modelParams || {}) };
-            const bindings = n.data.paramBindings || {};
-            for (const [key, binding] of Object.entries(bindings)) {
-              if (binding && binding !== "manual") {
-                mergedParams[key] = binding;
-              }
-            }
-            const validCustomParams = (n.data.customParams || []).filter(
-              (p: { name: string; value: string }) => p.name.trim() !== ""
-            );
-            const isCustomFal = n.data.aiModel === "fal-custom";
-            const validFalParams = (n.data.customFalParams || []).filter(
-              (p: { key: string; value: string }) => p.key.trim() !== ""
-            );
-            const isCustomApi = n.type === "customApiNode";
-            return {
-              order: n.data.order,
-              name: n.data.label,
-              stepType: stepTypeMap[n.type || "basicNode"] || "BASIC",
-              aiModel: n.data.aiModel || null,
-              inputType: n.data.inputType || "TEXT",
-              outputType: n.data.outputType || "TEXT",
-              prompt: n.data.prompt || "",
-              modelParams: Object.keys(mergedParams).length > 0 ? mergedParams : null,
-              customParams: validCustomParams.length > 0 ? validCustomParams : null,
-              customFalEndpoint: isCustomFal ? (n.data.customFalEndpoint || null) : null,
-              customFalParams: isCustomFal && validFalParams.length > 0 ? validFalParams : null,
-              customApiUrl: isCustomApi ? (n.data.customApiUrl || null) : null,
-              customApiMethod: isCustomApi ? (n.data.customApiMethod || "POST") : null,
-              customApiHeaders: isCustomApi ? (n.data.customApiHeaders || []) : null,
-              customApiParams: isCustomApi ? (n.data.customApiParams || []) : null,
-              customApiResultFields: isCustomApi ? (n.data.customApiResultFields || []) : null,
-              customApiPrice: isCustomApi ? (n.data.customApiPrice ?? 0) : null,
-              acceptTypes: n.data.acceptTypes || [],
-              positionX: n.position.x,
-              positionY: n.position.y,
-            };
-          }),
-        }),
+        body: JSON.stringify(buildSavePayload()),
       });
 
       if (!res.ok) {
@@ -207,15 +229,41 @@ export default function EditWorkflow() {
         throw new Error(data.error || "Failed to save");
       }
 
-      toast.success("Workflow updated!");
-      store.reset();
-      router.push(`/workflow/${id}`);
+      if (silent) {
+        setAutoSaveStatus("saved");
+        setTimeout(() => setAutoSaveStatus("idle"), 2000);
+      } else {
+        toast.success("Workflow updated!");
+        store.reset();
+        router.push(`/workflow/${id}`);
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save workflow");
+      if (silent) {
+        setAutoSaveStatus("idle");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to save workflow");
+      }
     } finally {
-      setSaving(false);
+      if (!silent) setSaving(false);
     }
-  };
+  }, [id, buildSavePayload, store, router]);
+
+  const handleSave = () => performSave(false);
+
+  // Autosave: subscribe to store changes with debounce
+  useEffect(() => {
+    const unsub = useWorkflowStore.subscribe(() => {
+      if (!initialLoadDoneRef.current || !id) return;
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(() => {
+        performSave(true);
+      }, 1500);
+    });
+    return () => {
+      unsub();
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [id, performSave]);
 
   if (status === "loading" || !session) {
     return (
@@ -244,30 +292,47 @@ export default function EditWorkflow() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
-      <header className="flex items-center justify-between px-4 h-14 border-b border-gray-200 dark:border-gray-800 glass">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="btn-ghost p-2">
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center">
-              <Zap className="w-3.5 h-3.5 text-white" />
+    <>
+      <Head><title>Edit Workflow — nolink.ai</title></Head>
+      <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
+        <header className="flex items-center justify-between px-4 h-14 border-b border-gray-200 dark:border-gray-800 glass">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard" className="btn-ghost p-2">
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center">
+                <Zap className="w-3.5 h-3.5 text-white" />
+              </div>
+              <span className="font-semibold text-sm">Edit Workflow</span>
+              <span className="text-xs text-gray-400 font-mono truncate max-w-[200px]">
+                {store.workflowName || "Untitled"}
+              </span>
             </div>
-            <span className="font-semibold text-sm">Edit Workflow</span>
-            <span className="text-xs text-gray-400 font-mono truncate max-w-[200px]">
-              {store.workflowName || "Untitled"}
-            </span>
           </div>
-        </div>
-        <ThemeToggle />
-      </header>
+          <div className="flex items-center gap-3">
+            {autoSaveStatus === "saving" && (
+              <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                <CloudUpload className="w-3.5 h-3.5 animate-pulse" />
+                Saving…
+              </span>
+            )}
+            {autoSaveStatus === "saved" && (
+              <span className="flex items-center gap-1.5 text-xs text-emerald-500">
+                <Check className="w-3.5 h-3.5" />
+                Saved
+              </span>
+            )}
+            <ThemeToggle />
+          </div>
+        </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        <BuilderToolbar onSave={handleSave} saving={saving} />
-        <WorkflowCanvas />
-        <StepConfigPanel />
+        <div className="flex-1 flex overflow-hidden">
+          <BuilderToolbar onSave={handleSave} saving={saving} />
+          <WorkflowCanvas />
+          <StepConfigPanel />
+        </div>
       </div>
-    </div>
+    </>
   );
 }

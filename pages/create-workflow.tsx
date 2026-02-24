@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
+import Head from "next/head";
 import dynamic from "next/dynamic";
 import { ArrowLeft, Zap, Crown, Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -121,28 +122,31 @@ export default function CreateWorkflow() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
-      <header className="flex items-center justify-between px-4 h-14 border-b border-gray-200 dark:border-gray-800 glass">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="btn-ghost p-2">
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center">
-              <Zap className="w-3.5 h-3.5 text-white" />
+    <>
+      <Head><title>Create Workflow — nolink.ai</title></Head>
+      <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
+        <header className="flex items-center justify-between px-4 h-14 border-b border-gray-200 dark:border-gray-800 glass">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard" className="btn-ghost p-2">
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center">
+                <Zap className="w-3.5 h-3.5 text-white" />
+              </div>
+              <span className="font-semibold text-sm">Workflow Builder</span>
             </div>
-            <span className="font-semibold text-sm">Workflow Builder</span>
           </div>
-        </div>
-        <ThemeToggle />
-      </header>
+          <ThemeToggle />
+        </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        <BuilderToolbar onSave={handleSave} saving={saving} />
-        <WorkflowCanvas />
-        <StepConfigPanel />
+        <div className="flex-1 flex overflow-hidden">
+          <BuilderToolbar onSave={handleSave} saving={saving} />
+          <WorkflowCanvas />
+          <StepConfigPanel />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

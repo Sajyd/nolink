@@ -146,7 +146,7 @@ function FalAiNode({ id, data, selected }: NodeProps) {
       {(nodeData.customParams?.length ?? 0) > 0 && (
         <div className="flex items-center gap-1 text-[10px] text-teal-600 dark:text-teal-400 mt-1">
           <Variable className="w-3 h-3" />
-          <span>{nodeData.customParams!.filter(p => p.name).length} custom param{nodeData.customParams!.filter(p => p.name).length !== 1 ? "s" : ""}</span>
+          <span>{nodeData.customParams!.filter(p => p.name).length} return param{nodeData.customParams!.filter(p => p.name).length !== 1 ? "s" : ""}</span>
         </div>
       )}
     </NodeShell>

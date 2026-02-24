@@ -3,6 +3,7 @@
  * du bouton « Accès immédiat » (SDK, code snippets, flux retour + token).
  */
 import { useState, useEffect } from "react";
+import Head from "next/head";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
@@ -82,6 +83,7 @@ const data = await res.json();
 
   return (
     <>
+      <Head><title>Integrate — nolink.ai</title></Head>
       <Navbar />
       <main className="min-h-screen bg-gray-50 pt-14">
         <div className="mx-auto max-w-4xl px-4 py-10">

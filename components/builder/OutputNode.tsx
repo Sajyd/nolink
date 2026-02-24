@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { NodeProps } from "@xyflow/react";
-import { Download, Type, Image, Mic, Video, FileText } from "lucide-react";
+import { Download, Type, Image, Mic, Video, FileText, Variable } from "lucide-react";
 import type { StepNodeData } from "@/lib/workflow-store";
 import NodeShell from "./NodeShell";
 
@@ -45,6 +45,13 @@ function OutputNode({ id, data, selected }: NodeProps) {
       <p className="text-[10px] text-gray-400 mt-1">
         Delivered to the user as the workflow result
       </p>
+
+      {(nodeData.customParams?.length ?? 0) > 0 && (
+        <div className="flex items-center gap-1 text-[10px] text-teal-600 dark:text-teal-400 mt-1">
+          <Variable className="w-3 h-3" />
+          <span>{nodeData.customParams!.filter(p => p.name).length} return param{nodeData.customParams!.filter(p => p.name).length !== 1 ? "s" : ""}</span>
+        </div>
+      )}
     </NodeShell>
   );
 }

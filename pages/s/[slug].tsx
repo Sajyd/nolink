@@ -5,6 +5,7 @@
  */
 
 import { GetServerSideProps } from "next";
+import Head from "next/head";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
@@ -288,6 +289,7 @@ export default function PartnerPage({ partner, embed, session, hasPaymentMethod 
   if (embed) {
     return (
       <div style={{ backgroundColor: `${primaryColor}08` }} className="min-h-screen">
+        <Head><title>{partner.name} — nolink.ai</title></Head>
         {content}
         {paymentModal && (
           <PaymentModal
@@ -309,6 +311,7 @@ export default function PartnerPage({ partner, embed, session, hasPaymentMethod 
 
   return (
     <>
+      <Head><title>{partner.name} — nolink.ai</title></Head>
       <Navbar />
       <main className="min-h-screen pt-14" style={{ backgroundColor: `${primaryColor}08` }}>
         {content}

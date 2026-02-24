@@ -249,7 +249,7 @@ export default function StepConfigPanel() {
           />
         )}
 
-        {/* ── CUSTOM PARAMETERS (all node types) ─────────── */}
+        {/* ── RETURN PARAMETERS (all node types) ─────────── */}
         <CustomParamsEditor nodeId={selectedNodeId} data={data} allNodes={nodes} />
       </div>
     </div>
@@ -459,7 +459,7 @@ function CustomParamsEditor({
       <div className="flex items-center justify-between">
         <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
           <Variable className="w-3.5 h-3.5" />
-          Custom Parameters
+          Return Parameters
         </h4>
         <button
           onClick={addParam}
@@ -472,7 +472,7 @@ function CustomParamsEditor({
 
       {customParams.length === 0 ? (
         <p className="text-[10px] text-gray-400">
-          No custom parameters. Add one to make it available as{" "}
+          No return parameters. Add one to make it available as{" "}
           <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">
             {"{{name}}"}
           </code>{" "}

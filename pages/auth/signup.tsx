@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 
@@ -29,7 +30,9 @@ export default function SignUp() {
   }
 
   return (
-    <div className="mx-auto max-w-sm px-4 py-16">
+    <>
+      <Head><title>Sign Up — nolink.ai</title></Head>
+      <div className="mx-auto max-w-sm px-4 py-16">
       <h1 className="text-2xl font-semibold text-[var(--fg)]">Create account</h1>
       <p className="mt-1 text-sm text-[var(--muted)]">
         Already have an account?{" "}
@@ -91,5 +94,6 @@ export default function SignUp() {
         </button>
       </form>
     </div>
+    </>
   );
 }

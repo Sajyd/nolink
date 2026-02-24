@@ -91,7 +91,7 @@ function CustomApiNode({ id, data, selected }: NodeProps) {
         <div className="flex items-center gap-1 text-[10px] text-teal-600 dark:text-teal-400 mt-1">
           <Variable className="w-3 h-3" />
           <span>
-            {d.customParams!.filter((p) => p.name).length} custom param
+            {d.customParams!.filter((p) => p.name).length} return param
             {d.customParams!.filter((p) => p.name).length !== 1 ? "s" : ""}
           </span>
         </div>

@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { NodeProps } from "@xyflow/react";
-import { Type, Image, Mic, Video, FileText, Cpu } from "lucide-react";
+import { Type, Image, Mic, Video, FileText, Cpu, Variable } from "lucide-react";
 import type { StepNodeData } from "@/lib/workflow-store";
 import { getModelById } from "@/lib/models";
 import NodeShell from "./NodeShell";
@@ -63,6 +63,13 @@ function BasicNode({ id, data, selected }: NodeProps) {
           {nodeData.outputType}
         </span>
       </div>
+
+      {(nodeData.customParams?.length ?? 0) > 0 && (
+        <div className="flex items-center gap-1 text-[10px] text-teal-600 dark:text-teal-400">
+          <Variable className="w-3 h-3" />
+          <span>{nodeData.customParams!.filter(p => p.name).length} return param{nodeData.customParams!.filter(p => p.name).length !== 1 ? "s" : ""}</span>
+        </div>
+      )}
     </NodeShell>
   );
 }
