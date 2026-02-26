@@ -25,6 +25,18 @@ export interface CustomApiResultField {
   type: CustomApiResultType;
 }
 
+export type InputParameterType = "text" | "number" | "checkbox" | "select";
+
+export interface InputParameter {
+  id: string;
+  name: string;
+  label: string;
+  type: InputParameterType;
+  options?: string[];
+  defaultValue: string;
+  required: boolean;
+}
+
 export interface StepNodeData {
   label: string;
   stepType: StepNodeType;
@@ -45,6 +57,7 @@ export interface StepNodeData {
   customApiParams?: CustomApiParam[];
   customApiResultFields?: CustomApiResultField[];
   customApiPrice?: number;
+  inputParameters?: InputParameter[];
   [key: string]: unknown;
 }
 

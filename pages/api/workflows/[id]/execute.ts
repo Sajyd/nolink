@@ -149,6 +149,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let failed = false;
   const customParamMap: Record<string, string> = {};
 
+  // Build input binding map from INPUT steps so {{input_1_text}}, {{input_1_image}} etc. resolve
+  const inputSteps = sortedSteps.filter((s) => s.stepType === "INPUT");
+  inputSteps.forEach((step, idx) => {
+    const n = idx + 1;
+    const accepts = step.acceptTypes || ["text"];
+    for (const type of accepts) {
+      const key = `input_${n}_${type}`;
+      if (type === "text") {
+        customParamMap[key] = input || "";
+      } else {
+        const file = fileInputs.find((f) => f.type === type);
+        customParamMap[key] = file?.url || "";
+      }
+    }
+  });
+
+  // Also inject user-provided input parameters (custom form fields)
+  const userParams: Record<string, unknown> = req.body.params || {};
+  for (const [key, val] of Object.entries(userParams)) {
+    customParamMap[key] = String(val ?? "");
+  }
+
   const resolveCP = (text: string) =>
     text.replace(/\{\{(\w+)\}\}/g, (m, name) =>
       name === "input" ? m : customParamMap[name] !== undefined ? customParamMap[name] : m
@@ -186,6 +208,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       resolvedStep.customApiHeaders = resolvedStep.customApiHeaders.map((h) => ({
         key: h.key,
         value: resolveCP(h.value),
+      }));
+    }
+    if (resolvedStep.customFalParams) {
+      resolvedStep.customFalParams = resolvedStep.customFalParams.map((p) => ({
+        key: p.key,
+        value: resolveCP(p.value),
       }));
     }
 

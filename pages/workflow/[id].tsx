@@ -33,8 +33,19 @@ import {
   LogIn,
   Code2,
   Terminal,
+  SlidersHorizontal,
 } from "lucide-react";
 import toast from "react-hot-toast";
+
+interface InputParameter {
+  id: string;
+  name: string;
+  label: string;
+  type: "text" | "number" | "checkbox" | "select";
+  options?: string[];
+  defaultValue: string;
+  required: boolean;
+}
 
 interface Step {
   id: string;
@@ -46,6 +57,10 @@ interface Step {
   outputType: string;
   prompt: string;
   acceptTypes: string[];
+  config?: {
+    inputParameters?: InputParameter[];
+    [key: string]: unknown;
+  };
 }
 
 interface Workflow {
@@ -144,6 +159,7 @@ export default function WorkflowPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [customParams, setCustomParams] = useState<Record<string, string | number | boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultsEndRef = useRef<HTMLDivElement>(null);
 
@@ -174,6 +190,27 @@ export default function WorkflowPage() {
   const acceptsFiles = acceptTypes.some((t) => t !== "text");
   const acceptsText = acceptTypes.length === 0 || acceptTypes.includes("text");
   const fileAcceptTypes = acceptTypes.filter((t) => t !== "text");
+
+  const inputParameters: InputParameter[] = workflow?.steps
+    .filter((s) => s.stepType === "INPUT")
+    .flatMap((s) => (s.config?.inputParameters || []).filter((p) => p.name)) || [];
+
+  // Initialize default values for custom params when workflow loads
+  useEffect(() => {
+    if (inputParameters.length > 0 && Object.keys(customParams).length === 0) {
+      const defaults: Record<string, string | number | boolean> = {};
+      for (const p of inputParameters) {
+        if (p.type === "checkbox") {
+          defaults[p.name] = p.defaultValue === "true";
+        } else if (p.type === "number") {
+          defaults[p.name] = p.defaultValue ? Number(p.defaultValue) : 0;
+        } else {
+          defaults[p.name] = p.defaultValue || "";
+        }
+      }
+      setCustomParams(defaults);
+    }
+  }, [workflow]);
 
   const acceptMimeString = fileAcceptTypes
     .map((t) => ACCEPT_MIME_MAP[t])
@@ -268,8 +305,20 @@ export default function WorkflowPage() {
   );
 
   const handleExecute = async () => {
-    if (!input.trim() && uploadedFiles.length === 0) {
+    if (!input.trim() && uploadedFiles.length === 0 && inputParameters.length === 0) {
       toast.error("Please provide input");
+      return;
+    }
+
+    const missingRequired = inputParameters
+      .filter((p) => p.required)
+      .filter((p) => {
+        const val = customParams[p.name];
+        if (val === undefined || val === "") return true;
+        return false;
+      });
+    if (missingRequired.length > 0) {
+      toast.error(`Please fill in: ${missingRequired.map((p) => p.label || p.name).join(", ")}`);
       return;
     }
 
@@ -293,6 +342,7 @@ export default function WorkflowPage() {
             name: f.name,
             mimeType: f.mimeType,
           })),
+          params: Object.keys(customParams).length > 0 ? customParams : undefined,
         }),
       });
 
@@ -452,8 +502,14 @@ export default function WorkflowPage() {
     );
   }
 
+  const hasCustomParamValues = inputParameters.length > 0 &&
+    inputParameters.some((p) => {
+      const val = customParams[p.name];
+      return val !== undefined && val !== "";
+    });
+
   const canExecute =
-    !executing && (input.trim().length > 0 || uploadedFiles.length > 0);
+    !executing && (input.trim().length > 0 || uploadedFiles.length > 0 || hasCustomParamValues);
 
   const completedCount = liveSteps.filter((s) => s.status === "completed").length;
   const totalCount = liveSteps.length;
@@ -784,6 +840,92 @@ export default function WorkflowPage() {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Custom Input Parameters */}
+          {inputParameters.length > 0 && (
+            <div className="space-y-3 mb-4">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4 text-emerald-500" />
+                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Parameters</h3>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {inputParameters.map((param) => (
+                  <div key={param.id}>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+                      {param.label || param.name}
+                      {param.required && <span className="text-red-400 ml-0.5">*</span>}
+                    </label>
+                    {param.type === "text" && (
+                      <input
+                        type="text"
+                        value={String(customParams[param.name] ?? param.defaultValue ?? "")}
+                        onChange={(e) =>
+                          setCustomParams((prev) => ({ ...prev, [param.name]: e.target.value }))
+                        }
+                        className="input-field text-sm"
+                        placeholder={`Enter ${param.label || param.name}...`}
+                        disabled={executing}
+                      />
+                    )}
+                    {param.type === "number" && (
+                      <input
+                        type="number"
+                        value={customParams[param.name] ?? param.defaultValue ?? ""}
+                        onChange={(e) =>
+                          setCustomParams((prev) => ({
+                            ...prev,
+                            [param.name]: e.target.value ? Number(e.target.value) : "",
+                          }))
+                        }
+                        className="input-field text-sm"
+                        placeholder="0"
+                        disabled={executing}
+                      />
+                    )}
+                    {param.type === "checkbox" && (
+                      <label className="flex items-center gap-2.5 h-[38px] px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={
+                            customParams[param.name] !== undefined
+                              ? Boolean(customParams[param.name])
+                              : param.defaultValue === "true"
+                          }
+                          onChange={(e) =>
+                            setCustomParams((prev) => ({ ...prev, [param.name]: e.target.checked }))
+                          }
+                          className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                          disabled={executing}
+                        />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {customParams[param.name] === true || (customParams[param.name] === undefined && param.defaultValue === "true")
+                            ? "Enabled"
+                            : "Disabled"}
+                        </span>
+                      </label>
+                    )}
+                    {param.type === "select" && (
+                      <select
+                        value={String(customParams[param.name] ?? param.defaultValue ?? "")}
+                        onChange={(e) =>
+                          setCustomParams((prev) => ({ ...prev, [param.name]: e.target.value }))
+                        }
+                        className="input-field text-sm"
+                        disabled={executing}
+                      >
+                        <option value="">Select...</option>
+                        {(param.options || []).filter(Boolean).map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

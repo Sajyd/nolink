@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { NodeProps } from "@xyflow/react";
-import { Upload, Type, Image, Mic, Video, FileText, Variable } from "lucide-react";
+import { Upload, Type, Image, Mic, Video, FileText, Variable, SlidersHorizontal } from "lucide-react";
 import type { StepNodeData } from "@/lib/workflow-store";
 import NodeShell from "./NodeShell";
 
@@ -23,6 +23,7 @@ const ACCEPT_COLORS: Record<string, string> = {
 function InputNode({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as StepNodeData;
   const accepts = nodeData.acceptTypes || ["text"];
+  const inputParamCount = (nodeData.inputParameters || []).filter(p => p.name).length;
 
   return (
     <NodeShell
@@ -63,6 +64,13 @@ function InputNode({ id, data, selected }: NodeProps) {
       <p className="text-[10px] text-gray-400 mt-1">
         Accepts {accepts.length > 1 ? "multiple formats" : accepts[0]} from user
       </p>
+
+      {inputParamCount > 0 && (
+        <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">
+          <SlidersHorizontal className="w-3 h-3" />
+          <span>{inputParamCount} custom param{inputParamCount !== 1 ? "s" : ""}</span>
+        </div>
+      )}
 
       {(nodeData.customParams?.length ?? 0) > 0 && (
         <div className="flex items-center gap-1 text-[10px] text-teal-600 dark:text-teal-400 mt-1">

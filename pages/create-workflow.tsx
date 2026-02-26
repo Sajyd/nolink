@@ -102,6 +102,9 @@ export default function CreateWorkflow() {
               customApiResultFields: isCustomApi ? (n.data.customApiResultFields || []) : null,
               customApiPrice: isCustomApi ? (n.data.customApiPrice ?? 0) : null,
               acceptTypes: n.data.acceptTypes || [],
+              inputParameters: (n.data.inputParameters || []).filter(
+                (p: { name: string }) => p.name.trim() !== ""
+              ),
               positionX: n.position.x,
               positionY: n.position.y,
             };

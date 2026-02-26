@@ -100,6 +100,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             if (step.customApiParams) config.customApiParams = step.customApiParams;
             if (step.customApiResultFields) config.customApiResultFields = step.customApiResultFields;
             if (step.customApiPrice != null) config.customApiPrice = step.customApiPrice;
+            if (step.inputParameters && step.inputParameters.length > 0) config.inputParameters = step.inputParameters;
             return {
               order: step.order,
               name: step.name || `Step ${step.order}`,

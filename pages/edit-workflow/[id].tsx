@@ -117,6 +117,7 @@ export default function EditWorkflow() {
           customApiParams: (config.customApiParams as any[]) || undefined,
           customApiResultFields: (config.customApiResultFields as any[]) || undefined,
           customApiPrice: (config.customApiPrice as number) ?? undefined,
+          inputParameters: (config.inputParameters as any[]) || undefined,
         };
 
         nodes.push({
@@ -197,6 +198,9 @@ export default function EditWorkflow() {
           customApiResultFields: isCustomApi ? (n.data.customApiResultFields || []) : null,
           customApiPrice: isCustomApi ? (n.data.customApiPrice ?? 0) : null,
           acceptTypes: n.data.acceptTypes || [],
+          inputParameters: (n.data.inputParameters || []).filter(
+            (p: { name: string }) => p.name.trim() !== ""
+          ),
           positionX: n.position.x,
           positionY: n.position.y,
         };

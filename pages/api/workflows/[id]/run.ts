@@ -27,7 +27,7 @@ export default async function handler(
   }
 
   const { id } = req.query;
-  const { input, files } = req.body;
+  const { input, files, params: userParams } = req.body;
 
   if (!input && (!files || files.length === 0)) {
     return res.status(400).json({ error: "Input is required" });
@@ -87,7 +87,8 @@ export default async function handler(
     fileInputs,
     input || "",
     session.user.id,
-    cost
+    cost,
+    userParams || {}
   ).catch(() => {});
 }
 
@@ -97,7 +98,8 @@ async function runWorkflowInBackground(
   fileInputs: FileInput[],
   input: string,
   userId: string,
-  cost: number
+  cost: number,
+  userParams: Record<string, unknown>
 ) {
   const stepDefs: StepDefinition[] = workflow.steps.map((s: any) => {
     const config = (s.config as Record<string, unknown>) || {};
@@ -142,6 +144,27 @@ async function runWorkflowInBackground(
   let failed = false;
   const customParamMap: Record<string, string> = {};
 
+  // Build input binding map from INPUT steps
+  const inputSteps = sortedSteps.filter((s) => s.stepType === "INPUT");
+  inputSteps.forEach((step, idx) => {
+    const n = idx + 1;
+    const accepts = step.acceptTypes || ["text"];
+    for (const type of accepts) {
+      const key = `input_${n}_${type}`;
+      if (type === "text") {
+        customParamMap[key] = input || "";
+      } else {
+        const file = fileInputs.find((f) => f.type === type);
+        customParamMap[key] = file?.url || "";
+      }
+    }
+  });
+
+  // Inject user-provided input parameters
+  for (const [key, val] of Object.entries(userParams)) {
+    customParamMap[key] = String(val ?? "");
+  }
+
   const resolveCP = (text: string) =>
     text.replace(/\{\{(\w+)\}\}/g, (m, name) =>
       name === "input"
@@ -181,6 +204,12 @@ async function runWorkflowInBackground(
       resolvedStep.customApiHeaders = resolvedStep.customApiHeaders.map((h) => ({
         key: h.key,
         value: resolveCP(h.value),
+      }));
+    }
+    if (resolvedStep.customFalParams) {
+      resolvedStep.customFalParams = resolvedStep.customFalParams.map((p) => ({
+        key: p.key,
+        value: resolveCP(p.value),
       }));
     }
 

@@ -5,6 +5,8 @@ import {
   type CustomApiParam,
   type CustomApiResultField,
   type CustomApiResultType,
+  type InputParameter,
+  type InputParameterType,
 } from "@/lib/workflow-store";
 import {
   ALL_MODELS,
@@ -20,7 +22,7 @@ import {
 import { useSession } from "next-auth/react";
 import {
   X, Sparkles, Settings2, Upload, Download, Plus, Trash2, Variable,
-  Lock, Clock, Zap, Link2, Globe, Shield, AlertTriangle,
+  Lock, Clock, Zap, Link2, Globe, Shield, AlertTriangle, SlidersHorizontal,
 } from "lucide-react";
 
 const IO_TYPES = ["TEXT", "IMAGE", "AUDIO", "VIDEO", "DOCUMENT"];
@@ -49,13 +51,23 @@ export default function StepConfigPanel() {
   const nodeType = node.type || "basicNode";
 
   const inputNodes = nodes.filter((n) => n.type === "inputNode");
-  const inputBindOptions = inputNodes.flatMap((n, idx) => {
-    const accepts = n.data.acceptTypes || ["text"];
-    return accepts.map((type, ti) => ({
-      value: `input_${idx + 1}_${type}`,
-      label: `Input ${idx + 1}: ${type}`,
-    }));
-  });
+  const inputBindOptions = [
+    ...inputNodes.flatMap((n, idx) => {
+      const accepts = n.data.acceptTypes || ["text"];
+      return accepts.map((type) => ({
+        value: `input_${idx + 1}_${type}`,
+        label: `Input ${idx + 1}: ${type}`,
+      }));
+    }),
+    ...inputNodes.flatMap((n) =>
+      (n.data.inputParameters || [])
+        .filter((p) => p.name)
+        .map((p) => ({
+          value: p.name,
+          label: `Param: ${p.label || p.name}`,
+        }))
+    ),
+  ];
 
   return (
     <div className="w-80 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-y-auto">
@@ -99,45 +111,49 @@ export default function StepConfigPanel() {
 
         {/* ── INPUT NODE CONFIG ──────────────────────────── */}
         {nodeType === "inputNode" && (
-          <div>
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-              Accepted Input Types
-            </label>
-            <div className="space-y-1.5">
-              {INPUT_ACCEPT_TYPES.map((t) => {
-                const accepts = data.acceptTypes || ["text"];
-                const checked = accepts.includes(t.id);
-                return (
-                  <label
-                    key={t.id}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                      checked
-                        ? "bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800"
-                        : "hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        const next = checked
-                          ? accepts.filter((a) => a !== t.id)
-                          : [...accepts, t.id];
-                        updateNodeData(selectedNodeId, {
-                          acceptTypes: next.length > 0 ? next : ["text"],
-                        });
-                      }}
-                      className="rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
-                    />
-                    <div>
-                      <p className="text-sm font-medium">{t.label}</p>
-                      <p className="text-[10px] text-gray-400">{t.description}</p>
-                    </div>
-                  </label>
-                );
-              })}
+          <>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+                Accepted Input Types
+              </label>
+              <div className="space-y-1.5">
+                {INPUT_ACCEPT_TYPES.map((t) => {
+                  const accepts = data.acceptTypes || ["text"];
+                  const checked = accepts.includes(t.id);
+                  return (
+                    <label
+                      key={t.id}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                        checked
+                          ? "bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800"
+                          : "hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          const next = checked
+                            ? accepts.filter((a) => a !== t.id)
+                            : [...accepts, t.id];
+                          updateNodeData(selectedNodeId, {
+                            acceptTypes: next.length > 0 ? next : ["text"],
+                          });
+                        }}
+                        className="rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
+                      />
+                      <div>
+                        <p className="text-sm font-medium">{t.label}</p>
+                        <p className="text-[10px] text-gray-400">{t.description}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+
+            <InputParametersEditor nodeId={selectedNodeId} data={data} />
+          </>
         )}
 
         {/* ── OUTPUT NODE CONFIG ─────────────────────────── */}
@@ -538,6 +554,214 @@ function CustomParamsEditor({
           </code>{" "}
           in prompts of downstream nodes to reference these values.
         </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Input Parameters Editor ────────────────────────────────────
+
+const INPUT_PARAM_TYPES: { value: InputParameterType; label: string }[] = [
+  { value: "text", label: "Text" },
+  { value: "number", label: "Number" },
+  { value: "checkbox", label: "Checkbox (Boolean)" },
+  { value: "select", label: "Select (Dropdown)" },
+];
+
+function InputParametersEditor({
+  nodeId,
+  data,
+}: {
+  nodeId: string;
+  data: any;
+}) {
+  const { updateNodeData } = useWorkflowStore();
+  const params: InputParameter[] = data.inputParameters || [];
+
+  const addParam = () => {
+    const newParam: InputParameter = {
+      id: `ip_${Date.now()}`,
+      name: "",
+      label: "",
+      type: "text",
+      options: [],
+      defaultValue: "",
+      required: false,
+    };
+    updateNodeData(nodeId, { inputParameters: [...params, newParam] });
+  };
+
+  const updateParam = (index: number, updates: Partial<InputParameter>) => {
+    const next = params.map((p, i) => (i === index ? { ...p, ...updates } : p));
+    updateNodeData(nodeId, { inputParameters: next });
+  };
+
+  const removeParam = (index: number) => {
+    updateNodeData(nodeId, {
+      inputParameters: params.filter((_, i) => i !== index),
+    });
+  };
+
+  return (
+    <div className="space-y-3 border-t border-gray-200 dark:border-gray-800 pt-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          Custom Input Parameters
+        </h4>
+        <button
+          onClick={addParam}
+          className="flex items-center gap-1 text-[10px] font-medium text-emerald-500 hover:text-emerald-600 transition-colors"
+        >
+          <Plus className="w-3 h-3" />
+          Add
+        </button>
+      </div>
+
+      {params.length === 0 ? (
+        <p className="text-[10px] text-gray-400">
+          Add custom parameters that users fill in when running the workflow.
+          Use{" "}
+          <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">
+            {"{{param_name}}"}
+          </code>{" "}
+          in downstream prompts.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {params.map((param, idx) => (
+            <div
+              key={param.id}
+              className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-medium text-gray-400">
+                  Parameter {idx + 1}
+                </span>
+                <button
+                  onClick={() => removeParam(idx)}
+                  className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-0.5">Variable name</label>
+                  <input
+                    type="text"
+                    value={param.name}
+                    onChange={(e) =>
+                      updateParam(idx, { name: e.target.value.replace(/[^a-zA-Z0-9_]/g, "") })
+                    }
+                    className="input-field text-xs font-mono"
+                    placeholder="my_param"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-0.5">Display label</label>
+                  <input
+                    type="text"
+                    value={param.label}
+                    onChange={(e) => updateParam(idx, { label: e.target.value })}
+                    className="input-field text-xs"
+                    placeholder="My Parameter"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-0.5">Type</label>
+                  <select
+                    value={param.type}
+                    onChange={(e) =>
+                      updateParam(idx, {
+                        type: e.target.value as InputParameterType,
+                        options: e.target.value === "select" ? (param.options?.length ? param.options : [""]) : [],
+                        defaultValue: e.target.value === "checkbox" ? "false" : param.defaultValue,
+                      })
+                    }
+                    className="input-field text-xs"
+                  >
+                    {INPUT_PARAM_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-0.5">Default value</label>
+                  {param.type === "checkbox" ? (
+                    <label className="flex items-center gap-2 h-[34px] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={param.defaultValue === "true"}
+                        onChange={(e) => updateParam(idx, { defaultValue: String(e.target.checked) })}
+                        className="rounded border-gray-300 text-emerald-500"
+                      />
+                      <span className="text-xs text-gray-500">
+                        {param.defaultValue === "true" ? "True" : "False"}
+                      </span>
+                    </label>
+                  ) : param.type === "select" ? (
+                    <select
+                      value={param.defaultValue}
+                      onChange={(e) => updateParam(idx, { defaultValue: e.target.value })}
+                      className="input-field text-xs"
+                    >
+                      <option value="">None</option>
+                      {(param.options || []).filter(Boolean).map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={param.type === "number" ? "number" : "text"}
+                      value={param.defaultValue}
+                      onChange={(e) => updateParam(idx, { defaultValue: e.target.value })}
+                      className="input-field text-xs"
+                      placeholder="Default..."
+                    />
+                  )}
+                </div>
+              </div>
+
+              {param.type === "select" && (
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-0.5">
+                    Options (one per line)
+                  </label>
+                  <textarea
+                    value={(param.options || []).join("\n")}
+                    onChange={(e) =>
+                      updateParam(idx, { options: e.target.value.split("\n") })
+                    }
+                    rows={3}
+                    className="input-field text-xs font-mono"
+                    placeholder={"Option A\nOption B\nOption C"}
+                  />
+                </div>
+              )}
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={param.required}
+                  onChange={(e) => updateParam(idx, { required: e.target.checked })}
+                  className="rounded border-gray-300 text-emerald-500"
+                />
+                <span className="text-[10px] text-gray-500">Required</span>
+              </label>
+
+              {param.name && (
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded">
+                  {`{{${param.name}}}`}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
