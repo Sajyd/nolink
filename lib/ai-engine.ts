@@ -1,8 +1,9 @@
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { v4 as uuidv4 } from "uuid";
 import { getModelById, estimateCostFromModels, type AIModel } from "./models";
 
 function getOpenAI() {
@@ -204,6 +205,97 @@ function ensureUploadsDir(): string {
   const dir = path.join(process.cwd(), "public", "uploads");
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+// ── Persist media results to S3 ─────────────────────────────────
+// External URLs from providers like DALL-E, fal.ai etc. are temporary.
+// This downloads the generated media and re-uploads it to our S3 bucket
+// so the result can be served reliably from <img>/<video> elements.
+
+const MEDIA_CONTENT_TYPE_MAP: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+};
+
+const CONTENT_TYPE_EXT_MAP: Record<string, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/webp": ".webp",
+  "image/gif": ".gif",
+  "video/mp4": ".mp4",
+  "video/webm": ".webm",
+  "video/quicktime": ".mov",
+};
+
+function guessExtFromUrl(url: string): string {
+  try {
+    const pathname = new URL(url).pathname;
+    const match = pathname.match(/\.(png|jpe?g|gif|webp|mp4|webm|mov)$/i);
+    return match ? `.${match[1].toLowerCase().replace("jpeg", "jpg")}` : "";
+  } catch {
+    return "";
+  }
+}
+
+function isTemporaryMediaUrl(url: string): boolean {
+  if (!url.startsWith("http")) return false;
+  if (isS3Url(url)) return false;
+  if (url.startsWith("/uploads/")) return false;
+  return true;
+}
+
+async function persistMediaToS3(
+  mediaUrl: string,
+  mediaType: "image" | "video"
+): Promise<string | null> {
+  const bucket = process.env.S3_BUCKET;
+  const accessKey = process.env.AWS_ACCESS_KEY_ID;
+  const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
+  if (!bucket || !accessKey || !secretKey) return null;
+
+  if (!isTemporaryMediaUrl(mediaUrl)) return null;
+
+  try {
+    const response = await fetch(mediaUrl);
+    if (!response.ok) return null;
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const responseContentType = response.headers.get("content-type")?.split(";")[0]?.trim() || "";
+
+    let ext = CONTENT_TYPE_EXT_MAP[responseContentType] || guessExtFromUrl(mediaUrl);
+    if (!ext) {
+      ext = mediaType === "image" ? ".png" : ".mp4";
+    }
+
+    const contentType = responseContentType || MEDIA_CONTENT_TYPE_MAP[ext] || `${mediaType}/${ext.slice(1)}`;
+    const region = process.env.S3_REGION || "eu-west-1";
+    const key = `results/${uuidv4()}${ext}`;
+
+    const s3 = new S3Client({
+      region,
+      credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+    });
+
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      })
+    );
+
+    return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+  } catch (err) {
+    console.error("Failed to persist media to S3:", err);
+    return null;
+  }
 }
 
 const OPENAI_MODEL_MAP: Record<string, string> = {
@@ -1016,6 +1108,26 @@ export async function executeStep(
     }
   } catch (error) {
     stepOutput = { text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`, files: [] };
+  }
+
+  // Persist image/video results to S3 so they survive provider URL expiry
+  const shouldPersist =
+    (step.outputType === "IMAGE" || step.outputType === "VIDEO") &&
+    stepOutput.text &&
+    isTemporaryMediaUrl(stepOutput.text.trim());
+
+  if (shouldPersist) {
+    const mediaType = step.outputType === "IMAGE" ? "image" as const : "video" as const;
+    const originalUrl = stepOutput.text.trim();
+    const s3Url = await persistMediaToS3(originalUrl, mediaType);
+    if (s3Url) {
+      stepOutput = {
+        text: s3Url,
+        files: stepOutput.files.length > 0
+          ? stepOutput.files.map((f) => f.url === originalUrl ? { ...f, url: s3Url } : f)
+          : [{ url: s3Url, type: mediaType, name: `generated.${mediaType === "image" ? "png" : "mp4"}` }],
+      };
+    }
   }
 
   return {
