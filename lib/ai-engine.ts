@@ -291,7 +291,7 @@ async function persistMediaToS3(
       })
     );
 
-    return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+    return `/api/media/${key}`;
   } catch (err) {
     console.error("Failed to persist media to S3:", err);
     return null;

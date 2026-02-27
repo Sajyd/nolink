@@ -1607,7 +1607,8 @@ function isUrl(str: string): boolean {
   return (
     str.startsWith("http://") ||
     str.startsWith("https://") ||
-    str.startsWith("/uploads/")
+    str.startsWith("/uploads/") ||
+    str.startsWith("/api/media/")
   );
 }
 
