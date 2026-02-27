@@ -725,17 +725,20 @@ async function executeFalStep(
     resolvedParams.prompt = step.prompt.replace(/\{\{input\}\}/g, input.text);
   }
 
+  const modelParamKeys = new Set(model?.params?.map((p) => p.key) ?? []);
+  const acceptsParam = (k: string) => isCustom || modelParamKeys.has(k);
+
   const imageFiles = getFilesByType(input.files, "image");
   const audioFiles = getFilesByType(input.files, "audio");
   const videoFiles = getFilesByType(input.files, "video");
 
-  if (imageFiles.length > 0 && !resolvedParams.image_url) {
+  if (imageFiles.length > 0 && !resolvedParams.image_url && acceptsParam("image_url")) {
     resolvedParams.image_url = await resolveFileUrlForFal(imageFiles[0].url, imageFiles[0].mimeType);
   }
-  if (audioFiles.length > 0 && !resolvedParams.audio_url) {
+  if (audioFiles.length > 0 && !resolvedParams.audio_url && acceptsParam("audio_url")) {
     resolvedParams.audio_url = await resolveFileUrlForFal(audioFiles[0].url, audioFiles[0].mimeType);
   }
-  if (videoFiles.length > 0 && !resolvedParams.video_url) {
+  if (videoFiles.length > 0 && !resolvedParams.video_url && acceptsParam("video_url")) {
     resolvedParams.video_url = await resolveFileUrlForFal(videoFiles[0].url, videoFiles[0].mimeType);
   }
 
