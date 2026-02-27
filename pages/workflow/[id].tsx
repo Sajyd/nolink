@@ -1648,8 +1648,38 @@ function ResultDisplay({
     );
   }
 
+  // Check URL extension first to override outputType mismatches
+  const urlIsVideo = looksLikeVideo(trimmedOutput);
+  const urlIsAudio = looksLikeAudio(trimmedOutput);
+  const urlIsImage = looksLikeImage(trimmedOutput);
+
   if (
-    (outputType === "IMAGE" || looksLikeImage(trimmedOutput)) &&
+    (urlIsVideo || (outputType === "VIDEO" && !urlIsImage && !urlIsAudio)) &&
+    outputIsUrl
+  ) {
+    return (
+      <div className="space-y-2">
+        <video
+          src={trimmedOutput}
+          controls
+          className="rounded-lg max-h-[28rem] w-full bg-black"
+        >
+          Your browser does not support the video element.
+        </video>
+        <a
+          href={trimmedOutput}
+          download
+          className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600 transition-colors"
+        >
+          <Download className="w-3 h-3" />
+          Download video
+        </a>
+      </div>
+    );
+  }
+
+  if (
+    (urlIsImage || (outputType === "IMAGE" && !urlIsVideo && !urlIsAudio)) &&
     outputIsUrl
   ) {
     return (
@@ -1683,32 +1713,7 @@ function ResultDisplay({
   }
 
   if (
-    (outputType === "VIDEO" || looksLikeVideo(trimmedOutput)) &&
-    outputIsUrl
-  ) {
-    return (
-      <div className="space-y-2">
-        <video
-          src={trimmedOutput}
-          controls
-          className="rounded-lg max-h-[28rem] w-full bg-black"
-        >
-          Your browser does not support the video element.
-        </video>
-        <a
-          href={trimmedOutput}
-          download
-          className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600 transition-colors"
-        >
-          <Download className="w-3 h-3" />
-          Download video
-        </a>
-      </div>
-    );
-  }
-
-  if (
-    (outputType === "AUDIO" || looksLikeAudio(trimmedOutput)) &&
+    (urlIsAudio || (outputType === "AUDIO" && !urlIsVideo && !urlIsImage)) &&
     outputIsUrl
   ) {
     return (
