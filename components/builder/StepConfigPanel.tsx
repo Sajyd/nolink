@@ -20,6 +20,7 @@ import {
   type ModelCategory,
 } from "@/lib/models";
 import { useSession } from "next-auth/react";
+import { useRef } from "react";
 import {
   X, Sparkles, Settings2, Upload, Download, Plus, Trash2, Variable,
   Lock, Clock, Zap, Link2, Globe, Shield, AlertTriangle, SlidersHorizontal,
@@ -199,72 +200,11 @@ export default function StepConfigPanel() {
 
         {/* ── BASIC NODE CONFIG ──────────────────────────── */}
         {(nodeType === "basicNode" || nodeType === "stepNode") && (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                  Input Type
-                </label>
-                <select
-                  value={data.inputType}
-                  onChange={(e) => updateNodeData(selectedNodeId, { inputType: e.target.value })}
-                  className="input-field text-sm"
-                >
-                  {IO_TYPES.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                  Output Type
-                </label>
-                <select
-                  value={data.outputType}
-                  onChange={(e) => updateNodeData(selectedNodeId, { outputType: e.target.value, aiModel: "" })}
-                  className="input-field text-sm"
-                >
-                  {IO_TYPES.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                AI Model
-              </label>
-              <select
-                value={data.aiModel}
-                onChange={(e) => updateNodeData(selectedNodeId, { aiModel: e.target.value })}
-                className="input-field text-sm"
-              >
-                <option value="">Select model...</option>
-                {getBasicModels().map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} — {m.category} ({m.costPerUse} NL)
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                Prompt / Template
-              </label>
-              <textarea
-                value={data.prompt}
-                onChange={(e) => updateNodeData(selectedNodeId, { prompt: e.target.value })}
-                rows={4}
-                className="input-field text-sm font-mono"
-                placeholder="Use {{input}} for the step input..."
-              />
-            </div>
-
-            {/* Model-specific params */}
-            {data.aiModel && <ModelParamsEditor nodeId={selectedNodeId} data={data} inputBindOptions={inputBindOptions} />}
-          </>
+          <BasicNodeConfig
+            nodeId={selectedNodeId}
+            data={data}
+            inputBindOptions={inputBindOptions}
+          />
         )}
 
         {/* ── FAL.AI NODE CONFIG ─────────────────────────── */}
@@ -289,6 +229,142 @@ export default function StepConfigPanel() {
         <CustomParamsEditor nodeId={selectedNodeId} data={data} allNodes={nodes} />
       </div>
     </div>
+  );
+}
+
+function BasicNodeConfig({
+  nodeId,
+  data,
+  inputBindOptions,
+}: {
+  nodeId: string;
+  data: any;
+  inputBindOptions: { value: string; label: string }[];
+}) {
+  const { updateNodeData } = useWorkflowStore();
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+
+  const rawOptions = [
+    { value: "{{input}}", label: "Previous step output" },
+    ...inputBindOptions.map((opt) => ({
+      value: opt.value.startsWith("{{") ? opt.value : `{{${opt.value}}}`,
+      label: opt.label,
+    })),
+  ];
+  const seen = new Set<string>();
+  const allInsertOptions = rawOptions.filter((o) => {
+    if (seen.has(o.value)) return false;
+    seen.add(o.value);
+    return true;
+  });
+
+  const insertAtCursor = (placeholder: string) => {
+    const ta = promptRef.current;
+    if (!ta) {
+      updateNodeData(nodeId, { prompt: (data.prompt || "") + placeholder });
+      return;
+    }
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const before = (data.prompt || "").slice(0, start);
+    const after = (data.prompt || "").slice(end);
+    const next = before + placeholder + after;
+    updateNodeData(nodeId, { prompt: next });
+    requestAnimationFrame(() => {
+      ta.focus();
+      const pos = start + placeholder.length;
+      ta.setSelectionRange(pos, pos);
+    });
+  };
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+            Input Type
+          </label>
+          <select
+            value={data.inputType}
+            onChange={(e) => updateNodeData(nodeId, { inputType: e.target.value })}
+            className="input-field text-sm"
+          >
+            {IO_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+            Output Type
+          </label>
+          <select
+            value={data.outputType}
+            onChange={(e) => updateNodeData(nodeId, { outputType: e.target.value, aiModel: "" })}
+            className="input-field text-sm"
+          >
+            {IO_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+          AI Model
+        </label>
+        <select
+          value={data.aiModel}
+          onChange={(e) => updateNodeData(nodeId, { aiModel: e.target.value })}
+          className="input-field text-sm"
+        >
+          <option value="">Select model...</option>
+          {getBasicModels().map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name} — {m.category} ({m.costPerUse} NL)
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+          Prompt / Template
+        </label>
+        <textarea
+          ref={promptRef}
+          value={data.prompt}
+          onChange={(e) => updateNodeData(nodeId, { prompt: e.target.value })}
+          rows={4}
+          className="input-field text-sm font-mono"
+          placeholder="Write your prompt and click inputs below to insert them..."
+        />
+
+        {allInsertOptions.length > 0 && (
+          <div className="mt-2 space-y-1.5">
+            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
+              Insert input
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {allInsertOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => insertAtCursor(opt.value)}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-mono font-medium bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 border border-brand-200 dark:border-brand-800 hover:bg-brand-100 dark:hover:bg-brand-900/40 hover:border-brand-300 dark:hover:border-brand-700 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-2.5 h-2.5" />
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {data.aiModel && <ModelParamsEditor nodeId={nodeId} data={data} inputBindOptions={inputBindOptions} />}
+    </>
   );
 }
 

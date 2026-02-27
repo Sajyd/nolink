@@ -1,12 +1,14 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState, useRef } from "react";
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   MiniMap,
   addEdge,
   applyNodeChanges,
   applyEdgeChanges,
+  useReactFlow,
   type OnConnect,
   type OnNodesChange,
   type OnEdgesChange,
@@ -22,15 +24,21 @@ import OutputNode from "./OutputNode";
 import FalAiNode from "./FalAiNode";
 import CustomApiNode from "./CustomApiNode";
 import DeletableEdge from "./DeletableEdge";
+import CanvasContextMenu, { type ContextMenuState } from "./CanvasContextMenu";
 import { useWorkflowStore, type StepNodeData } from "@/lib/workflow-store";
 import { playNodeClick, playConnect } from "@/lib/sounds";
 
-export default function WorkflowCanvas() {
+function WorkflowCanvasInner() {
   const nodes = useWorkflowStore((s) => s.nodes);
   const edges = useWorkflowStore((s) => s.edges);
   const setNodes = useWorkflowStore((s) => s.setNodes);
   const setEdges = useWorkflowStore((s) => s.setEdges);
   const setSelectedNodeId = useWorkflowStore((s) => s.setSelectedNodeId);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition } = useReactFlow();
+
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const nodeTypes: NodeTypes = useMemo(
     () => ({
@@ -81,7 +89,44 @@ export default function WorkflowCanvas() {
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
+    setContextMenu(null);
   }, [setSelectedNodeId]);
+
+  const onPaneContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      setContextMenu({
+        kind: "pane",
+        position: { x: event.clientX, y: event.clientY },
+        flowPosition: flowPos,
+      });
+    },
+    [screenToFlowPosition]
+  );
+
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.preventDefault();
+      setContextMenu({
+        kind: "node",
+        position: { x: event.clientX, y: event.clientY },
+        nodeId: node.id,
+      });
+    },
+    []
+  );
+
+  const toggleFullscreen = useCallback(() => {
+    if (!wrapperRef.current) return;
+    if (!document.fullscreenElement) {
+      wrapperRef.current.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  }, []);
 
   const nodeColor = (node: Node) => {
     switch (node.type) {
@@ -94,7 +139,7 @@ export default function WorkflowCanvas() {
   };
 
   return (
-    <div className="flex-1 h-full">
+    <div ref={wrapperRef} className="flex-1 h-full relative">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -103,6 +148,8 @@ export default function WorkflowCanvas() {
         onConnect={onConnect}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        onPaneContextMenu={onPaneContextMenu}
+        onNodeContextMenu={onNodeContextMenu}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
@@ -120,6 +167,20 @@ export default function WorkflowCanvas() {
           maskColor="rgba(0,0,0,0.1)"
         />
       </ReactFlow>
+      <CanvasContextMenu
+        menu={contextMenu}
+        onClose={() => setContextMenu(null)}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+      />
     </div>
+  );
+}
+
+export default function WorkflowCanvas() {
+  return (
+    <ReactFlowProvider>
+      <WorkflowCanvasInner />
+    </ReactFlowProvider>
   );
 }
