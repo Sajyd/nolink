@@ -1,6 +1,5 @@
 // Monetization
 export const NL_TO_USD_CENTS = 2; // 1 NL = $0.02
-export const CREATOR_COMMISSION_RATE = 0.7; // 70% to creator
 export const MINIMUM_PAYOUT_NL = 100; // minimum 100 NL ($4.00) to request payout
 export const PAYOUT_ELIGIBLE_TIERS = ["PRO", "ENTERPRISE"] as const;
 

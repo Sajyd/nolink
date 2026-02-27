@@ -243,18 +243,26 @@ export default function BuilderToolbar({ onSave, saving }: BuilderToolbarProps) 
               <div className="relative">
                 <input
                   type="number"
-                  min={0}
-                  value={store.workflowPrice}
-                  onChange={(e) => store.setWorkflowPrice(parseInt(e.target.value) || 0)}
+                  min={estimatedCost || 1}
+                  value={Math.max(store.workflowPrice, estimatedCost || 1)}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    store.setWorkflowPrice(Math.max(val, estimatedCost || 1));
+                  }}
                   className="input-field text-sm pl-8"
                 />
                 <Zap className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-brand-500" />
               </div>
-              {estimatedCost > 0 && (
-                <p className="mt-1 text-[10px] text-gray-400">
-                  Estimated AI cost: {estimatedCost} NL · Suggested: {Math.ceil(estimatedCost * 1.5)} NL
+              <div className="mt-1.5 space-y-0.5">
+                <p className="text-[10px] text-gray-400">
+                  Min. price: {estimatedCost || 1} NL (AI model costs)
                 </p>
-              )}
+                {Math.max(store.workflowPrice, estimatedCost || 1) > (estimatedCost || 1) && (
+                  <p className="text-[10px] text-emerald-500">
+                    You earn: {Math.max(store.workflowPrice, estimatedCost || 1) - (estimatedCost || 1)} NL per run
+                  </p>
+                )}
+              </div>
             </div>
 
             <label className="flex items-center gap-2 cursor-pointer">

@@ -1,6 +1,5 @@
 import prisma from "./prisma";
 import {
-  CREATOR_COMMISSION_RATE,
   NL_TO_USD_CENTS,
   MINIMUM_PAYOUT_NL,
   PAYOUT_ELIGIBLE_TIERS,
@@ -36,7 +35,8 @@ export async function checkBalance(userId: string, cost: number): Promise<boolea
 export async function deductCredits(
   userId: string,
   workflowId: string,
-  cost: number
+  cost: number,
+  baseCost: number = 0
 ) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || totalBalance(user.purchasedBalance, user.earnedBalance) < cost) {
@@ -53,7 +53,7 @@ export async function deductCredits(
   });
   if (!workflow) throw new Error("Workflow not found");
 
-  const creatorEarnings = Math.floor(cost * CREATOR_COMMISSION_RATE);
+  const creatorEarnings = Math.max(0, cost - baseCost);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);

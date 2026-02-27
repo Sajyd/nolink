@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
+import { estimateWorkflowCost, type StepDefinition } from "@/lib/ai-engine";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
@@ -72,6 +73,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         };
       });
 
+      const minCost = estimateWorkflowCost(steps as StepDefinition[]);
+      const enforcedPrice = priceInNolinks !== undefined
+        ? Math.max(priceInNolinks, minCost)
+        : undefined;
+
       const updated = await prisma.$transaction(async (tx) => {
         await tx.step.deleteMany({ where: { workflowId: id as string } });
         return tx.workflow.update({
@@ -80,7 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             ...(name && { name }),
             ...(description !== undefined && { description }),
             ...(category && { category }),
-            ...(priceInNolinks !== undefined && { priceInNolinks }),
+            ...(enforcedPrice !== undefined && { priceInNolinks: enforcedPrice }),
             ...(isPublic !== undefined && { isPublic }),
             ...(exampleInput !== undefined && { exampleInput }),
             ...(exampleOutput !== undefined && { exampleOutput }),

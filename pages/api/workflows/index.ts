@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
 import { WORKFLOW_LIMITS } from "@/lib/constants";
+import { estimateWorkflowCost, type StepDefinition } from "@/lib/ai-engine";
 
 function slugify(text: string): string {
   return (
@@ -82,7 +83,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         name: workflowName,
         description: description || "",
         category: category || "OTHER",
-        priceInNolinks: priceInNolinks || 0,
+        priceInNolinks: Math.max(priceInNolinks || 0, estimateWorkflowCost(steps as StepDefinition[])),
         isPublic: isPublic ?? true,
         slug: slugify(workflowName),
         creatorId: session.user.id,

@@ -46,14 +46,10 @@ export default function WorkflowCard({
           >
             {category.replace("_", " ")}
           </span>
-          {priceInNolinks === 0 ? (
-            <span className="badge-green">Free</span>
-          ) : (
-            <span className="flex items-center gap-1 text-sm font-semibold text-brand-600 dark:text-brand-400">
-              <Zap className="w-3.5 h-3.5" />
-              {priceInNolinks} NL
-            </span>
-          )}
+          <span className="flex items-center gap-1 text-sm font-semibold text-brand-600 dark:text-brand-400">
+            <Zap className="w-3.5 h-3.5" />
+            {priceInNolinks} NL
+          </span>
         </div>
 
         <div className="flex-1">

@@ -40,10 +40,8 @@ export default async function handler(
 
   if (!workflow) return res.status(404).json({ error: "Workflow not found" });
 
-  const cost =
-    workflow.priceInNolinks > 0
-      ? workflow.priceInNolinks
-      : estimateWorkflowCost(workflow.steps as unknown as StepDefinition[]);
+  const baseCost = estimateWorkflowCost(workflow.steps as unknown as StepDefinition[]);
+  const cost = Math.max(workflow.priceInNolinks, baseCost);
 
   const canAfford = await checkBalance(session.user.id, cost);
   if (!canAfford) {
@@ -241,7 +239,7 @@ async function runWorkflowInBackground(
 
   try {
     if (cost > 0 && !failed) {
-      await deductCredits(userId, workflow.id, cost);
+      await deductCredits(userId, workflow.id, cost, baseCost);
     }
 
     if (!failed) {

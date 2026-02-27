@@ -45,9 +45,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const cost = workflow.priceInNolinks > 0
-    ? workflow.priceInNolinks
-    : estimateWorkflowCost(workflow.steps as unknown as StepDefinition[]);
+  const baseCost = estimateWorkflowCost(workflow.steps as unknown as StepDefinition[]);
+  const cost = Math.max(workflow.priceInNolinks, baseCost);
 
   if (!isAnonymous) {
     const canAfford = await checkBalance(session.user.id, cost);
@@ -273,7 +272,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!aborted) {
     try {
       if (!isAnonymous && cost > 0 && !failed) {
-        await deductCredits(session.user.id, workflow.id, cost);
+        await deductCredits(session.user.id, workflow.id, cost, baseCost);
       }
 
       if (isAnonymous && !failed) {
