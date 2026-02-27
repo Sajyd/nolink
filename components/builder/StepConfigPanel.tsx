@@ -41,7 +41,7 @@ function groupFalVideoModels() {
 }
 
 export default function StepConfigPanel() {
-  const { nodes, selectedNodeId, updateNodeData, setSelectedNodeId } =
+  const { nodes, edges, selectedNodeId, updateNodeData, setSelectedNodeId } =
     useWorkflowStore();
 
   const node = nodes.find((n) => n.id === selectedNodeId);
@@ -50,23 +50,43 @@ export default function StepConfigPanel() {
   const data = node.data;
   const nodeType = node.type || "basicNode";
 
-  const inputNodes = nodes.filter((n) => n.type === "inputNode");
+  // Build bind options from nodes actually connected as parents via edges
+  const parentNodeIds = edges
+    .filter((e) => e.target === selectedNodeId)
+    .map((e) => e.source);
+  const parentNodes = parentNodeIds
+    .map((id) => nodes.find((n) => n.id === id))
+    .filter(Boolean) as typeof nodes;
+
+  const allInputNodes = nodes.filter((n) => n.type === "inputNode");
+
   const inputBindOptions = [
-    ...inputNodes.flatMap((n, idx) => {
-      const accepts = n.data.acceptTypes || ["text"];
-      return accepts.map((type) => ({
-        value: `input_${idx + 1}_${type}`,
-        label: `Input ${idx + 1}: ${type}`,
-      }));
+    // Options from connected parent nodes
+    ...parentNodes.flatMap((pn) => {
+      if (pn.type === "inputNode") {
+        const idx = allInputNodes.findIndex((n) => n.id === pn.id);
+        const accepts = pn.data.acceptTypes || ["text"];
+        return accepts.map((type) => ({
+          value: `input_${idx + 1}_${type}`,
+          label: `${pn.data.label || `Input ${idx + 1}`}: ${type}`,
+        }));
+      }
+      return [{
+        value: "{{input}}",
+        label: pn.data.label || "Previous node",
+      }];
     }),
-    ...inputNodes.flatMap((n) =>
-      (n.data.inputParameters || [])
-        .filter((p) => p.name)
-        .map((p) => ({
-          value: p.name,
-          label: `Param: ${p.label || p.name}`,
-        }))
-    ),
+    // Input parameters from connected input nodes
+    ...parentNodes
+      .filter((pn) => pn.type === "inputNode")
+      .flatMap((pn) =>
+        (pn.data.inputParameters || [])
+          .filter((p) => p.name)
+          .map((p) => ({
+            value: p.name,
+            label: `Param: ${p.label || p.name}`,
+          }))
+      ),
   ];
 
   return (
@@ -330,9 +350,8 @@ function ModelParamsEditor({
                   className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-transparent"
                 >
                   <option value="manual">Manual</option>
-                  <option value="{{input}}">Previous step</option>
                   {inputBindOptions.map((opt) => (
-                    <option key={opt.value} value={`{{${opt.value}}}`}>
+                    <option key={opt.value} value={opt.value.startsWith("{{") ? opt.value : `{{${opt.value}}}`}>
                       {opt.label}
                     </option>
                   ))}
@@ -1121,11 +1140,8 @@ function CustomApiNodeConfig({
         </div>
         {apiParams.length === 0 ? (
           <p className="text-[10px] text-gray-400">
-            Add key-value parameters. Use{" "}
-            <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">
-              {"{{input}}"}
-            </code>{" "}
-            to bind to the previous step&apos;s output.
+            Add key-value parameters. Use the binding dropdown to link values
+            to connected nodes.
           </p>
         ) : (
           <div className="space-y-2">
@@ -1167,9 +1183,8 @@ function CustomApiNodeConfig({
                     className="text-[10px] px-1.5 py-1 rounded border border-gray-200 dark:border-gray-700 bg-transparent w-24 shrink-0"
                   >
                     <option value="_manual_">Manual</option>
-                    <option value="{{input}}">Prev. step</option>
                     {inputBindOptions.map((opt) => (
-                      <option key={opt.value} value={`{{${opt.value}}}`}>
+                      <option key={opt.value} value={opt.value.startsWith("{{") ? opt.value : `{{${opt.value}}}`}>
                         {opt.label}
                       </option>
                     ))}
@@ -1323,11 +1338,7 @@ function CustomFalModelEditor({
         {customFalParams.length === 0 ? (
           <p className="text-[10px] text-gray-400">
             No parameters yet. Add key-value pairs to send to the fal.ai API.
-            Use{" "}
-            <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono">
-              {"{{input}}"}
-            </code>{" "}
-            to bind to the previous step&apos;s output.
+            Use the binding dropdown to link values to connected nodes.
           </p>
         ) : (
           <div className="space-y-2">
@@ -1372,9 +1383,8 @@ function CustomFalModelEditor({
                     className="text-[10px] px-1.5 py-1 rounded border border-gray-200 dark:border-gray-700 bg-transparent w-24 shrink-0"
                   >
                     <option value="_manual_">Manual</option>
-                    <option value="{{input}}">Prev. step</option>
                     {inputBindOptions.map((opt) => (
-                      <option key={opt.value} value={`{{${opt.value}}}`}>
+                      <option key={opt.value} value={opt.value.startsWith("{{") ? opt.value : `{{${opt.value}}}`}>
                         {opt.label}
                       </option>
                     ))}
