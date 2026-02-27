@@ -291,7 +291,8 @@ async function persistMediaToS3(
       })
     );
 
-    return `/api/media/${key}`;
+    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    return `${baseUrl}/api/media/${key}`;
   } catch (err) {
     console.error("Failed to persist media to S3:", err);
     return null;
