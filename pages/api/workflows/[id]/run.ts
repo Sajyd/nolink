@@ -27,9 +27,12 @@ export default async function handler(
   }
 
   const { id } = req.query;
-  const { input, files, params: userParams } = req.body;
+  const { input, files, inputs, params: userParams } = req.body;
 
-  if (!input && (!files || files.length === 0)) {
+  const hasLegacyInput = input || (files && files.length > 0);
+  const hasPerStepInputs = inputs && typeof inputs === "object" && Object.keys(inputs).length > 0;
+
+  if (!hasLegacyInput && !hasPerStepInputs) {
     return res.status(400).json({ error: "Input is required" });
   }
 
@@ -86,7 +89,8 @@ export default async function handler(
     input || "",
     session.user.id,
     cost,
-    userParams || {}
+    userParams || {},
+    inputs || {}
   ).catch(() => {});
 }
 
@@ -97,7 +101,8 @@ async function runWorkflowInBackground(
   input: string,
   userId: string,
   cost: number,
-  userParams: Record<string, unknown>
+  userParams: Record<string, unknown>,
+  rawInputs: Record<string, { text?: string; files?: any[] }>
 ) {
   const stepDefs: StepDefinition[] = workflow.steps.map((s: any) => {
     const config = (s.config as Record<string, unknown>) || {};
@@ -134,6 +139,24 @@ async function runWorkflowInBackground(
   });
 
   const sortedSteps = [...stepDefs].sort((a, b) => a.order - b.order);
+
+  // Build per-step input map
+  const hasPerStepInputs = rawInputs && typeof rawInputs === "object" && Object.keys(rawInputs).length > 0;
+  const perStepInputMap: Record<string, { text: string; files: FileInput[] }> = {};
+  if (hasPerStepInputs) {
+    for (const [stepId, data] of Object.entries(rawInputs)) {
+      perStepInputMap[stepId] = {
+        text: data.text || "",
+        files: (data.files || []).map((f: any) => ({
+          url: f.url,
+          type: f.type,
+          name: f.name,
+          mimeType: f.mimeType,
+        })),
+      };
+    }
+  }
+
   let currentInput: { text: string; files: FileInput[] } = {
     text: input,
     files: fileInputs,
@@ -142,17 +165,17 @@ async function runWorkflowInBackground(
   let failed = false;
   const customParamMap: Record<string, string> = {};
 
-  // Build input binding map from INPUT steps
   const inputSteps = sortedSteps.filter((s) => s.stepType === "INPUT");
   inputSteps.forEach((step, idx) => {
     const n = idx + 1;
     const accepts = step.acceptTypes || ["text"];
+    const stepData = perStepInputMap[step.id] || { text: input || "", files: fileInputs };
     for (const type of accepts) {
       const key = `input_${n}_${type}`;
       if (type === "text") {
-        customParamMap[key] = input || "";
+        customParamMap[key] = stepData.text;
       } else {
-        const file = fileInputs.find((f) => f.type === type);
+        const file = stepData.files.find((f) => f.type === type);
         customParamMap[key] = file?.url || "";
       }
     }
@@ -173,6 +196,10 @@ async function runWorkflowInBackground(
     );
 
   for (const step of sortedSteps) {
+    if (step.stepType === "INPUT" && perStepInputMap[step.id]) {
+      currentInput = perStepInputMap[step.id];
+    }
+
     if (step.customParams) {
       for (const cp of step.customParams) {
         if (cp.name) customParamMap[cp.name] = cp.value;

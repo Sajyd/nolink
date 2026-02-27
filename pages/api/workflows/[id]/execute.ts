@@ -29,9 +29,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const { id } = req.query;
-  const { input, files } = req.body;
+  const { input, files, inputs } = req.body;
 
-  if (!input && (!files || files.length === 0)) {
+  const hasLegacyInput = input || (files && files.length > 0);
+  const hasPerStepInputs = inputs && typeof inputs === "object" && Object.keys(inputs).length > 0;
+
+  if (!hasLegacyInput && !hasPerStepInputs) {
     return res.status(400).json({ error: "Input is required" });
   }
 
@@ -142,23 +145,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })),
   });
 
+  // Build per-step input map: prefer `inputs` object, fall back to legacy `input`/`files`
+  const perStepInputMap: Record<string, { text: string; files: FileInput[] }> = {};
+  if (hasPerStepInputs) {
+    for (const [stepId, data] of Object.entries(inputs as Record<string, { text?: string; files?: any[] }>)) {
+      perStepInputMap[stepId] = {
+        text: data.text || "",
+        files: (data.files || []).map((f: any) => ({
+          url: f.url,
+          type: f.type,
+          name: f.name,
+          mimeType: f.mimeType,
+        })),
+      };
+    }
+  }
+
   let currentInput: { text: string; files: FileInput[] } = { text: input || "", files: fileInputs };
   const allResults: StepResult[] = [];
   let visibleIndex = 0;
   let failed = false;
   const customParamMap: Record<string, string> = {};
 
-  // Build input binding map from INPUT steps so {{input_1_text}}, {{input_1_image}} etc. resolve
   const inputSteps = sortedSteps.filter((s) => s.stepType === "INPUT");
   inputSteps.forEach((step, idx) => {
     const n = idx + 1;
     const accepts = step.acceptTypes || ["text"];
+    const stepData = perStepInputMap[step.id] || { text: input || "", files: fileInputs };
     for (const type of accepts) {
       const key = `input_${n}_${type}`;
       if (type === "text") {
-        customParamMap[key] = input || "";
+        customParamMap[key] = stepData.text;
       } else {
-        const file = fileInputs.find((f) => f.type === type);
+        const file = stepData.files.find((f) => f.type === type);
         customParamMap[key] = file?.url || "";
       }
     }
@@ -177,6 +196,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   for (const step of sortedSteps) {
     if (aborted) break;
+
+    // For INPUT steps with per-step data, inject the specific user input
+    if (step.stepType === "INPUT" && perStepInputMap[step.id]) {
+      currentInput = perStepInputMap[step.id];
+    }
 
     if (step.customParams) {
       for (const cp of step.customParams) {

@@ -143,7 +143,6 @@ export default function WorkflowPage() {
   const { data: session, update: updateSession } = useSession();
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [loading, setLoading] = useState(true);
-  const [input, setInput] = useState("");
   const [executing, setExecuting] = useState(false);
   const [liveSteps, setLiveSteps] = useState<LiveStep[]>([]);
   const [creditsUsed, setCreditsUsed] = useState(0);
@@ -156,11 +155,11 @@ export default function WorkflowPage() {
 
   const [showApiModal, setShowApiModal] = useState(false);
 
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
+  const [stepInputs, setStepInputs] = useState<Record<string, { text: string; files: UploadedFile[] }>>({});
+  const [uploadingStep, setUploadingStep] = useState<string | null>(null);
+  const [dragOverStep, setDragOverStep] = useState<string | null>(null);
   const [customParams, setCustomParams] = useState<Record<string, string | number | boolean>>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const resultsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -185,17 +184,23 @@ export default function WorkflowPage() {
     setLoading(false);
   };
 
-  const inputStep = workflow?.steps.find((s) => s.stepType === "INPUT");
-  const acceptTypes = inputStep?.acceptTypes || [];
-  const acceptsFiles = acceptTypes.some((t) => t !== "text");
-  const acceptsText = acceptTypes.length === 0 || acceptTypes.includes("text");
-  const fileAcceptTypes = acceptTypes.filter((t) => t !== "text");
+  const inputSteps = workflow?.steps.filter((s) => s.stepType === "INPUT") || [];
 
-  const inputParameters: InputParameter[] = workflow?.steps
-    .filter((s) => s.stepType === "INPUT")
-    .flatMap((s) => (s.config?.inputParameters || []).filter((p) => p.name)) || [];
+  const inputParameters: InputParameter[] = inputSteps
+    .flatMap((s) => (s.config?.inputParameters || []).filter((p: InputParameter) => p.name)) || [];
 
-  // Initialize default values for custom params when workflow loads
+  useEffect(() => {
+    if (!workflow) return;
+    const steps = workflow.steps.filter((s) => s.stepType === "INPUT");
+    setStepInputs((prev) => {
+      const next = { ...prev };
+      for (const s of steps) {
+        if (!next[s.id]) next[s.id] = { text: "", files: [] };
+      }
+      return next;
+    });
+  }, [workflow]);
+
   useEffect(() => {
     if (inputParameters.length > 0 && Object.keys(customParams).length === 0) {
       const defaults: Record<string, string | number | boolean> = {};
@@ -212,22 +217,24 @@ export default function WorkflowPage() {
     }
   }, [workflow]);
 
-  const acceptMimeString = fileAcceptTypes
-    .map((t) => ACCEPT_MIME_MAP[t])
-    .filter(Boolean)
-    .join(",");
+  const getStepInput = (stepId: string) => stepInputs[stepId] || { text: "", files: [] };
 
-  const uploadFiles = useCallback(
-    async (files: FileList | File[]) => {
+  const setStepText = (stepId: string, text: string) => {
+    setStepInputs((prev) => ({ ...prev, [stepId]: { ...prev[stepId], text, files: prev[stepId]?.files || [] } }));
+  };
+
+  const uploadFilesForStep = useCallback(
+    async (stepId: string, files: FileList | File[]) => {
       const fileArray = Array.from(files);
       if (fileArray.length === 0) return;
 
-      if (uploadedFiles.length + fileArray.length > 5) {
+      const existing = stepInputs[stepId]?.files || [];
+      if (existing.length + fileArray.length > 5) {
         toast.error("Maximum 5 files allowed");
         return;
       }
 
-      setUploading(true);
+      setUploadingStep(stepId);
       try {
         const fileMeta = fileArray.map((f) => ({
           name: f.name,
@@ -272,40 +279,46 @@ export default function WorkflowPage() {
           })
         );
 
-        setUploadedFiles((prev) => [...prev, ...newFiles]);
+        setStepInputs((prev) => ({
+          ...prev,
+          [stepId]: {
+            text: prev[stepId]?.text || "",
+            files: [...(prev[stepId]?.files || []), ...newFiles],
+          },
+        }));
         toast.success(
           `${newFiles.length} file${newFiles.length > 1 ? "s" : ""} uploaded`
         );
       } catch {
         toast.error("Upload failed");
       } finally {
-        setUploading(false);
+        setUploadingStep(null);
       }
     },
-    [uploadedFiles.length]
+    [stepInputs]
   );
 
-  const removeFile = (index: number) => {
-    setUploadedFiles((prev) => {
-      const removed = prev[index];
+  const removeFileFromStep = (stepId: string, index: number) => {
+    setStepInputs((prev) => {
+      const existing = prev[stepId] || { text: "", files: [] };
+      const removed = existing.files[index];
       if (removed?.preview) URL.revokeObjectURL(removed.preview);
-      return prev.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        [stepId]: {
+          ...existing,
+          files: existing.files.filter((_, i) => i !== index),
+        },
+      };
     });
   };
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragOver(false);
-      if (e.dataTransfer.files.length > 0) {
-        uploadFiles(e.dataTransfer.files);
-      }
-    },
-    [uploadFiles]
-  );
-
   const handleExecute = async () => {
-    if (!input.trim() && uploadedFiles.length === 0 && inputParameters.length === 0) {
+    const hasAnyInput = inputSteps.some((s) => {
+      const si = getStepInput(s.id);
+      return si.text.trim().length > 0 || si.files.length > 0;
+    });
+    if (!hasAnyInput && inputParameters.length === 0) {
       toast.error("Please provide input");
       return;
     }
@@ -330,18 +343,36 @@ export default function WorkflowPage() {
     setIsTrialRun(false);
     setTrialExpired(false);
 
+    const inputsPayload: Record<string, { text: string; files: { url: string; type: string; name: string; mimeType: string }[] }> = {};
+    for (const s of inputSteps) {
+      const si = getStepInput(s.id);
+      inputsPayload[s.id] = {
+        text: si.text.trim(),
+        files: si.files.map((f) => ({
+          url: f.url,
+          type: f.type,
+          name: f.name,
+          mimeType: f.mimeType,
+        })),
+      };
+    }
+
+    // Backward-compatible: also send legacy `input` and `files` from first input step
+    const firstInput = inputSteps.length > 0 ? getStepInput(inputSteps[0].id) : { text: "", files: [] as UploadedFile[] };
+
     try {
       const res = await fetch(`/api/workflows/${id}/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          input: input.trim(),
-          files: uploadedFiles.map((f) => ({
+          input: firstInput.text.trim(),
+          files: firstInput.files.map((f) => ({
             url: f.url,
             type: f.type,
             name: f.name,
             mimeType: f.mimeType,
           })),
+          inputs: inputsPayload,
           params: Object.keys(customParams).length > 0 ? customParams : undefined,
         }),
       });
@@ -508,8 +539,13 @@ export default function WorkflowPage() {
       return val !== undefined && val !== "";
     });
 
+  const hasAnyStepInput = inputSteps.some((s) => {
+    const si = getStepInput(s.id);
+    return si.text.trim().length > 0 || si.files.length > 0;
+  });
+
   const canExecute =
-    !executing && (input.trim().length > 0 || uploadedFiles.length > 0 || hasCustomParamValues);
+    !executing && (hasAnyStepInput || hasCustomParamValues);
 
   const completedCount = liveSteps.filter((s) => s.status === "completed").length;
   const totalCount = liveSteps.length;
@@ -572,10 +608,10 @@ export default function WorkflowPage() {
               </button>
             </div>
 
-            {acceptsFiles && (
+            {inputSteps.length === 1 && inputSteps[0].acceptTypes?.some((t) => t !== "text") && (
               <div className="flex items-center gap-2 mt-3">
                 <span className="text-xs text-gray-400">Accepts:</span>
-                {fileAcceptTypes.map((t) => {
+                {(inputSteps[0].acceptTypes || []).filter((t) => t !== "text").map((t) => {
                   const Icon = TYPE_ICONS[t] || FileText;
                   return (
                     <span
@@ -587,6 +623,11 @@ export default function WorkflowPage() {
                     </span>
                   );
                 })}
+              </div>
+            )}
+            {inputSteps.length > 1 && (
+              <div className="flex items-center gap-2 mt-3">
+                <span className="text-xs text-gray-400">{inputSteps.length} inputs required</span>
               </div>
             )}
           </div>
@@ -730,216 +771,279 @@ export default function WorkflowPage() {
         <div className="card p-6 mb-6">
           <h2 className="font-semibold mb-3">Run this workflow</h2>
 
-          {/* File Upload Zone */}
-          {acceptsFiles && (
-            <div className="mb-4">
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`relative border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
-                  dragOver
-                    ? "border-brand-500 bg-brand-50/50 dark:bg-brand-900/20"
-                    : "border-gray-200 dark:border-gray-700 hover:border-brand-300 dark:hover:border-brand-700 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                }`}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept={acceptMimeString}
-                  onChange={(e) => {
-                    if (e.target.files) uploadFiles(e.target.files);
-                    e.target.value = "";
-                  }}
-                  className="hidden"
-                  disabled={executing || uploading}
-                />
+          <div className={`space-y-4 ${inputSteps.length > 1 ? "" : ""}`}>
+            {inputSteps.map((step, stepIdx) => {
+              const acceptTypes = step.acceptTypes || [];
+              const acceptsFiles = acceptTypes.some((t) => t !== "text");
+              const acceptsText = acceptTypes.length === 0 || acceptTypes.includes("text");
+              const fileAcceptTypes = acceptTypes.filter((t) => t !== "text");
+              const acceptMimeString = fileAcceptTypes
+                .map((t) => ACCEPT_MIME_MAP[t])
+                .filter(Boolean)
+                .join(",");
 
-                {uploading ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
-                    <p className="text-sm text-gray-500">Uploading...</p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-12 h-12 rounded-full bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center">
-                      <Upload className="w-5 h-5 text-brand-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Drop files here or click to browse
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Accepts{" "}
-                        {fileAcceptTypes
-                          .map((t) => TYPE_LABELS[t] || t)
-                          .join(", ")}{" "}
-                        — max 50MB per file, up to 5 files
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+              const si = getStepInput(step.id);
+              const isUploading = uploadingStep === step.id;
+              const isDragOver = dragOverStep === step.id;
 
-              {uploadedFiles.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  {uploadedFiles.map((file, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700"
-                    >
-                      {file.type === "image" && file.preview ? (
-                        <img
-                          src={file.preview}
-                          alt={file.name}
-                          className="w-12 h-12 rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div
-                          className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                            file.type === "video"
-                              ? "bg-purple-50 dark:bg-purple-900/20"
-                              : file.type === "audio"
-                                ? "bg-amber-50 dark:bg-amber-900/20"
-                                : "bg-blue-50 dark:bg-blue-900/20"
-                          }`}
-                        >
-                          {file.type === "video" && <Video className="w-5 h-5 text-purple-500" />}
-                          {file.type === "audio" && <Mic className="w-5 h-5 text-amber-500" />}
-                          {file.type === "document" && <FileText className="w-5 h-5 text-blue-500" />}
-                          {!["video", "audio", "document"].includes(file.type) && (
-                            <File className="w-5 h-5 text-gray-400" />
-                          )}
+              const stepParams: InputParameter[] = (step.config?.inputParameters || []).filter(
+                (p: InputParameter) => p.name
+              );
+
+              return (
+                <div
+                  key={step.id}
+                  className={`${inputSteps.length > 1 ? "rounded-xl border border-gray-200 dark:border-gray-700 p-4" : ""}`}
+                >
+                  {inputSteps.length > 1 && (
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-5 h-5 rounded-md bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                        <Upload className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {step.name || `Input ${stepIdx + 1}`}
+                      </h3>
+                      {acceptsFiles && (
+                        <div className="flex items-center gap-1 ml-auto">
+                          {fileAcceptTypes.map((t) => {
+                            const Icon = TYPE_ICONS[t] || FileText;
+                            return (
+                              <span
+                                key={t}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 text-[10px] font-medium"
+                              >
+                                <Icon className="w-2.5 h-2.5" />
+                                {TYPE_LABELS[t] || t}
+                              </span>
+                            );
+                          })}
                         </div>
                       )}
+                    </div>
+                  )}
 
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{file.name}</p>
-                        <p className="text-xs text-gray-400">
-                          {file.type} — {formatFileSize(file.size)}
-                        </p>
+                  {/* File Upload Zone */}
+                  {acceptsFiles && (
+                    <div className="mb-3">
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setDragOverStep(step.id);
+                        }}
+                        onDragLeave={() => setDragOverStep(null)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDragOverStep(null);
+                          if (e.dataTransfer.files.length > 0) {
+                            uploadFilesForStep(step.id, e.dataTransfer.files);
+                          }
+                        }}
+                        onClick={() => fileInputRefs.current[step.id]?.click()}
+                        className={`relative border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
+                          isDragOver
+                            ? "border-brand-500 bg-brand-50/50 dark:bg-brand-900/20"
+                            : "border-gray-200 dark:border-gray-700 hover:border-brand-300 dark:hover:border-brand-700 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                        }`}
+                      >
+                        <input
+                          ref={(el) => { fileInputRefs.current[step.id] = el; }}
+                          type="file"
+                          multiple
+                          accept={acceptMimeString}
+                          onChange={(e) => {
+                            if (e.target.files) uploadFilesForStep(step.id, e.target.files);
+                            e.target.value = "";
+                          }}
+                          className="hidden"
+                          disabled={executing || isUploading}
+                        />
+
+                        {isUploading ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
+                            <p className="text-sm text-gray-500">Uploading...</p>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="w-12 h-12 rounded-full bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center">
+                              <Upload className="w-5 h-5 text-brand-500" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Drop files here or click to browse
+                              </p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                Accepts{" "}
+                                {fileAcceptTypes
+                                  .map((t) => TYPE_LABELS[t] || t)
+                                  .join(", ")}{" "}
+                                — max 50MB per file, up to 5 files
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      <button
-                        onClick={() => removeFile(i)}
-                        disabled={executing}
-                        className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500 transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                      {si.files.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          {si.files.map((file, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700"
+                            >
+                              {file.type === "image" && file.preview ? (
+                                <img
+                                  src={file.preview}
+                                  alt={file.name}
+                                  className="w-12 h-12 rounded-lg object-cover"
+                                />
+                              ) : (
+                                <div
+                                  className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                                    file.type === "video"
+                                      ? "bg-purple-50 dark:bg-purple-900/20"
+                                      : file.type === "audio"
+                                        ? "bg-amber-50 dark:bg-amber-900/20"
+                                        : "bg-blue-50 dark:bg-blue-900/20"
+                                  }`}
+                                >
+                                  {file.type === "video" && <Video className="w-5 h-5 text-purple-500" />}
+                                  {file.type === "audio" && <Mic className="w-5 h-5 text-amber-500" />}
+                                  {file.type === "document" && <FileText className="w-5 h-5 text-blue-500" />}
+                                  {!["video", "audio", "document"].includes(file.type) && (
+                                    <File className="w-5 h-5 text-gray-400" />
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{file.name}</p>
+                                <p className="text-xs text-gray-400">
+                                  {file.type} — {formatFileSize(file.size)}
+                                </p>
+                              </div>
+
+                              <button
+                                onClick={() => removeFileFromStep(step.id, i)}
+                                disabled={executing}
+                                className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-red-500 transition-colors"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                  )}
 
-          {/* Custom Input Parameters */}
-          {inputParameters.length > 0 && (
-            <div className="space-y-3 mb-4">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4 text-emerald-500" />
-                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Parameters</h3>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {inputParameters.map((param) => (
-                  <div key={param.id}>
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
-                      {param.label || param.name}
-                      {param.required && <span className="text-red-400 ml-0.5">*</span>}
-                    </label>
-                    {param.type === "text" && (
-                      <input
-                        type="text"
-                        value={String(customParams[param.name] ?? param.defaultValue ?? "")}
-                        onChange={(e) =>
-                          setCustomParams((prev) => ({ ...prev, [param.name]: e.target.value }))
-                        }
-                        className="input-field text-sm"
-                        placeholder={`Enter ${param.label || param.name}...`}
-                        disabled={executing}
-                      />
-                    )}
-                    {param.type === "number" && (
-                      <input
-                        type="number"
-                        value={customParams[param.name] ?? param.defaultValue ?? ""}
-                        onChange={(e) =>
-                          setCustomParams((prev) => ({
-                            ...prev,
-                            [param.name]: e.target.value ? Number(e.target.value) : "",
-                          }))
-                        }
-                        className="input-field text-sm"
-                        placeholder="0"
-                        disabled={executing}
-                      />
-                    )}
-                    {param.type === "checkbox" && (
-                      <label className="flex items-center gap-2.5 h-[38px] px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={
-                            customParams[param.name] !== undefined
-                              ? Boolean(customParams[param.name])
-                              : param.defaultValue === "true"
-                          }
-                          onChange={(e) =>
-                            setCustomParams((prev) => ({ ...prev, [param.name]: e.target.checked }))
-                          }
-                          className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
-                          disabled={executing}
-                        />
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          {customParams[param.name] === true || (customParams[param.name] === undefined && param.defaultValue === "true")
-                            ? "Enabled"
-                            : "Disabled"}
-                        </span>
-                      </label>
-                    )}
-                    {param.type === "select" && (
-                      <select
-                        value={String(customParams[param.name] ?? param.defaultValue ?? "")}
-                        onChange={(e) =>
-                          setCustomParams((prev) => ({ ...prev, [param.name]: e.target.value }))
-                        }
-                        className="input-field text-sm"
-                        disabled={executing}
-                      >
-                        <option value="">Select...</option>
-                        {(param.options || []).filter(Boolean).map((opt) => (
-                          <option key={opt} value={opt}>
-                            {opt}
-                          </option>
+                  {/* Custom Input Parameters for this step */}
+                  {stepParams.length > 0 && (
+                    <div className="space-y-3 mb-3">
+                      <div className="flex items-center gap-2">
+                        <SlidersHorizontal className="w-4 h-4 text-emerald-500" />
+                        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Parameters</h3>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {stepParams.map((param) => (
+                          <div key={param.id}>
+                            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">
+                              {param.label || param.name}
+                              {param.required && <span className="text-red-400 ml-0.5">*</span>}
+                            </label>
+                            {param.type === "text" && (
+                              <input
+                                type="text"
+                                value={String(customParams[param.name] ?? param.defaultValue ?? "")}
+                                onChange={(e) =>
+                                  setCustomParams((prev) => ({ ...prev, [param.name]: e.target.value }))
+                                }
+                                className="input-field text-sm"
+                                placeholder={`Enter ${param.label || param.name}...`}
+                                disabled={executing}
+                              />
+                            )}
+                            {param.type === "number" && (
+                              <input
+                                type="number"
+                                value={customParams[param.name] ?? param.defaultValue ?? ""}
+                                onChange={(e) =>
+                                  setCustomParams((prev) => ({
+                                    ...prev,
+                                    [param.name]: e.target.value ? Number(e.target.value) : "",
+                                  }))
+                                }
+                                className="input-field text-sm"
+                                placeholder="0"
+                                disabled={executing}
+                              />
+                            )}
+                            {param.type === "checkbox" && (
+                              <label className="flex items-center gap-2.5 h-[38px] px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    customParams[param.name] !== undefined
+                                      ? Boolean(customParams[param.name])
+                                      : param.defaultValue === "true"
+                                  }
+                                  onChange={(e) =>
+                                    setCustomParams((prev) => ({ ...prev, [param.name]: e.target.checked }))
+                                  }
+                                  className="rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                                  disabled={executing}
+                                />
+                                <span className="text-sm text-gray-600 dark:text-gray-400">
+                                  {customParams[param.name] === true || (customParams[param.name] === undefined && param.defaultValue === "true")
+                                    ? "Enabled"
+                                    : "Disabled"}
+                                </span>
+                              </label>
+                            )}
+                            {param.type === "select" && (
+                              <select
+                                value={String(customParams[param.name] ?? param.defaultValue ?? "")}
+                                onChange={(e) =>
+                                  setCustomParams((prev) => ({ ...prev, [param.name]: e.target.value }))
+                                }
+                                className="input-field text-sm"
+                                disabled={executing}
+                              >
+                                <option value="">Select...</option>
+                                {(param.options || []).filter(Boolean).map((opt) => (
+                                  <option key={opt} value={opt}>
+                                    {opt}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
                         ))}
-                      </select>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+                      </div>
+                    </div>
+                  )}
 
-          {/* Text Input */}
-          {(acceptsText || !acceptsFiles) && (
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              rows={4}
-              className="input-field font-mono text-sm"
-              placeholder={
-                acceptsFiles
-                  ? "Optionally enter a text prompt alongside your files..."
-                  : "Enter your input here..."
-              }
-              disabled={executing}
-            />
-          )}
+                  {/* Text Input */}
+                  {(acceptsText || !acceptsFiles) && (
+                    <textarea
+                      value={si.text}
+                      onChange={(e) => setStepText(step.id, e.target.value)}
+                      rows={inputSteps.length > 1 ? 3 : 4}
+                      className="input-field font-mono text-sm"
+                      placeholder={
+                        acceptsFiles
+                          ? "Optionally enter a text prompt alongside your files..."
+                          : inputSteps.length > 1
+                            ? `Enter input for "${step.name || `Input ${stepIdx + 1}`}"...`
+                            : "Enter your input here..."
+                      }
+                      disabled={executing}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
           <div className="flex items-center justify-between mt-4">
             <p className="text-xs text-gray-400">
@@ -1124,8 +1228,8 @@ function ApiIntegrationModal({
     } catch {}
   };
 
-  const inputStep = workflow.steps.find((s) => s.stepType === "INPUT");
-  const acceptsFiles = inputStep?.acceptTypes?.some((t) => t !== "text");
+  const firstInputStep = workflow.steps.find((s) => s.stepType === "INPUT");
+  const acceptsFiles = firstInputStep?.acceptTypes?.some((t) => t !== "text");
 
   const filesPayload = acceptsFiles
     ? `,
