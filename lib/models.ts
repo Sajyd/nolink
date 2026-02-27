@@ -193,6 +193,7 @@ export const FAL_IMAGE_MODELS: AIModel[] = [
     description: "Ultra-fast image generation with great quality",
     params: [
       { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image_url", label: "Reference Image URL", type: "text", bindable: true, description: "Optional image reference from a previous node" },
       { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
       { key: "image_size", label: "Image Size", type: "select", default: "landscape_4_3", options: [
         { label: "Square (1:1)", value: "square" },
@@ -218,6 +219,7 @@ export const FAL_IMAGE_MODELS: AIModel[] = [
     description: "Enhanced version with higher quality and more control",
     params: [
       { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image_url", label: "Reference Image URL", type: "text", bindable: true, description: "Optional image reference from a previous node" },
       { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
       { key: "image_size", label: "Image Size", type: "select", default: "landscape_4_3", options: [
         { label: "Square (1:1)", value: "square" },
@@ -244,6 +246,7 @@ export const FAL_IMAGE_MODELS: AIModel[] = [
     description: "State-of-the-art text-to-image by Black Forest Labs",
     params: [
       { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image_url", label: "Reference Image URL", type: "text", bindable: true, description: "Optional image reference from a previous node" },
       { key: "image_size", label: "Image Size", type: "select", default: "landscape_4_3", options: [
         { label: "Square (1:1)", value: "square" },
         { label: "Square HD", value: "square_hd" },
@@ -268,6 +271,7 @@ export const FAL_IMAGE_MODELS: AIModel[] = [
     description: "High-quality open-source image generation",
     params: [
       { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image_url", label: "Reference Image URL", type: "text", bindable: true, description: "Optional image reference from a previous node" },
       { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true },
       { key: "image_size", label: "Image Size", type: "select", default: "square_hd", options: [
         { label: "Square (1:1)", value: "square" },
