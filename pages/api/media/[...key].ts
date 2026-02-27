@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
-import type { Readable } from "stream";
 
 export default async function handler(
   req: NextApiRequest,
@@ -39,17 +38,17 @@ export default async function handler(
       new GetObjectCommand({ Bucket: bucket, Key: key })
     );
 
+    const bytes = await obj.Body!.transformToByteArray();
+
     if (obj.ContentType) {
       res.setHeader("Content-Type", obj.ContentType);
     }
-    if (obj.ContentLength) {
-      res.setHeader("Content-Length", obj.ContentLength);
-    }
+    res.setHeader("Content-Length", bytes.length);
     res.setHeader("Cache-Control", "public, max-age=86400, immutable");
 
-    const stream = obj.Body as Readable;
-    stream.pipe(res);
-  } catch {
+    res.status(200).send(Buffer.from(bytes));
+  } catch (err) {
+    console.error("Media proxy error:", err);
     return res.status(404).json({ error: "Not found" });
   }
 }
