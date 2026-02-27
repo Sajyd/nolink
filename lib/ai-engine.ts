@@ -697,7 +697,7 @@ async function executeFalStep(
   const model = getModelById(step.aiModel);
   if (!isCustom && (!model || !model.isFal)) return { text: `[Unknown fal model: ${step.aiModel}]`, files: [] };
 
-  const falEndpoint = isCustom ? step.customFalEndpoint : model?.falEndpoint;
+  let falEndpoint = isCustom ? step.customFalEndpoint : model?.falEndpoint;
   if (!falEndpoint) return { text: `[No fal.ai endpoint configured]`, files: [] };
 
   const resolvedParams: Record<string, unknown> = {};
@@ -763,6 +763,14 @@ async function executeFalStep(
             : v
         )
       );
+    }
+  }
+
+  if (!isCustom && model?.falEditEndpoint) {
+    const hasImageUrl = resolvedParams.image_url && String(resolvedParams.image_url).length > 0;
+    const hasImageUrls = Array.isArray(resolvedParams.image_urls) && resolvedParams.image_urls.length > 0;
+    if (hasImageUrl || hasImageUrls) {
+      falEndpoint = model.falEditEndpoint;
     }
   }
 
