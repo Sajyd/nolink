@@ -13,6 +13,7 @@ import {
   type Node,
   BackgroundVariant,
   type NodeTypes,
+  type EdgeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import BasicNode from "./StepNode";
@@ -20,6 +21,7 @@ import InputNode from "./InputNode";
 import OutputNode from "./OutputNode";
 import FalAiNode from "./FalAiNode";
 import CustomApiNode from "./CustomApiNode";
+import DeletableEdge from "./DeletableEdge";
 import { useWorkflowStore, type StepNodeData } from "@/lib/workflow-store";
 import { playNodeClick, playConnect } from "@/lib/sounds";
 
@@ -39,6 +41,11 @@ export default function WorkflowCanvas() {
       falAiNode: FalAiNode,
       customApiNode: CustomApiNode,
     }),
+    []
+  );
+
+  const edgeTypes: EdgeTypes = useMemo(
+    () => ({ default: DeletableEdge }),
     []
   );
 
@@ -97,6 +104,7 @@ export default function WorkflowCanvas() {
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         className="bg-gray-50 dark:bg-gray-950"
         defaultEdgeOptions={{ animated: true }}
