@@ -89,7 +89,18 @@ export default function EditWorkflow() {
 
         if (step.params) {
           for (const [key, val] of Object.entries(step.params as Record<string, unknown>)) {
-            if (typeof val === "string" && val.startsWith("{{") && val.endsWith("}}")) {
+            if (key === "image_urls" && Array.isArray(val)) {
+              const urls: string[] = [];
+              (val as string[]).forEach((v, i) => {
+                if (typeof v === "string" && v.startsWith("{{") && v.endsWith("}}")) {
+                  paramBindings[`image_urls_${i}`] = v;
+                  urls.push("");
+                } else {
+                  urls.push(v as string);
+                }
+              });
+              modelParams.image_urls = urls;
+            } else if (typeof val === "string" && val.startsWith("{{") && val.endsWith("}}")) {
               paramBindings[key] = val;
             } else {
               modelParams[key] = val;
@@ -167,7 +178,13 @@ export default function EditWorkflow() {
         const mergedParams = { ...(n.data.modelParams || {}) };
         const bindings = n.data.paramBindings || {};
         for (const [key, binding] of Object.entries(bindings)) {
-          if (binding && binding !== "manual") {
+          if (!binding || binding === "manual") continue;
+          const arrMatch = key.match(/^image_urls_(\d+)$/);
+          if (arrMatch) {
+            const arr = Array.isArray(mergedParams.image_urls) ? [...(mergedParams.image_urls as string[])] : [];
+            arr[parseInt(arrMatch[1])] = binding;
+            mergedParams.image_urls = arr;
+          } else {
             mergedParams[key] = binding;
           }
         }

@@ -713,7 +713,13 @@ async function executeFalStep(
     }
   } else if (step.params) {
     for (const [key, val] of Object.entries(step.params)) {
-      if (typeof val === "string" && val.includes("{{input}}")) {
+      if (Array.isArray(val)) {
+        resolvedParams[key] = val.map((v) =>
+          typeof v === "string" && v.includes("{{input}}")
+            ? v.replace(/\{\{input\}\}/g, input.text)
+            : v
+        );
+      } else if (typeof val === "string" && val.includes("{{input}}")) {
         resolvedParams[key] = val.replace(/\{\{input\}\}/g, input.text);
       } else {
         resolvedParams[key] = val;

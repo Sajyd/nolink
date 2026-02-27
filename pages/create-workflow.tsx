@@ -77,7 +77,13 @@ export default function CreateWorkflow() {
             const mergedParams = { ...(n.data.modelParams || {}) };
             const bindings = n.data.paramBindings || {};
             for (const [key, binding] of Object.entries(bindings)) {
-              if (binding && binding !== "manual") {
+              if (!binding || binding === "manual") continue;
+              const arrMatch = key.match(/^image_urls_(\d+)$/);
+              if (arrMatch) {
+                const arr = Array.isArray(mergedParams.image_urls) ? [...(mergedParams.image_urls as string[])] : [];
+                arr[parseInt(arrMatch[1])] = binding;
+                mergedParams.image_urls = arr;
+              } else {
                 mergedParams[key] = binding;
               }
             }

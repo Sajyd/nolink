@@ -332,7 +332,21 @@ function ModelParamsEditor({
         <span className="text-[10px] text-gray-400">{params.length} params</span>
       </div>
 
-      {params.map((param, idx) => {
+      {params.map((param) => {
+        if (param.key === "image_urls") {
+          return (
+            <ImageUrlsEditor
+              key={param.key}
+              param={param}
+              values={values}
+              bindings={bindings}
+              inputBindOptions={inputBindOptions}
+              setParam={setParam}
+              setBinding={setBinding}
+            />
+          );
+        }
+
         const binding = bindings[param.key];
         const isBound = binding && binding !== "manual";
 
@@ -448,6 +462,142 @@ function ParamInput({
         />
       );
   }
+}
+
+function ImageUrlsEditor({
+  param,
+  values,
+  bindings,
+  inputBindOptions,
+  setParam,
+  setBinding,
+}: {
+  param: ModelParam;
+  values: Record<string, unknown>;
+  bindings: Record<string, string>;
+  inputBindOptions: { value: string; label: string }[];
+  setParam: (key: string, value: unknown) => void;
+  setBinding: (key: string, binding: string) => void;
+}) {
+  const slots: string[] = Array.isArray(values.image_urls)
+    ? (values.image_urls as string[])
+    : [];
+
+  const updateSlot = (idx: number, val: string) => {
+    const next = [...slots];
+    next[idx] = val;
+    setParam("image_urls", next);
+  };
+
+  const addSlot = () => {
+    setParam("image_urls", [...slots, ""]);
+  };
+
+  const removeSlot = (idx: number) => {
+    const next = slots.filter((_, i) => i !== idx);
+    setParam("image_urls", next);
+    const newBindings = { ...bindings };
+    delete newBindings[`image_urls_${idx}`];
+    const renumbered: Record<string, string> = {};
+    for (const [k, v] of Object.entries(newBindings)) {
+      const m = k.match(/^image_urls_(\d+)$/);
+      if (m) {
+        const oldIdx = parseInt(m[1]);
+        if (oldIdx > idx) {
+          renumbered[`image_urls_${oldIdx - 1}`] = v;
+        } else {
+          renumbered[k] = v;
+        }
+      }
+    }
+    for (let i = 0; i < next.length; i++) {
+      const bk = `image_urls_${i}`;
+      setBinding(bk, renumbered[bk] || "manual");
+    }
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
+          {param.label}
+        </label>
+        <button
+          onClick={addSlot}
+          className="flex items-center gap-1 text-[10px] font-medium text-brand-500 hover:text-brand-600 transition-colors"
+        >
+          <Plus className="w-3 h-3" />
+          Add Image
+        </button>
+      </div>
+
+      {param.description && (
+        <p className="text-[10px] text-gray-400">{param.description}</p>
+      )}
+
+      {slots.length === 0 ? (
+        <button
+          onClick={addSlot}
+          className="w-full px-3 py-2.5 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700 text-xs text-gray-400 hover:text-brand-500 hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
+        >
+          + Add reference image
+        </button>
+      ) : (
+        <div className="space-y-2">
+          {slots.map((url, idx) => {
+            const bk = `image_urls_${idx}`;
+            const slotBinding = bindings[bk];
+            const isBound = slotBinding && slotBinding !== "manual";
+
+            return (
+              <div key={idx} className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-medium text-gray-400">
+                    Image {idx + 1}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={slotBinding || "manual"}
+                      onChange={(e) => setBinding(bk, e.target.value)}
+                      className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-transparent"
+                    >
+                      <option value="manual">Manual</option>
+                      {inputBindOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value.startsWith("{{") ? opt.value : `{{${opt.value}}}`}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => removeSlot(idx)}
+                      className="p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {isBound ? (
+                  <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs font-mono">
+                    <Link2 className="w-3 h-3" />
+                    {slotBinding}
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={url}
+                    onChange={(e) => updateSlot(idx, e.target.value)}
+                    className="input-field text-xs font-mono"
+                    placeholder="https://... or bind to a node above"
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CustomParamsEditor({
