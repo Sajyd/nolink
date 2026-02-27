@@ -16,7 +16,9 @@ import {
   Settings,
   ChevronDown,
   ChevronUp,
+  ExternalLink,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 const CATEGORIES = [
@@ -127,9 +129,10 @@ const NODE_TEMPLATES: {
 interface BuilderToolbarProps {
   onSave: () => void;
   saving: boolean;
+  workflowId?: string | null;
 }
 
-export default function BuilderToolbar({ onSave, saving }: BuilderToolbarProps) {
+export default function BuilderToolbar({ onSave, saving, workflowId }: BuilderToolbarProps) {
   const store = useWorkflowStore();
   const [showSettings, setShowSettings] = useState(true);
 
@@ -361,7 +364,7 @@ export default function BuilderToolbar({ onSave, saving }: BuilderToolbarProps) 
       </div>
 
       {/* Save button */}
-      <div className="p-4">
+      <div className="p-4 space-y-2">
         <button
           onClick={onSave}
           disabled={saving || store.nodes.length === 0}
@@ -370,6 +373,15 @@ export default function BuilderToolbar({ onSave, saving }: BuilderToolbarProps) 
           <Save className="w-4 h-4" />
           {saving ? "Saving..." : store.editingWorkflowId ? "Update Workflow" : "Save Workflow"}
         </button>
+        {workflowId && (
+          <Link
+            href={`/workflow/${workflowId}`}
+            className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Visit Workflow
+          </Link>
+        )}
       </div>
     </div>
   );

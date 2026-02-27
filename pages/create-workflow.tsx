@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import Head from "next/head";
 import dynamic from "next/dynamic";
-import { ArrowLeft, Zap, Crown, Loader2, Cloud } from "lucide-react";
+import { ArrowLeft, Zap, Crown, Loader2, CloudUpload, Check } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { SUBSCRIPTION_PLANS } from "@/lib/constants";
@@ -22,11 +22,24 @@ export default function CreateWorkflow() {
   const router = useRouter();
   const store = useWorkflowStore();
   const [saving, setSaving] = useState(false);
+  const [autoSave, setAutoSave] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("nolink-autosave") !== "false";
+    }
+    return true;
+  });
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [workflowId, setWorkflowId] = useState<string | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(false);
 
   useEffect(() => {
     if (store.editingWorkflowId) {
       store.reset();
     }
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
   }, []);
 
   if (status === "loading") {
@@ -46,95 +59,147 @@ export default function CreateWorkflow() {
     return <SubscriptionGate />;
   }
 
-  const handleSave = async () => {
-    if (store.nodes.length === 0) {
-      toast.error("Add at least one step");
+  const buildPayload = useCallback(() => {
+    const s = useWorkflowStore.getState();
+    return {
+      name: s.workflowName || "Untitled Workflow",
+      description: s.workflowDescription,
+      category: s.workflowCategory,
+      priceInNolinks: s.workflowPrice,
+      isPublic: s.isPublic,
+      exampleInput: s.exampleInput || null,
+      exampleOutput: s.exampleOutput || null,
+      steps: s.nodes.map((n) => {
+        const stepTypeMap: Record<string, string> = {
+          inputNode: "INPUT",
+          outputNode: "OUTPUT",
+          falAiNode: "FAL_AI",
+          basicNode: "BASIC",
+          stepNode: "BASIC",
+          customApiNode: "CUSTOM_API",
+        };
+        const mergedParams = { ...(n.data.modelParams || {}) };
+        const bindings = n.data.paramBindings || {};
+        for (const [key, binding] of Object.entries(bindings)) {
+          if (!binding || binding === "manual") continue;
+          const arrMatch = key.match(/^image_urls_(\d+)$/);
+          if (arrMatch) {
+            const arr = Array.isArray(mergedParams.image_urls) ? [...(mergedParams.image_urls as string[])] : [];
+            arr[parseInt(arrMatch[1])] = binding;
+            mergedParams.image_urls = arr;
+          } else {
+            mergedParams[key] = binding;
+          }
+        }
+        const validCustomParams = (n.data.customParams || []).filter(
+          (p: { name: string; value: string }) => p.name.trim() !== ""
+        );
+        const isCustomFal = n.data.aiModel === "fal-custom";
+        const validFalParams = (n.data.customFalParams || []).filter(
+          (p: { key: string; value: string }) => p.key.trim() !== ""
+        );
+        const isCustomApi = n.type === "customApiNode";
+        return {
+          order: n.data.order,
+          name: n.data.label,
+          stepType: stepTypeMap[n.type || "basicNode"] || "BASIC",
+          aiModel: n.data.aiModel || null,
+          inputType: n.data.inputType || "TEXT",
+          outputType: n.data.outputType || "TEXT",
+          prompt: n.data.prompt || "",
+          modelParams: Object.keys(mergedParams).length > 0 ? mergedParams : null,
+          customParams: validCustomParams.length > 0 ? validCustomParams : null,
+          customFalEndpoint: isCustomFal ? (n.data.customFalEndpoint || null) : null,
+          customFalParams: isCustomFal && validFalParams.length > 0 ? validFalParams : null,
+          customApiUrl: isCustomApi ? (n.data.customApiUrl || null) : null,
+          customApiMethod: isCustomApi ? (n.data.customApiMethod || "POST") : null,
+          customApiHeaders: isCustomApi ? (n.data.customApiHeaders || []) : null,
+          customApiParams: isCustomApi ? (n.data.customApiParams || []) : null,
+          customApiResultFields: isCustomApi ? (n.data.customApiResultFields || []) : null,
+          customApiPrice: isCustomApi ? (n.data.customApiPrice ?? 0) : null,
+          acceptTypes: n.data.acceptTypes || [],
+          inputParameters: (n.data.inputParameters || []).filter(
+            (p: { name: string }) => p.name.trim() !== ""
+          ),
+          positionX: n.position.x,
+          positionY: n.position.y,
+        };
+      }),
+    };
+  }, []);
+
+  const performSave = useCallback(async (silent: boolean) => {
+    const s = useWorkflowStore.getState();
+    if (s.nodes.length === 0) {
+      if (!silent) toast.error("Add at least one step");
       return;
     }
 
-    setSaving(true);
-    try {
-      const res = await fetch("/api/workflows", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: store.workflowName || "Untitled Workflow",
-          description: store.workflowDescription,
-          category: store.workflowCategory,
-          priceInNolinks: store.workflowPrice,
-          isPublic: store.isPublic,
-          exampleInput: store.exampleInput || null,
-          exampleOutput: store.exampleOutput || null,
-          steps: store.nodes.map((n) => {
-            const stepTypeMap: Record<string, string> = {
-              inputNode: "INPUT",
-              outputNode: "OUTPUT",
-              falAiNode: "FAL_AI",
-              basicNode: "BASIC",
-              stepNode: "BASIC",
-              customApiNode: "CUSTOM_API",
-            };
-            const mergedParams = { ...(n.data.modelParams || {}) };
-            const bindings = n.data.paramBindings || {};
-            for (const [key, binding] of Object.entries(bindings)) {
-              if (!binding || binding === "manual") continue;
-              const arrMatch = key.match(/^image_urls_(\d+)$/);
-              if (arrMatch) {
-                const arr = Array.isArray(mergedParams.image_urls) ? [...(mergedParams.image_urls as string[])] : [];
-                arr[parseInt(arrMatch[1])] = binding;
-                mergedParams.image_urls = arr;
-              } else {
-                mergedParams[key] = binding;
-              }
-            }
-            const validCustomParams = (n.data.customParams || []).filter(
-              (p: { name: string; value: string }) => p.name.trim() !== ""
-            );
-            const isCustomFal = n.data.aiModel === "fal-custom";
-            const validFalParams = (n.data.customFalParams || []).filter(
-              (p: { key: string; value: string }) => p.key.trim() !== ""
-            );
-            const isCustomApi = n.type === "customApiNode";
-            return {
-              order: n.data.order,
-              name: n.data.label,
-              stepType: stepTypeMap[n.type || "basicNode"] || "BASIC",
-              aiModel: n.data.aiModel || null,
-              inputType: n.data.inputType || "TEXT",
-              outputType: n.data.outputType || "TEXT",
-              prompt: n.data.prompt || "",
-              modelParams: Object.keys(mergedParams).length > 0 ? mergedParams : null,
-              customParams: validCustomParams.length > 0 ? validCustomParams : null,
-              customFalEndpoint: isCustomFal ? (n.data.customFalEndpoint || null) : null,
-              customFalParams: isCustomFal && validFalParams.length > 0 ? validFalParams : null,
-              customApiUrl: isCustomApi ? (n.data.customApiUrl || null) : null,
-              customApiMethod: isCustomApi ? (n.data.customApiMethod || "POST") : null,
-              customApiHeaders: isCustomApi ? (n.data.customApiHeaders || []) : null,
-              customApiParams: isCustomApi ? (n.data.customApiParams || []) : null,
-              customApiResultFields: isCustomApi ? (n.data.customApiResultFields || []) : null,
-              customApiPrice: isCustomApi ? (n.data.customApiPrice ?? 0) : null,
-              acceptTypes: n.data.acceptTypes || [],
-              inputParameters: (n.data.inputParameters || []).filter(
-                (p: { name: string }) => p.name.trim() !== ""
-              ),
-              positionX: n.position.x,
-              positionY: n.position.y,
-            };
-          }),
-        }),
-      });
+    if (!silent) setSaving(true);
+    if (silent) setAutoSaveStatus("saving");
 
-      if (!res.ok) throw new Error("Failed to save");
-      const data = await res.json();
-      toast.success("Workflow saved!");
-      store.reset();
-      router.push(`/workflow/${data.id}`);
+    try {
+      const payload = buildPayload();
+
+      if (workflowId) {
+        const res = await fetch(`/api/workflows/${workflowId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error("Failed to update");
+      } else {
+        const res = await fetch("/api/workflows", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error("Failed to save");
+        const data = await res.json();
+        setWorkflowId(data.id);
+      }
+
+      const now = new Date();
+      setLastSavedAt(now);
+      if (silent) {
+        setAutoSaveStatus("saved");
+        setTimeout(() => { if (mountedRef.current) setAutoSaveStatus("idle"); }, 2000);
+      } else {
+        toast.success("Workflow saved!");
+      }
     } catch {
-      toast.error("Failed to save workflow");
+      if (silent) {
+        setAutoSaveStatus("idle");
+      } else {
+        toast.error("Failed to save workflow");
+      }
     } finally {
-      setSaving(false);
+      if (!silent) setSaving(false);
     }
-  };
+  }, [buildPayload, workflowId]);
+
+  const handleSave = () => performSave(false);
+
+  useEffect(() => {
+    localStorage.setItem("nolink-autosave", String(autoSave));
+  }, [autoSave]);
+
+  useEffect(() => {
+    if (!autoSave) return;
+    const unsub = useWorkflowStore.subscribe(() => {
+      if (!mountedRef.current) return;
+      const s = useWorkflowStore.getState();
+      if (s.nodes.length === 0) return;
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(() => {
+        performSave(true);
+      }, 2000);
+    });
+    return () => {
+      unsub();
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [autoSave, performSave]);
 
   return (
     <>
@@ -153,18 +218,43 @@ export default function CreateWorkflow() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {store.nodes.length > 0 && (
+            {autoSaveStatus === "saving" && (
               <span className="flex items-center gap-1.5 text-xs text-gray-400">
-                <Cloud className="w-3.5 h-3.5" />
-                Draft saved
+                <CloudUpload className="w-3.5 h-3.5 animate-pulse" />
+                Saving…
               </span>
             )}
+            {autoSaveStatus !== "saving" && lastSavedAt && (
+              <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                <Check className="w-3.5 h-3.5 text-emerald-500" />
+                Last saved {lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Autosave</span>
+              <button
+                role="switch"
+                aria-checked={autoSave}
+                onClick={() => setAutoSave((v) => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ${
+                  autoSave
+                    ? "bg-brand-500"
+                    : "bg-gray-200 dark:bg-gray-700"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ease-in-out ${
+                    autoSave ? "translate-x-[22px]" : "translate-x-[2px]"
+                  } mt-[2px]`}
+                />
+              </button>
+            </label>
             <ThemeToggle />
           </div>
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          <BuilderToolbar onSave={handleSave} saving={saving} />
+          <BuilderToolbar onSave={handleSave} saving={saving} workflowId={workflowId} />
           <WorkflowCanvas />
           <StepConfigPanel />
         </div>

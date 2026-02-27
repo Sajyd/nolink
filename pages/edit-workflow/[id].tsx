@@ -33,7 +33,14 @@ export default function EditWorkflow() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [autoSave, setAutoSave] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("nolink-autosave") !== "false";
+    }
+    return true;
+  });
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const loadedIdRef = useRef<string | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialLoadDoneRef = useRef(false);
@@ -250,13 +257,13 @@ export default function EditWorkflow() {
         throw new Error(data.error || "Failed to save");
       }
 
+      const now = new Date();
+      setLastSavedAt(now);
       if (silent) {
         setAutoSaveStatus("saved");
         setTimeout(() => setAutoSaveStatus("idle"), 2000);
       } else {
-        toast.success("Workflow updated!");
-        store.reset();
-        router.push(`/workflow/${id}`);
+        toast.success("Workflow saved!");
       }
     } catch (err) {
       if (silent) {
@@ -267,12 +274,16 @@ export default function EditWorkflow() {
     } finally {
       if (!silent) setSaving(false);
     }
-  }, [id, buildSavePayload, store, router]);
+  }, [id, buildSavePayload]);
 
   const handleSave = () => performSave(false);
 
-  // Autosave: subscribe to store changes with debounce
   useEffect(() => {
+    localStorage.setItem("nolink-autosave", String(autoSave));
+  }, [autoSave]);
+
+  useEffect(() => {
+    if (!autoSave) return;
     const unsub = useWorkflowStore.subscribe(() => {
       if (!initialLoadDoneRef.current || !id) return;
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -284,7 +295,7 @@ export default function EditWorkflow() {
       unsub();
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [id, performSave]);
+  }, [id, autoSave, performSave]);
 
   if (status === "loading" || !session) {
     return (
@@ -338,18 +349,37 @@ export default function EditWorkflow() {
                 Saving…
               </span>
             )}
-            {autoSaveStatus === "saved" && (
-              <span className="flex items-center gap-1.5 text-xs text-emerald-500">
-                <Check className="w-3.5 h-3.5" />
-                Saved
+            {autoSaveStatus !== "saving" && lastSavedAt && (
+              <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                <Check className="w-3.5 h-3.5 text-emerald-500" />
+                Last saved {lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </span>
             )}
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Autosave</span>
+              <button
+                role="switch"
+                aria-checked={autoSave}
+                onClick={() => setAutoSave((v) => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ${
+                  autoSave
+                    ? "bg-brand-500"
+                    : "bg-gray-200 dark:bg-gray-700"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ease-in-out ${
+                    autoSave ? "translate-x-[22px]" : "translate-x-[2px]"
+                  } mt-[2px]`}
+                />
+              </button>
+            </label>
             <ThemeToggle />
           </div>
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          <BuilderToolbar onSave={handleSave} saving={saving} />
+          <BuilderToolbar onSave={handleSave} saving={saving} workflowId={typeof id === "string" ? id : null} />
           <WorkflowCanvas />
           <StepConfigPanel />
         </div>
