@@ -3,7 +3,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import Head from "next/head";
 import dynamic from "next/dynamic";
-import { ArrowLeft, Zap, Crown, Loader2 } from "lucide-react";
+import { ArrowLeft, Zap, Crown, Loader2, Cloud } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { SUBSCRIPTION_PLANS } from "@/lib/constants";
@@ -24,7 +24,9 @@ export default function CreateWorkflow() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    store.reset();
+    if (store.editingWorkflowId) {
+      store.reset();
+    }
   }, []);
 
   if (status === "loading") {
@@ -144,7 +146,15 @@ export default function CreateWorkflow() {
               <span className="font-semibold text-sm">Workflow Builder</span>
             </div>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-3">
+            {store.nodes.length > 0 && (
+              <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                <Cloud className="w-3.5 h-3.5" />
+                Draft saved
+              </span>
+            )}
+            <ThemeToggle />
+          </div>
         </header>
 
         <div className="flex-1 flex overflow-hidden">

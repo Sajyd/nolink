@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import type { Node, Edge } from "@xyflow/react";
 
 export type StepNodeType = "inputNode" | "outputNode" | "basicNode" | "falAiNode" | "customApiNode";
@@ -91,55 +92,65 @@ interface WorkflowStore {
   reset: () => void;
 }
 
-export const useWorkflowStore = create<WorkflowStore>((set) => ({
-  nodes: [],
-  edges: [],
+const INITIAL_STATE = {
+  nodes: [] as Node<StepNodeData>[],
+  edges: [] as Edge[],
   workflowName: "",
   workflowDescription: "",
   workflowCategory: "OTHER",
   workflowPrice: 0,
   isPublic: true,
-  selectedNodeId: null,
+  selectedNodeId: null as string | null,
   exampleInput: "",
   exampleOutput: "",
-  editingWorkflowId: null,
+  editingWorkflowId: null as string | null,
+};
 
-  setNodes: (nodes) => set({ nodes }),
-  setEdges: (edges) => set({ edges }),
-  addNode: (node) => set((s) => ({ nodes: [...s.nodes, node] })),
-  updateNodeData: (nodeId, data) =>
-    set((s) => ({
-      nodes: s.nodes.map((n) =>
-        n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n
-      ),
-    })),
-  removeNode: (nodeId) =>
-    set((s) => ({
-      nodes: s.nodes.filter((n) => n.id !== nodeId),
-      edges: s.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
-      selectedNodeId: s.selectedNodeId === nodeId ? null : s.selectedNodeId,
-    })),
-  setSelectedNodeId: (id) => set({ selectedNodeId: id }),
-  setWorkflowName: (name) => set({ workflowName: name }),
-  setWorkflowDescription: (desc) => set({ workflowDescription: desc }),
-  setWorkflowCategory: (cat) => set({ workflowCategory: cat }),
-  setWorkflowPrice: (price) => set({ workflowPrice: price }),
-  setIsPublic: (isPublic) => set({ isPublic }),
-  setExampleInput: (input) => set({ exampleInput: input }),
-  setExampleOutput: (output) => set({ exampleOutput: output }),
-  setEditingWorkflowId: (id) => set({ editingWorkflowId: id }),
-  reset: () =>
-    set({
-      nodes: [],
-      edges: [],
-      workflowName: "",
-      workflowDescription: "",
-      workflowCategory: "OTHER",
-      workflowPrice: 0,
-      isPublic: true,
-      selectedNodeId: null,
-      exampleInput: "",
-      exampleOutput: "",
-      editingWorkflowId: null,
+export const useWorkflowStore = create<WorkflowStore>()(
+  persist(
+    (set) => ({
+      ...INITIAL_STATE,
+
+      setNodes: (nodes) => set({ nodes }),
+      setEdges: (edges) => set({ edges }),
+      addNode: (node) => set((s) => ({ nodes: [...s.nodes, node] })),
+      updateNodeData: (nodeId, data) =>
+        set((s) => ({
+          nodes: s.nodes.map((n) =>
+            n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n
+          ),
+        })),
+      removeNode: (nodeId) =>
+        set((s) => ({
+          nodes: s.nodes.filter((n) => n.id !== nodeId),
+          edges: s.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
+          selectedNodeId: s.selectedNodeId === nodeId ? null : s.selectedNodeId,
+        })),
+      setSelectedNodeId: (id) => set({ selectedNodeId: id }),
+      setWorkflowName: (name) => set({ workflowName: name }),
+      setWorkflowDescription: (desc) => set({ workflowDescription: desc }),
+      setWorkflowCategory: (cat) => set({ workflowCategory: cat }),
+      setWorkflowPrice: (price) => set({ workflowPrice: price }),
+      setIsPublic: (isPublic) => set({ isPublic }),
+      setExampleInput: (input) => set({ exampleInput: input }),
+      setExampleOutput: (output) => set({ exampleOutput: output }),
+      setEditingWorkflowId: (id) => set({ editingWorkflowId: id }),
+      reset: () => set({ ...INITIAL_STATE }),
     }),
-}));
+    {
+      name: "nolink-workflow-draft",
+      partialize: (state) => ({
+        nodes: state.nodes,
+        edges: state.edges,
+        workflowName: state.workflowName,
+        workflowDescription: state.workflowDescription,
+        workflowCategory: state.workflowCategory,
+        workflowPrice: state.workflowPrice,
+        isPublic: state.isPublic,
+        exampleInput: state.exampleInput,
+        exampleOutput: state.exampleOutput,
+        editingWorkflowId: state.editingWorkflowId,
+      }),
+    }
+  )
+);

@@ -732,6 +732,13 @@ async function executeFalStep(
   const audioFiles = getFilesByType(input.files, "audio");
   const videoFiles = getFilesByType(input.files, "video");
 
+  if (imageFiles.length > 0 && !resolvedParams.image_urls && acceptsParam("image_urls")) {
+    const urls: string[] = [];
+    for (const f of imageFiles) {
+      urls.push(await resolveFileUrlForFal(f.url, f.mimeType));
+    }
+    resolvedParams.image_urls = urls;
+  }
   if (imageFiles.length > 0 && !resolvedParams.image_url && acceptsParam("image_url")) {
     resolvedParams.image_url = await resolveFileUrlForFal(imageFiles[0].url, imageFiles[0].mimeType);
   }
@@ -742,13 +749,20 @@ async function executeFalStep(
     resolvedParams.video_url = await resolveFileUrlForFal(videoFiles[0].url, videoFiles[0].mimeType);
   }
 
-  // Resolve any remaining S3/local file URLs in custom params
   for (const [key, val] of Object.entries(resolvedParams)) {
     if (
       typeof val === "string" &&
       (isS3Url(val) || val.startsWith("/uploads/"))
     ) {
       resolvedParams[key] = await resolveFileUrlForFal(val);
+    } else if (Array.isArray(val)) {
+      resolvedParams[key] = await Promise.all(
+        val.map((v) =>
+          typeof v === "string" && (isS3Url(v) || v.startsWith("/uploads/"))
+            ? resolveFileUrlForFal(v)
+            : v
+        )
+      );
     }
   }
 
