@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { Readable } from "stream";
 
 export default async function handler(
   req: NextApiRequest,
@@ -35,14 +35,20 @@ export default async function handler(
       credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
     });
 
-    const url = await getSignedUrl(
-      s3,
-      new GetObjectCommand({ Bucket: bucket, Key: key }),
-      { expiresIn: 3600 }
+    const obj = await s3.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key })
     );
 
-    res.setHeader("Cache-Control", "public, max-age=3600");
-    res.redirect(302, url);
+    if (obj.ContentType) {
+      res.setHeader("Content-Type", obj.ContentType);
+    }
+    if (obj.ContentLength) {
+      res.setHeader("Content-Length", obj.ContentLength);
+    }
+    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+
+    const stream = obj.Body as Readable;
+    stream.pipe(res);
   } catch {
     return res.status(404).json({ error: "Not found" });
   }
