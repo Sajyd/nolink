@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import Head from "next/head";
@@ -22,6 +22,10 @@ export default function CreateWorkflow() {
   const router = useRouter();
   const store = useWorkflowStore();
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    store.reset();
+  }, []);
 
   if (status === "loading") {
     return (
