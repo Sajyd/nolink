@@ -135,6 +135,8 @@ async function runWorkflowInBackground(
         (config.customApiResultFields as { key: string; type: string }[] | undefined) || undefined,
       customApiPrice:
         (config.customApiPrice as number | undefined) ?? undefined,
+      fileBindings:
+        (config.fileBindings as string[] | undefined) || undefined,
     };
   });
 
@@ -236,6 +238,24 @@ async function runWorkflowInBackground(
         key: p.key,
         value: resolveCP(p.value),
       }));
+    }
+
+    // Resolve fileBindings → inject as files into currentInput
+    if (resolvedStep.fileBindings && resolvedStep.fileBindings.length > 0) {
+      const extraFiles: FileInput[] = [];
+      for (const binding of resolvedStep.fileBindings) {
+        const url = customParamMap[binding];
+        if (!url) continue;
+        const parts = binding.split("_");
+        const fileType = parts[parts.length - 1] || "document";
+        extraFiles.push({ url, type: fileType, name: binding });
+      }
+      if (extraFiles.length > 0) {
+        currentInput = {
+          ...currentInput,
+          files: [...currentInput.files, ...extraFiles],
+        };
+      }
     }
 
     try {

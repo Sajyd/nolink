@@ -40,6 +40,7 @@ export interface StepDefinition {
   config?: Record<string, unknown> | null;
   params?: Record<string, unknown> | null;
   acceptTypes?: string[];
+  fileBindings?: string[];
   customParams?: StepCustomParam[];
   customFalEndpoint?: string;
   customFalParams?: { key: string; value: string }[];
@@ -322,7 +323,8 @@ async function generateWithAnthropic(
   systemPrompt: string,
   userMessage: string,
   params: Record<string, unknown>,
-  modelId: string
+  modelId: string,
+  imageFiles: FileInput[] = []
 ): Promise<string | null> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
@@ -331,6 +333,26 @@ async function generateWithAnthropic(
     modelId === "claude-4-opus"
       ? "claude-sonnet-4-20250514"
       : "claude-sonnet-4-20250514";
+
+  const contentParts: any[] = [];
+
+  for (const img of imageFiles) {
+    const base64 = fileToBase64(img.url);
+    if (base64 && img.mimeType) {
+      contentParts.push({
+        type: "image",
+        source: { type: "base64", media_type: img.mimeType, data: base64 },
+      });
+    } else {
+      const resolvedUrl = resolveFileUrl(img.url);
+      contentParts.push({
+        type: "image",
+        source: { type: "url", url: resolvedUrl },
+      });
+    }
+  }
+
+  contentParts.push({ type: "text", text: userMessage });
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -343,7 +365,7 @@ async function generateWithAnthropic(
       model: claudeModel,
       max_tokens: (params.max_tokens as number) || 4096,
       system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
+      messages: [{ role: "user", content: imageFiles.length > 0 ? contentParts : userMessage }],
     }),
   });
 
@@ -360,10 +382,24 @@ async function generateWithAnthropic(
 async function generateWithGemini(
   systemPrompt: string,
   userMessage: string,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  imageFiles: FileInput[] = []
 ): Promise<string | null> {
   const key = process.env.GOOGLE_AI_API_KEY;
   if (!key) return null;
+
+  const parts: any[] = [];
+
+  for (const img of imageFiles) {
+    const base64 = fileToBase64(img.url);
+    if (base64 && img.mimeType) {
+      parts.push({
+        inline_data: { mime_type: img.mimeType, data: base64 },
+      });
+    }
+  }
+
+  parts.push({ text: userMessage });
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
@@ -372,7 +408,7 @@ async function generateWithGemini(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ parts: [{ text: userMessage }] }],
+        contents: [{ parts }],
         generationConfig: {
           maxOutputTokens: (params.max_tokens as number) || 4096,
           temperature: (params.temperature as number) || 0.7,
@@ -596,6 +632,21 @@ async function executeOutputStep(
   return input;
 }
 
+async function fetchDocumentText(fileUrl: string): Promise<string> {
+  try {
+    const resolvedUrl = resolveFileUrl(fileUrl);
+    const resp = await fetch(resolvedUrl);
+    if (!resp.ok) return `[Could not fetch document: ${fileUrl}]`;
+    const contentType = resp.headers.get("content-type") || "";
+    if (contentType.includes("text") || contentType.includes("json") || contentType.includes("xml")) {
+      return await resp.text();
+    }
+    return `[Document attached: ${fileUrl}]`;
+  } catch {
+    return `[Could not fetch document: ${fileUrl}]`;
+  }
+}
+
 async function executeBasicStep(
   step: StepDefinition,
   input: StepInput
@@ -613,20 +664,33 @@ async function executeBasicStep(
 
   // ── Text & Document models ──
   if (model.category === "text" || model.category === "document") {
+    const imageFiles = getFilesByType(input.files, "image");
+    const documentFiles = getFilesByType(input.files, "document");
+
+    let augmentedPrompt = promptText;
+    if (documentFiles.length > 0) {
+      const docTexts = await Promise.all(
+        documentFiles.map(async (f) => {
+          const content = await fetchDocumentText(f.url);
+          return `--- Document: ${f.name || f.url} ---\n${content}`;
+        })
+      );
+      augmentedPrompt = `${promptText}\n\n${docTexts.join("\n\n")}`;
+    }
+
     let result: string | null = null;
 
     if (model.provider === "anthropic") {
-      result = await generateWithAnthropic(promptText, input.text, params, step.aiModel);
+      result = await generateWithAnthropic(augmentedPrompt, input.text, params, step.aiModel, imageFiles);
     } else if (model.provider === "google") {
-      result = await generateWithGemini(promptText, input.text, params);
+      result = await generateWithGemini(augmentedPrompt, input.text, params, imageFiles);
     } else if (model.provider === "xai") {
-      result = await generateWithXai(promptText, input.text, params);
+      result = await generateWithXai(augmentedPrompt, input.text, params);
     }
 
     if (result === null) {
-      const imageFiles = getFilesByType(input.files, "image");
       result = await generateTextWithOpenAI(
-        promptText,
+        augmentedPrompt,
         input.text,
         params,
         step.aiModel,

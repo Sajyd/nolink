@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -130,9 +131,10 @@ interface BuilderToolbarProps {
   onSave: () => void;
   saving: boolean;
   workflowId?: string | null;
+  onClose?: () => void;
 }
 
-export default function BuilderToolbar({ onSave, saving, workflowId }: BuilderToolbarProps) {
+export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: BuilderToolbarProps) {
   const store = useWorkflowStore();
   const [showSettings, setShowSettings] = useState(true);
 
@@ -155,6 +157,7 @@ export default function BuilderToolbar({ onSave, saving, workflowId }: BuilderTo
     store.addNode(newNode);
     playAddNode();
     store.setSelectedNodeId(newNode.id);
+    onClose?.();
   };
 
   const modelIds = store.nodes
@@ -166,7 +169,16 @@ export default function BuilderToolbar({ onSave, saving, workflowId }: BuilderTo
   const estimatedCost = estimateCostFromModels(modelIds) + customApiCost;
 
   return (
-    <div className="w-72 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col overflow-y-auto">
+    <div className="w-72 h-full border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col overflow-y-auto">
+      {/* Mobile close button */}
+      {onClose && (
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 md:hidden">
+          <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Toolbar</span>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       {/* Node type picker */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-800">
         <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">

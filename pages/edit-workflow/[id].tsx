@@ -3,7 +3,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import Head from "next/head";
 import dynamic from "next/dynamic";
-import { ArrowLeft, Zap, Loader2, Check, CloudUpload, Undo2, Redo2 } from "lucide-react";
+import { ArrowLeft, Zap, Loader2, Check, CloudUpload, Menu, Settings2 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import BuilderToolbar from "@/components/builder/BuilderToolbar";
@@ -30,6 +30,7 @@ export default function EditWorkflow() {
   const router = useRouter();
   const { id } = router.query;
   const store = useWorkflowStore();
+  const selectedNodeId = useWorkflowStore((s) => s.selectedNodeId);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -41,6 +42,8 @@ export default function EditWorkflow() {
   });
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [mobileToolbarOpen, setMobileToolbarOpen] = useState(false);
+  const [mobileConfigOpen, setMobileConfigOpen] = useState(false);
   const loadedIdRef = useRef<string | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialLoadDoneRef = useRef(false);
@@ -48,6 +51,11 @@ export default function EditWorkflow() {
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/signin");
   }, [status, router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || window.innerWidth >= 768) return;
+    setMobileConfigOpen(!!selectedNodeId);
+  }, [selectedNodeId]);
 
   useEffect(() => {
     const workflowId = typeof id === "string" ? id : undefined;
@@ -135,6 +143,7 @@ export default function EditWorkflow() {
           customApiParams: (config.customApiParams as any[]) || undefined,
           customApiResultFields: (config.customApiResultFields as any[]) || undefined,
           customApiPrice: (config.customApiPrice as number) ?? undefined,
+          fileBindings: (config.fileBindings as string[]) || undefined,
           inputParameters: (config.inputParameters as any[]) || undefined,
         };
 
@@ -221,6 +230,7 @@ export default function EditWorkflow() {
           customApiParams: isCustomApi ? (n.data.customApiParams || []) : null,
           customApiResultFields: isCustomApi ? (n.data.customApiResultFields || []) : null,
           customApiPrice: isCustomApi ? (n.data.customApiPrice ?? 0) : null,
+          fileBindings: (n.data.fileBindings && n.data.fileBindings.length > 0) ? n.data.fileBindings : null,
           acceptTypes: n.data.acceptTypes || [],
           inputParameters: (n.data.inputParameters || []).filter(
             (p: { name: string }) => p.name.trim() !== ""
@@ -327,8 +337,11 @@ export default function EditWorkflow() {
     <>
       <Head><title>Edit Workflow — nolink.ai</title></Head>
       <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
-        <header className="flex items-center justify-between px-4 h-14 border-b border-gray-200 dark:border-gray-800 glass">
-          <div className="flex items-center gap-3">
+        <header className="flex items-center justify-between px-3 sm:px-4 h-14 border-b border-gray-200 dark:border-gray-800 glass">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button onClick={() => setMobileToolbarOpen(true)} className="md:hidden btn-ghost p-2">
+              <Menu className="w-4 h-4" />
+            </button>
             <Link href="/dashboard" className="btn-ghost p-2">
               <ArrowLeft className="w-4 h-4" />
             </Link>
@@ -336,45 +349,27 @@ export default function EditWorkflow() {
               <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center">
                 <Zap className="w-3.5 h-3.5 text-white" />
               </div>
-              <span className="font-semibold text-sm">Edit Workflow</span>
-              <span className="text-xs text-gray-400 font-mono truncate max-w-[200px]">
+              <span className="font-semibold text-sm hidden sm:inline">Edit Workflow</span>
+              <span className="text-xs text-gray-400 font-mono truncate max-w-[200px] hidden sm:inline">
                 {store.workflowName || "Untitled"}
               </span>
             </div>
-            <div className="ml-2 flex items-center gap-0.5 border border-gray-200 dark:border-gray-700 rounded-lg p-0.5">
-              <button
-                onClick={() => store.undo()}
-                disabled={store._past.length === 0}
-                title="Undo (⌘Z)"
-                className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <Undo2 className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => store.redo()}
-                disabled={store._future.length === 0}
-                title="Redo (⌘⇧Z)"
-                className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <Redo2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {autoSaveStatus === "saving" && (
-              <span className="flex items-center gap-1.5 text-xs text-gray-400">
+              <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
                 <CloudUpload className="w-3.5 h-3.5 animate-pulse" />
                 Saving…
               </span>
             )}
             {autoSaveStatus !== "saving" && lastSavedAt && (
-              <span className="flex items-center gap-1.5 text-xs text-gray-400">
+              <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
                 <Check className="w-3.5 h-3.5 text-emerald-500" />
                 Last saved {lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </span>
             )}
             <label className="flex items-center gap-2 cursor-pointer select-none">
-              <span className="text-xs text-gray-500 dark:text-gray-400">Autosave</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">Autosave</span>
               <button
                 role="switch"
                 aria-checked={autoSave}
@@ -396,10 +391,50 @@ export default function EditWorkflow() {
           </div>
         </header>
 
-        <div className="flex-1 flex overflow-hidden">
-          <BuilderToolbar onSave={handleSave} saving={saving} workflowId={typeof id === "string" ? id : null} />
+        <div className="flex-1 flex overflow-hidden relative">
+          {/* Mobile backdrop */}
+          {(mobileToolbarOpen || mobileConfigOpen) && (
+            <div
+              className="fixed inset-0 bg-black/40 z-30 md:hidden"
+              onClick={() => { setMobileToolbarOpen(false); setMobileConfigOpen(false); }}
+            />
+          )}
+
+          {/* Left sidebar – in-flow on md+, slide-in drawer on mobile */}
+          <div className={`
+            fixed top-14 left-0 bottom-0 z-40 shadow-2xl transition-transform duration-300
+            md:static md:z-auto md:shadow-none md:translate-x-0 md:transition-none
+            ${mobileToolbarOpen ? "translate-x-0" : "-translate-x-full"}
+          `}>
+            <BuilderToolbar
+              onSave={handleSave}
+              saving={saving}
+              workflowId={typeof id === "string" ? id : null}
+              onClose={() => setMobileToolbarOpen(false)}
+            />
+          </div>
+
+          {/* Canvas */}
           <WorkflowCanvas />
-          <StepConfigPanel />
+
+          {/* Right sidebar – in-flow on md+, slide-in drawer on mobile */}
+          <div className={`
+            fixed top-14 right-0 bottom-0 z-40 shadow-2xl transition-transform duration-300
+            md:static md:z-auto md:shadow-none md:translate-x-0 md:transition-none
+            ${mobileConfigOpen ? "translate-x-0" : "translate-x-full"}
+          `}>
+            <StepConfigPanel />
+          </div>
+
+          {/* Mobile floating button – open config panel */}
+          {selectedNodeId && !mobileConfigOpen && (
+            <button
+              onClick={() => setMobileConfigOpen(true)}
+              className="md:hidden fixed bottom-20 right-4 z-20 p-3 rounded-full bg-brand-600 text-white shadow-lg active:scale-95 transition-transform"
+            >
+              <Settings2 className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
     </>

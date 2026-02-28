@@ -122,6 +122,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       customApiParams: (config.customApiParams as { key: string; value: string }[] | undefined) || undefined,
       customApiResultFields: (config.customApiResultFields as { key: string; type: string }[] | undefined) || undefined,
       customApiPrice: (config.customApiPrice as number | undefined) ?? undefined,
+      fileBindings: (config.fileBindings as string[] | undefined) || undefined,
     };
   });
 
@@ -254,6 +255,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         index: visibleIndex,
         totalSteps: totalVisible,
       });
+    }
+
+    // Resolve fileBindings → inject as files into currentInput
+    if (resolvedStep.fileBindings && resolvedStep.fileBindings.length > 0) {
+      const extraFiles: FileInput[] = [];
+      for (const binding of resolvedStep.fileBindings) {
+        const url = customParamMap[binding];
+        if (!url) continue;
+        const parts = binding.split("_");
+        const fileType = parts[parts.length - 1] || "document";
+        extraFiles.push({ url, type: fileType, name: binding });
+      }
+      if (extraFiles.length > 0) {
+        currentInput = {
+          ...currentInput,
+          files: [...currentInput.files, ...extraFiles],
+        };
+      }
     }
 
     try {

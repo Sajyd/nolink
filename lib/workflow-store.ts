@@ -49,6 +49,7 @@ export interface StepNodeData {
   acceptTypes?: string[];
   modelParams?: Record<string, unknown>;
   paramBindings?: Record<string, string>;
+  fileBindings?: string[];
   customParams?: CustomParam[];
   customFalEndpoint?: string;
   customFalParams?: CustomFalParam[];
