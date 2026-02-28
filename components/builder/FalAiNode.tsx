@@ -1,7 +1,7 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import type { NodeProps } from "@xyflow/react";
 import { Sparkles, Link2, PenLine, Variable, Zap, Clock } from "lucide-react";
-import type { StepNodeData } from "@/lib/workflow-store";
+import { useWorkflowStore, topologicalOrder, type StepNodeData } from "@/lib/workflow-store";
 import { getModelById } from "@/lib/models";
 import NodeShell from "./NodeShell";
 
@@ -13,6 +13,12 @@ function FalAiNode({ id, data, selected }: NodeProps) {
   const boundCount = Object.values(bindings).filter((v) => v && v !== "manual").length;
   const manualCount = model && !isCustom ? model.params.length - boundCount : 0;
   const customFalParams = nodeData.customFalParams || [];
+  const nodes = useWorkflowStore((s) => s.nodes);
+  const edges = useWorkflowStore((s) => s.edges);
+  const stepNumber = useMemo(() => {
+    const sorted = topologicalOrder(nodes, edges);
+    return sorted.findIndex((n) => n.id === id) + 1;
+  }, [nodes, edges, id]);
 
   return (
     <NodeShell
@@ -20,7 +26,7 @@ function FalAiNode({ id, data, selected }: NodeProps) {
       selected={selected}
       accentColor="border-amber-500 shadow-amber-500/20"
       headerBg="bg-amber-50 dark:bg-amber-900/20"
-      headerLabel={`Step ${nodeData.order}`}
+      headerLabel={`Step ${stepNumber || nodeData.order}`}
       headerBadge={
         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gradient-to-r from-amber-500 to-orange-500 text-white">
           fal.ai

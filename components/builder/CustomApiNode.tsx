@@ -1,7 +1,7 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import type { NodeProps } from "@xyflow/react";
 import { Globe, Shield, ArrowRightLeft, Variable } from "lucide-react";
-import type { StepNodeData } from "@/lib/workflow-store";
+import { useWorkflowStore, topologicalOrder, type StepNodeData } from "@/lib/workflow-store";
 import NodeShell from "./NodeShell";
 
 function CustomApiNode({ id, data, selected }: NodeProps) {
@@ -9,6 +9,12 @@ function CustomApiNode({ id, data, selected }: NodeProps) {
   const params = d.customApiParams || [];
   const results = d.customApiResultFields || [];
   const method = d.customApiMethod || "POST";
+  const nodes = useWorkflowStore((s) => s.nodes);
+  const edges = useWorkflowStore((s) => s.edges);
+  const stepNumber = useMemo(() => {
+    const sorted = topologicalOrder(nodes, edges);
+    return sorted.findIndex((n) => n.id === id) + 1;
+  }, [nodes, edges, id]);
 
   return (
     <NodeShell
@@ -16,7 +22,7 @@ function CustomApiNode({ id, data, selected }: NodeProps) {
       selected={selected}
       accentColor="border-rose-500 shadow-rose-500/20"
       headerBg="bg-rose-50 dark:bg-rose-900/20"
-      headerLabel={`Step ${d.order}`}
+      headerLabel={`Step ${stepNumber || d.order}`}
       headerBadge={
         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gradient-to-r from-rose-500 to-pink-500 text-white">
           API

@@ -1,7 +1,7 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import type { NodeProps } from "@xyflow/react";
 import { Type, Image, Mic, Video, FileText, Cpu, Variable } from "lucide-react";
-import type { StepNodeData } from "@/lib/workflow-store";
+import { useWorkflowStore, topologicalOrder, type StepNodeData } from "@/lib/workflow-store";
 import { getModelById } from "@/lib/models";
 import NodeShell from "./NodeShell";
 
@@ -26,6 +26,12 @@ function BasicNode({ id, data, selected }: NodeProps) {
   const InputIcon = IO_ICONS[nodeData.inputType] || Type;
   const OutputIcon = IO_ICONS[nodeData.outputType] || Type;
   const model = getModelById(nodeData.aiModel);
+  const nodes = useWorkflowStore((s) => s.nodes);
+  const edges = useWorkflowStore((s) => s.edges);
+  const stepNumber = useMemo(() => {
+    const sorted = topologicalOrder(nodes, edges);
+    return sorted.findIndex((n) => n.id === id) + 1;
+  }, [nodes, edges, id]);
 
   return (
     <NodeShell
@@ -33,7 +39,7 @@ function BasicNode({ id, data, selected }: NodeProps) {
       selected={selected}
       accentColor="border-brand-500 shadow-brand-500/20"
       headerBg="bg-gray-50 dark:bg-gray-800/50"
-      headerLabel={`Step ${nodeData.order}`}
+      headerLabel={`Step ${stepNumber || nodeData.order}`}
       headerBadge={
         <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-300">
           BASIC

@@ -8,7 +8,7 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import BuilderToolbar from "@/components/builder/BuilderToolbar";
 import StepConfigPanel from "@/components/builder/StepConfigPanel";
-import { useWorkflowStore, type StepNodeData, type CustomFalParam } from "@/lib/workflow-store";
+import { useWorkflowStore, topologicalOrder, type StepNodeData, type CustomFalParam } from "@/lib/workflow-store";
 import ThemeToggle from "@/components/ThemeToggle";
 import type { Node, Edge } from "@xyflow/react";
 
@@ -196,7 +196,7 @@ export default function EditWorkflow() {
       exampleInput: s.exampleInput || null,
       exampleOutput: s.exampleOutput || null,
       edges: s.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
-      steps: s.nodes.map((n) => {
+      steps: topologicalOrder(s.nodes, s.edges).map((n, idx) => {
         const stepTypeMap: Record<string, string> = {
           inputNode: "INPUT",
           outputNode: "OUTPUT",
@@ -228,7 +228,7 @@ export default function EditWorkflow() {
         const isCustomApi = n.type === "customApiNode";
         return {
           nodeId: n.id,
-          order: n.data.order,
+          order: idx + 1,
           name: n.data.label,
           stepType: stepTypeMap[n.type || "basicNode"] || "BASIC",
           aiModel: n.data.aiModel || null,

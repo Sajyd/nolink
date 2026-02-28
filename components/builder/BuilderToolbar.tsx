@@ -1,4 +1,4 @@
-import { useWorkflowStore, type StepNodeData, type StepNodeType } from "@/lib/workflow-store";
+import { useWorkflowStore, topologicalOrder, type StepNodeData, type StepNodeType } from "@/lib/workflow-store";
 import { v4 as uuid } from "uuid";
 import type { Node } from "@xyflow/react";
 import { estimateCostFromModels } from "@/lib/models";
@@ -341,9 +341,8 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
           Nodes ({store.nodes.length})
         </h4>
         <div className="space-y-1.5">
-          {store.nodes
-            .sort((a, b) => a.data.order - b.data.order)
-            .map((node) => {
+          {topologicalOrder(store.nodes, store.edges)
+            .map((node, topoIdx) => {
               const typeLabel =
                 node.type === "inputNode" ? "IN" :
                 node.type === "outputNode" ? "OUT" :

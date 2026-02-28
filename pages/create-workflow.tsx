@@ -9,7 +9,7 @@ import toast from "react-hot-toast";
 import { SUBSCRIPTION_PLANS } from "@/lib/constants";
 import BuilderToolbar from "@/components/builder/BuilderToolbar";
 import StepConfigPanel from "@/components/builder/StepConfigPanel";
-import { useWorkflowStore } from "@/lib/workflow-store";
+import { useWorkflowStore, topologicalOrder } from "@/lib/workflow-store";
 import ThemeToggle from "@/components/ThemeToggle";
 
 const WorkflowCanvas = dynamic(
@@ -78,7 +78,7 @@ export default function CreateWorkflow() {
       exampleInput: s.exampleInput || null,
       exampleOutput: s.exampleOutput || null,
       edges: s.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
-      steps: s.nodes.map((n) => {
+      steps: topologicalOrder(s.nodes, s.edges).map((n, idx) => {
         const stepTypeMap: Record<string, string> = {
           inputNode: "INPUT",
           outputNode: "OUTPUT",
@@ -110,7 +110,7 @@ export default function CreateWorkflow() {
         const isCustomApi = n.type === "customApiNode";
         return {
           nodeId: n.id,
-          order: n.data.order,
+          order: idx + 1,
           name: n.data.label,
           stepType: stepTypeMap[n.type || "basicNode"] || "BASIC",
           aiModel: n.data.aiModel || null,

@@ -69,6 +69,60 @@ interface CanvasSnapshot {
   edges: Edge[];
 }
 
+export function topologicalOrder(
+  nodes: Node<StepNodeData>[],
+  edges: Edge[]
+): Node<StepNodeData>[] {
+  const inDegree = new Map<string, number>();
+  const adjacency = new Map<string, string[]>();
+
+  for (const n of nodes) {
+    inDegree.set(n.id, 0);
+    adjacency.set(n.id, []);
+  }
+
+  for (const e of edges) {
+    if (!adjacency.has(e.source) || !inDegree.has(e.target)) continue;
+    adjacency.get(e.source)!.push(e.target);
+    inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
+  }
+
+  const queue = nodes
+    .filter((n) => (inDegree.get(n.id) || 0) === 0)
+    .sort((a, b) => a.data.order - b.data.order);
+
+  const result: Node<StepNodeData>[] = [];
+  const visited = new Set<string>();
+
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+    if (visited.has(node.id)) continue;
+    visited.add(node.id);
+    result.push(node);
+
+    const targets = (adjacency.get(node.id) || []).slice().sort((a, b) => {
+      const na = nodes.find((n) => n.id === a);
+      const nb = nodes.find((n) => n.id === b);
+      return (na?.data.order ?? 0) - (nb?.data.order ?? 0);
+    });
+
+    for (const targetId of targets) {
+      const deg = (inDegree.get(targetId) || 1) - 1;
+      inDegree.set(targetId, deg);
+      if (deg === 0) {
+        const targetNode = nodes.find((n) => n.id === targetId);
+        if (targetNode) queue.push(targetNode);
+      }
+    }
+  }
+
+  for (const n of nodes) {
+    if (!visited.has(n.id)) result.push(n);
+  }
+
+  return result;
+}
+
 const MAX_HISTORY = 50;
 
 interface WorkflowStore {
