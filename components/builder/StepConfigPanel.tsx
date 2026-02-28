@@ -20,11 +20,11 @@ import {
   type ModelCategory,
 } from "@/lib/models";
 import { useSession } from "next-auth/react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   X, Sparkles, Settings2, Upload, Download, Plus, Trash2, Variable,
   Lock, Clock, Zap, Link2, Globe, Shield, AlertTriangle, SlidersHorizontal,
-  Paperclip, Image, FileText, Music, Film,
+  Paperclip, Image, FileText, Music, Film, ChevronDown, ChevronUp, Cpu,
 } from "lucide-react";
 
 const IO_TYPES = ["TEXT", "IMAGE", "AUDIO", "VIDEO", "DOCUMENT"];
@@ -242,6 +242,88 @@ const FILE_TYPE_ICONS: Record<string, typeof Image> = {
 
 const FILE_TYPES = new Set(["image", "document", "audio", "video"]);
 
+function PromptField({
+  nodeId,
+  fieldKey,
+  value,
+  label,
+  placeholder,
+  description,
+  allInsertOptions,
+  accentColor,
+}: {
+  nodeId: string;
+  fieldKey: "prompt" | "systemPrompt";
+  value: string;
+  label: string;
+  placeholder: string;
+  description?: string;
+  allInsertOptions: { value: string; label: string }[];
+  accentColor: string;
+}) {
+  const { updateNodeData } = useWorkflowStore();
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  const insertAtCursor = (placeholder: string) => {
+    const ta = ref.current;
+    if (!ta) {
+      updateNodeData(nodeId, { [fieldKey]: (value || "") + placeholder });
+      return;
+    }
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const before = (value || "").slice(0, start);
+    const after = (value || "").slice(end);
+    const next = before + placeholder + after;
+    updateNodeData(nodeId, { [fieldKey]: next });
+    requestAnimationFrame(() => {
+      ta.focus();
+      const pos = start + placeholder.length;
+      ta.setSelectionRange(pos, pos);
+    });
+  };
+
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+        {label}
+      </label>
+      {description && (
+        <p className="text-[10px] text-gray-400 mb-1.5">{description}</p>
+      )}
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => updateNodeData(nodeId, { [fieldKey]: e.target.value })}
+        rows={4}
+        className="input-field text-sm font-mono"
+        placeholder={placeholder}
+      />
+
+      {allInsertOptions.length > 0 && (
+        <div className="mt-2 space-y-1.5">
+          <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
+            Insert input
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {allInsertOptions.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => insertAtCursor(opt.value)}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-mono font-medium border transition-colors cursor-pointer ${accentColor}`}
+              >
+                <Plus className="w-2.5 h-2.5" />
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BasicNodeConfig({
   nodeId,
   data,
@@ -252,7 +334,7 @@ function BasicNodeConfig({
   inputBindOptions: { value: string; label: string }[];
 }) {
   const { updateNodeData } = useWorkflowStore();
-  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const [showSystemPrompt, setShowSystemPrompt] = useState(!!data.systemPrompt);
 
   const rawOptions = [
     { value: "{{input}}", label: "Previous step output" },
@@ -286,25 +368,6 @@ function BasicNodeConfig({
   const removeFileBinding = (bindingValue: string) => {
     updateNodeData(nodeId, {
       fileBindings: currentFileBindings.filter((b) => b !== bindingValue),
-    });
-  };
-
-  const insertAtCursor = (placeholder: string) => {
-    const ta = promptRef.current;
-    if (!ta) {
-      updateNodeData(nodeId, { prompt: (data.prompt || "") + placeholder });
-      return;
-    }
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const before = (data.prompt || "").slice(0, start);
-    const after = (data.prompt || "").slice(end);
-    const next = before + placeholder + after;
-    updateNodeData(nodeId, { prompt: next });
-    requestAnimationFrame(() => {
-      ta.focus();
-      const pos = start + placeholder.length;
-      ta.setSelectionRange(pos, pos);
     });
   };
 
@@ -359,40 +422,58 @@ function BasicNodeConfig({
         </select>
       </div>
 
-      <div>
-        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-          Prompt / Template
-        </label>
-        <textarea
-          ref={promptRef}
-          value={data.prompt}
-          onChange={(e) => updateNodeData(nodeId, { prompt: e.target.value })}
-          rows={4}
-          className="input-field text-sm font-mono"
-          placeholder="Write your prompt and click inputs below to insert them..."
-        />
+      {/* System Prompt (collapsible) */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => {
+            const next = !showSystemPrompt;
+            setShowSystemPrompt(next);
+            if (!next) updateNodeData(nodeId, { systemPrompt: "" });
+          }}
+          className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+        >
+          <span className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+            <Cpu className="w-3.5 h-3.5 text-violet-500" />
+            System Prompt
+            {data.systemPrompt && (
+              <span className="px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 text-[9px] font-semibold">
+                SET
+              </span>
+            )}
+          </span>
+          {showSystemPrompt
+            ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
+            : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+        </button>
 
-        {allInsertOptions.length > 0 && (
-          <div className="mt-2 space-y-1.5">
-            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
-              Insert input
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {allInsertOptions.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => insertAtCursor(opt.value)}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-mono font-medium bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 border border-brand-200 dark:border-brand-800 hover:bg-brand-100 dark:hover:bg-brand-900/40 hover:border-brand-300 dark:hover:border-brand-700 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-2.5 h-2.5" />
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+        {showSystemPrompt && (
+          <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 pt-3">
+            <PromptField
+              nodeId={nodeId}
+              fieldKey="systemPrompt"
+              value={data.systemPrompt || ""}
+              label=""
+              placeholder="Define the AI's role, personality, or analysis instructions..."
+              description="Persistent instructions sent as the system message. Defines how the AI should behave."
+              allInsertOptions={allInsertOptions}
+              accentColor="bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/40 hover:border-violet-300 dark:hover:border-violet-700"
+            />
           </div>
         )}
       </div>
+
+      {/* User Prompt */}
+      <PromptField
+        nodeId={nodeId}
+        fieldKey="prompt"
+        value={data.prompt}
+        label="User Prompt"
+        placeholder="Write your prompt and click inputs below to insert them..."
+        description="The main instruction sent as the user message. Use {{input}} to embed the previous step's output."
+        allInsertOptions={allInsertOptions}
+        accentColor="bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 border-brand-200 dark:border-brand-800 hover:bg-brand-100 dark:hover:bg-brand-900/40 hover:border-brand-300 dark:hover:border-brand-700"
+      />
 
       {/* File Attachments */}
       {(fileAttachOptions.length > 0 || currentFileBindings.length > 0) && (

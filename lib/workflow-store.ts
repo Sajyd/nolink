@@ -45,6 +45,7 @@ export interface StepNodeData {
   inputType: string;
   outputType: string;
   prompt: string;
+  systemPrompt?: string;
   order: number;
   acceptTypes?: string[];
   modelParams?: Record<string, unknown>;

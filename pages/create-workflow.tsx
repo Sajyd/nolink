@@ -117,6 +117,7 @@ export default function CreateWorkflow() {
           inputType: n.data.inputType || "TEXT",
           outputType: n.data.outputType || "TEXT",
           prompt: n.data.prompt || "",
+          systemPrompt: n.data.systemPrompt || "",
           modelParams: Object.keys(mergedParams).length > 0 ? mergedParams : null,
           customParams: validCustomParams.length > 0 ? validCustomParams : null,
           customFalEndpoint: isCustomFal ? (n.data.customFalEndpoint || null) : null,

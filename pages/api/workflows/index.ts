@@ -113,6 +113,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               inputType: step.inputType || "TEXT",
               outputType: step.outputType || "TEXT",
               prompt: step.prompt || "",
+              systemPrompt: step.systemPrompt || "",
               config: Object.keys(config).length > 0 ? config : undefined,
               params: step.modelParams || undefined,
               acceptTypes: step.acceptTypes || [],

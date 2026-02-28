@@ -64,6 +64,13 @@ function BasicNode({ id, data, selected }: NodeProps) {
         </span>
       </div>
 
+      {nodeData.systemPrompt && (
+        <div className="flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400">
+          <Cpu className="w-3 h-3" />
+          <span>System prompt set</span>
+        </div>
+      )}
+
       {(nodeData.customParams?.length ?? 0) > 0 && (
         <div className="flex items-center gap-1 text-[10px] text-teal-600 dark:text-teal-400">
           <Variable className="w-3 h-3" />

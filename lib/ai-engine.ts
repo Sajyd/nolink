@@ -37,6 +37,7 @@ export interface StepDefinition {
   inputType: string;
   outputType: string;
   prompt: string;
+  systemPrompt?: string;
   config?: Record<string, unknown> | null;
   params?: Record<string, unknown> | null;
   acceptTypes?: string[];
@@ -656,9 +657,16 @@ async function executeBasicStep(
   const model = getModelById(step.aiModel);
   if (!model) return { text: `[Unknown model: ${step.aiModel}] ${input.text.slice(0, 200)}`, files: [] };
 
-  const promptText = step.prompt
-    ? step.prompt.replace(/\{\{input\}\}/g, input.text)
+  const resolveInput = (text: string) =>
+    text.replace(/\{\{input\}\}/g, input.text);
+
+  const resolvedUserPrompt = step.prompt
+    ? resolveInput(step.prompt)
     : input.text;
+
+  const resolvedSystemPrompt = step.systemPrompt
+    ? resolveInput(step.systemPrompt)
+    : "";
 
   const params = (step.params || {}) as Record<string, unknown>;
 
@@ -667,7 +675,7 @@ async function executeBasicStep(
     const imageFiles = getFilesByType(input.files, "image");
     const documentFiles = getFilesByType(input.files, "document");
 
-    let augmentedPrompt = promptText;
+    let docSuffix = "";
     if (documentFiles.length > 0) {
       const docTexts = await Promise.all(
         documentFiles.map(async (f) => {
@@ -675,23 +683,26 @@ async function executeBasicStep(
           return `--- Document: ${f.name || f.url} ---\n${content}`;
         })
       );
-      augmentedPrompt = `${promptText}\n\n${docTexts.join("\n\n")}`;
+      docSuffix = "\n\n" + docTexts.join("\n\n");
     }
+
+    const systemMsg = resolvedSystemPrompt;
+    const userMsg = resolvedUserPrompt + docSuffix;
 
     let result: string | null = null;
 
     if (model.provider === "anthropic") {
-      result = await generateWithAnthropic(augmentedPrompt, input.text, params, step.aiModel, imageFiles);
+      result = await generateWithAnthropic(systemMsg, userMsg, params, step.aiModel, imageFiles);
     } else if (model.provider === "google") {
-      result = await generateWithGemini(augmentedPrompt, input.text, params, imageFiles);
+      result = await generateWithGemini(systemMsg, userMsg, params, imageFiles);
     } else if (model.provider === "xai") {
-      result = await generateWithXai(augmentedPrompt, input.text, params);
+      result = await generateWithXai(systemMsg, userMsg, params);
     }
 
     if (result === null) {
       result = await generateTextWithOpenAI(
-        augmentedPrompt,
-        input.text,
+        systemMsg,
+        userMsg,
         params,
         step.aiModel,
         imageFiles
@@ -708,7 +719,7 @@ async function executeBasicStep(
     if (step.aiModel === "gpt-image-1") {
       const response = await openai.images.generate({
         model: "gpt-image-1",
-        prompt: promptText,
+        prompt: resolvedUserPrompt,
         n: 1,
         size: ((params.size as string) || "1024x1024") as any,
       });
@@ -726,7 +737,7 @@ async function executeBasicStep(
 
     const response = await openai.images.generate({
       model: "dall-e-3",
-      prompt: promptText,
+      prompt: resolvedUserPrompt,
       n: 1,
       size: ((params.size as string) || "1024x1024") as any,
       quality: ((params.quality as string) || "standard") as any,
@@ -1124,6 +1135,10 @@ function applyCustomParamsToStep(
     ? resolveCustomParams(step.prompt, paramMap)
     : step.prompt;
 
+  const resolvedSystemPrompt = step.systemPrompt
+    ? resolveCustomParams(step.systemPrompt, paramMap)
+    : step.systemPrompt;
+
   let resolvedParams = step.params;
   if (step.params) {
     resolvedParams = { ...step.params };
@@ -1166,6 +1181,7 @@ function applyCustomParamsToStep(
   return {
     ...step,
     prompt: resolvedPrompt,
+    systemPrompt: resolvedSystemPrompt,
     params: resolvedParams,
     customFalParams: resolvedFalParams,
     customApiParams: resolvedApiParams,

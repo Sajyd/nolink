@@ -90,7 +90,8 @@ const NODE_TEMPLATES: {
       aiModel: "gpt-4o",
       inputType: "TEXT",
       outputType: "TEXT",
-      prompt: "Process the following input: {{input}}",
+      prompt: "{{input}}",
+      systemPrompt: "",
     },
   },
   {

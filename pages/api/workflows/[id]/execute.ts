@@ -111,6 +111,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       inputType: s.inputType,
       outputType: s.outputType,
       prompt: s.prompt,
+      systemPrompt: (s as any).systemPrompt || "",
       params: s.params as Record<string, unknown> | null,
       acceptTypes: s.acceptTypes,
       customParams: (config.customParams as StepCustomParam[] | undefined) || undefined,
@@ -211,6 +212,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const resolvedStep = { ...step };
     if (resolvedStep.prompt) resolvedStep.prompt = resolveCP(resolvedStep.prompt);
+    if (resolvedStep.systemPrompt) resolvedStep.systemPrompt = resolveCP(resolvedStep.systemPrompt);
     if (resolvedStep.params) {
       resolvedStep.params = { ...resolvedStep.params };
       for (const [k, v] of Object.entries(resolvedStep.params)) {

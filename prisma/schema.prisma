@@ -134,8 +134,9 @@ model Step {
   aiModel    String?
   inputType  IOType
   outputType IOType
-  prompt     String   @db.Text
-  config     Json?
+  prompt       String   @db.Text
+  systemPrompt String   @db.Text @default("")
+  config       Json?
   params     Json?
   acceptTypes String[]
   positionX  Float    @default(0)
