@@ -664,11 +664,17 @@ async function executeBasicStep(
     ? resolveInput(step.prompt)
     : input.text;
 
-  const resolvedSystemPrompt = step.systemPrompt
-    ? resolveInput(step.systemPrompt)
-    : "";
-
   const params = (step.params || {}) as Record<string, unknown>;
+
+  // System prompt: prefer the model parameter "prompt" (labeled "System Prompt"
+  // in the UI), fall back to the dedicated systemPrompt field.
+  const rawSystemPrompt =
+    (typeof params.prompt === "string" && params.prompt) ||
+    step.systemPrompt ||
+    "";
+  const resolvedSystemPrompt = rawSystemPrompt
+    ? resolveInput(rawSystemPrompt)
+    : "";
 
   // ── Text & Document models ──
   if (model.category === "text" || model.category === "document") {

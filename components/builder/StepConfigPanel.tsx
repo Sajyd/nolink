@@ -20,11 +20,11 @@ import {
   type ModelCategory,
 } from "@/lib/models";
 import { useSession } from "next-auth/react";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import {
   X, Sparkles, Settings2, Upload, Download, Plus, Trash2, Variable,
   Lock, Clock, Zap, Link2, Globe, Shield, AlertTriangle, SlidersHorizontal,
-  Paperclip, Image, FileText, Music, Film, ChevronDown, ChevronUp, Cpu,
+  Paperclip, Image, FileText, Music, Film,
 } from "lucide-react";
 
 const IO_TYPES = ["TEXT", "IMAGE", "AUDIO", "VIDEO", "DOCUMENT"];
@@ -334,7 +334,6 @@ function BasicNodeConfig({
   inputBindOptions: { value: string; label: string }[];
 }) {
   const { updateNodeData } = useWorkflowStore();
-  const [showSystemPrompt, setShowSystemPrompt] = useState(!!data.systemPrompt);
 
   const rawOptions = [
     { value: "{{input}}", label: "Previous step output" },
@@ -420,47 +419,6 @@ function BasicNodeConfig({
             </option>
           ))}
         </select>
-      </div>
-
-      {/* System Prompt (collapsible) */}
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <button
-          type="button"
-          onClick={() => {
-            const next = !showSystemPrompt;
-            setShowSystemPrompt(next);
-            if (!next) updateNodeData(nodeId, { systemPrompt: "" });
-          }}
-          className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-        >
-          <span className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
-            <Cpu className="w-3.5 h-3.5 text-violet-500" />
-            System Prompt
-            {data.systemPrompt && (
-              <span className="px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 text-[9px] font-semibold">
-                SET
-              </span>
-            )}
-          </span>
-          {showSystemPrompt
-            ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
-            : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
-        </button>
-
-        {showSystemPrompt && (
-          <div className="px-3 pb-3 border-t border-gray-200 dark:border-gray-700 pt-3">
-            <PromptField
-              nodeId={nodeId}
-              fieldKey="systemPrompt"
-              value={data.systemPrompt || ""}
-              label=""
-              placeholder="Define the AI's role, personality, or analysis instructions..."
-              description="Persistent instructions sent as the system message. Defines how the AI should behave."
-              allInsertOptions={allInsertOptions}
-              accentColor="bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/40 hover:border-violet-300 dark:hover:border-violet-700"
-            />
-          </div>
-        )}
       </div>
 
       {/* User Prompt */}
@@ -606,6 +564,18 @@ function ModelParamsEditor({
           );
         }
 
+        if (param.key === "prompt" && param.type === "textarea") {
+          return (
+            <PromptParamField
+              key={param.key}
+              param={param}
+              value={String(values[param.key] ?? param.default ?? "")}
+              onChange={(v: string) => setParam(param.key, v)}
+              inputBindOptions={inputBindOptions}
+            />
+          );
+        }
+
         const binding = bindings[param.key];
         const isBound = binding && binding !== "manual";
 
@@ -650,6 +620,93 @@ function ModelParamsEditor({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PromptParamField({
+  param,
+  value,
+  onChange,
+  inputBindOptions,
+}: {
+  param: ModelParam;
+  value: string;
+  onChange: (v: string) => void;
+  inputBindOptions: { value: string; label: string }[];
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  const rawOpts = [
+    { value: "{{input}}", label: "Previous step output" },
+    ...inputBindOptions.map((opt) => ({
+      value: opt.value.startsWith("{{") ? opt.value : `{{${opt.value}}}`,
+      label: opt.label,
+    })),
+  ];
+  const seen = new Set<string>();
+  const insertOptions = rawOpts.filter((o) => {
+    if (seen.has(o.value)) return false;
+    seen.add(o.value);
+    return true;
+  });
+
+  const insertAtCursor = (placeholder: string) => {
+    const ta = ref.current;
+    if (!ta) {
+      onChange((value || "") + placeholder);
+      return;
+    }
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const before = (value || "").slice(0, start);
+    const after = (value || "").slice(end);
+    onChange(before + placeholder + after);
+    requestAnimationFrame(() => {
+      ta.focus();
+      const pos = start + placeholder.length;
+      ta.setSelectionRange(pos, pos);
+    });
+  };
+
+  return (
+    <div className="space-y-1">
+      <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
+        {param.label}
+        {param.required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      <p className="text-[10px] text-gray-400">
+        Persistent instructions sent as the system message. Defines how the AI should behave.
+      </p>
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={4}
+        className="input-field text-sm font-mono"
+        placeholder="Define the AI's role, personality, or analysis instructions..."
+      />
+
+      {insertOptions.length > 0 && (
+        <div className="mt-2 space-y-1.5">
+          <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
+            Insert input
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {insertOptions.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => insertAtCursor(opt.value)}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-mono font-medium border transition-colors cursor-pointer bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/40 hover:border-violet-300 dark:hover:border-violet-700"
+              >
+                <Plus className="w-2.5 h-2.5" />
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
