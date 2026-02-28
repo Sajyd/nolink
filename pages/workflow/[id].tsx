@@ -1710,6 +1710,14 @@ function isUrl(str: string): boolean {
   );
 }
 
+function toDisplayUrl(url: string): string {
+  const s3Match = url.match(/\.s3[.\-].*amazonaws\.com\/(.+?)(\?|$)/);
+  if (s3Match && (s3Match[1].startsWith("results/") || s3Match[1].startsWith("uploads/"))) {
+    return `/api/media/${s3Match[1]}`;
+  }
+  return url;
+}
+
 function looksLikeImage(url: string): boolean {
   return /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url);
 }
@@ -1738,6 +1746,7 @@ function ResultDisplay({
   const [copied, setCopied] = useState(false);
   const outputIsUrl = isUrl(output.trim());
   const trimmedOutput = output.trim();
+  const displayUrl = toDisplayUrl(trimmedOutput);
 
   if (hasError) {
     return (
@@ -1764,14 +1773,14 @@ function ResultDisplay({
     return (
       <div className="space-y-2">
         <video
-          src={trimmedOutput}
+          src={displayUrl}
           controls
           className="rounded-lg max-h-[28rem] w-full bg-black"
         >
           Your browser does not support the video element.
         </video>
         <a
-          href={trimmedOutput}
+          href={displayUrl}
           download
           className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600 transition-colors"
         >
@@ -1789,13 +1798,13 @@ function ResultDisplay({
     return (
       <div className="space-y-2">
         <img
-          src={trimmedOutput}
+          src={displayUrl}
           alt={stepName}
           className="rounded-lg max-h-[28rem] object-contain bg-gray-50 dark:bg-gray-800"
         />
         <div className="flex items-center gap-2">
           <a
-            href={trimmedOutput}
+            href={displayUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600 transition-colors"
@@ -1804,7 +1813,7 @@ function ResultDisplay({
             Open full size
           </a>
           <a
-            href={trimmedOutput}
+            href={displayUrl}
             download
             className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600 transition-colors"
           >
@@ -1822,11 +1831,11 @@ function ResultDisplay({
   ) {
     return (
       <div className="space-y-2">
-        <audio src={trimmedOutput} controls className="w-full">
+        <audio src={displayUrl} controls className="w-full">
           Your browser does not support the audio element.
         </audio>
         <a
-          href={trimmedOutput}
+          href={displayUrl}
           download
           className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600 transition-colors"
         >
@@ -1840,7 +1849,7 @@ function ResultDisplay({
   if (outputType === "DOCUMENT" && outputIsUrl) {
     return (
       <a
-        href={trimmedOutput}
+        href={displayUrl}
         target="_blank"
         rel="noopener noreferrer"
         download

@@ -16,7 +16,7 @@ export default async function handler(
 
   const key = keyParts.join("/");
 
-  if (!key.startsWith("results/")) {
+  if (!key.startsWith("results/") && !key.startsWith("uploads/")) {
     return res.status(403).json({ error: "Forbidden" });
   }
 

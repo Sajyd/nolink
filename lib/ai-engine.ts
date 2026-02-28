@@ -93,6 +93,31 @@ function fileToBase64(fileUrl: string): string | null {
   return buffer.toString("base64");
 }
 
+async function resolveMediaUrl(fileUrl: string): Promise<string> {
+  if (isS3Url(fileUrl)) {
+    const key = extractS3Key(fileUrl);
+    if (key) {
+      const presigned = await presignS3Key(key);
+      if (presigned) return presigned;
+    }
+  }
+
+  const mediaKey = extractMediaS3Key(fileUrl);
+  if (mediaKey) {
+    const presigned = await presignS3Key(mediaKey);
+    if (presigned) return presigned;
+  }
+
+  if (fileUrl.startsWith("/uploads/")) {
+    const s3Key = fileUrl.slice(1);
+    const presigned = await presignS3Key(s3Key);
+    if (presigned) return presigned;
+    return resolveFileUrl(fileUrl);
+  }
+
+  return fileUrl;
+}
+
 function getFilesByType(files: FileInput[], type: string): FileInput[] {
   return files.filter((f) => f.type === type);
 }
@@ -160,47 +185,50 @@ async function uploadToFalStorage(
   return file_url;
 }
 
+function extractMediaS3Key(url: string): string | null {
+  const match = url.match(/\/api\/media\/(results\/.+)$/);
+  return match ? match[1] : null;
+}
+
+async function presignS3Key(key: string): Promise<string | null> {
+  const bucket = process.env.S3_BUCKET;
+  const accessKey = process.env.AWS_ACCESS_KEY_ID;
+  const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
+  if (!bucket || !accessKey || !secretKey) return null;
+
+  const s3 = new S3Client({
+    region: process.env.S3_REGION || "eu-west-1",
+    credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+  });
+  return getSignedUrl(
+    s3,
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { expiresIn: 3600 }
+  );
+}
+
 async function resolveFileUrlForFal(
   fileUrl: string,
   mimeType?: string
 ): Promise<string> {
-  // S3 URLs → presigned GET URL (valid 1 hour)
-  if (isS3Url(fileUrl)) {
-    const key = extractS3Key(fileUrl);
-    const bucket = process.env.S3_BUCKET;
-    const accessKey = process.env.AWS_ACCESS_KEY_ID;
-    const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
+  const resolved = await resolveMediaUrl(fileUrl);
+  if (resolved !== fileUrl) return resolved;
 
-    if (key && bucket && accessKey && secretKey) {
-      const s3 = new S3Client({
-        region: process.env.S3_REGION || "eu-west-1",
-        credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
-      });
-      return getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
-        { expiresIn: 3600 }
-      );
-    }
-  }
-
-  // Local /uploads/ files → upload to fal.ai storage
+  // Last resort for local files: upload bytes directly to fal.ai storage
   if (fileUrl.startsWith("/uploads/") && process.env.FAL_KEY) {
     const filePath = path.join(process.cwd(), "public", fileUrl);
     if (fs.existsSync(filePath)) {
-      const fileBuffer = fs.readFileSync(filePath);
-      const contentType = mimeType || "application/octet-stream";
-      const fileName = path.basename(fileUrl);
       try {
-        return await uploadToFalStorage(fileBuffer, contentType, fileName);
+        const fileBuffer = fs.readFileSync(filePath);
+        const contentType = mimeType || "application/octet-stream";
+        return await uploadToFalStorage(fileBuffer, contentType, path.basename(fileUrl));
       } catch (err) {
         console.error("Failed to upload to fal.ai storage:", err);
       }
     }
-    return resolveFileUrl(fileUrl);
   }
 
-  return fileUrl;
+  return resolved;
 }
 
 function ensureUploadsDir(): string {
@@ -293,8 +321,7 @@ async function persistMediaToS3(
       })
     );
 
-    const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-    return `${baseUrl}/api/media/${key}`;
+    return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
   } catch (err) {
     console.error("Failed to persist media to S3:", err);
     return null;
@@ -338,19 +365,11 @@ async function generateWithAnthropic(
   const contentParts: any[] = [];
 
   for (const img of imageFiles) {
-    const base64 = fileToBase64(img.url);
-    if (base64 && img.mimeType) {
-      contentParts.push({
-        type: "image",
-        source: { type: "base64", media_type: img.mimeType, data: base64 },
-      });
-    } else {
-      const resolvedUrl = resolveFileUrl(img.url);
-      contentParts.push({
-        type: "image",
-        source: { type: "url", url: resolvedUrl },
-      });
-    }
+    const url = await resolveMediaUrl(img.url);
+    contentParts.push({
+      type: "image",
+      source: { type: "url", url },
+    });
   }
 
   contentParts.push({ type: "text", text: userMessage });
@@ -397,6 +416,18 @@ async function generateWithGemini(
       parts.push({
         inline_data: { mime_type: img.mimeType, data: base64 },
       });
+    } else {
+      const url = await resolveMediaUrl(img.url);
+      try {
+        const resp = await fetch(url);
+        if (resp.ok) {
+          const buf = Buffer.from(await resp.arrayBuffer());
+          const mime = img.mimeType || resp.headers.get("content-type") || "image/png";
+          parts.push({
+            inline_data: { mime_type: mime, data: buf.toString("base64") },
+          });
+        }
+      } catch {}
     }
   }
 
@@ -468,18 +499,11 @@ async function generateTextWithOpenAI(
       { type: "text", text: userMessage || "Analyze this image." },
     ];
     for (const img of imageFiles) {
-      const base64 = fileToBase64(img.url);
-      if (base64 && img.mimeType) {
-        contentParts.push({
-          type: "image_url",
-          image_url: { url: `data:${img.mimeType};base64,${base64}` },
-        });
-      } else {
-        contentParts.push({
-          type: "image_url",
-          image_url: { url: resolveFileUrl(img.url) },
-        });
-      }
+      const url = await resolveMediaUrl(img.url);
+      contentParts.push({
+        type: "image_url",
+        image_url: { url },
+      });
     }
     messages.push({ role: "user", content: contentParts });
   } else {
@@ -522,8 +546,9 @@ async function executeWhisperStep(
     }
   }
 
-  if (audioFile.url.startsWith("http")) {
-    const resp = await fetch(audioFile.url);
+  if (audioFile.url.startsWith("http") || isS3Url(audioFile.url) || extractMediaS3Key(audioFile.url)) {
+    const resolved = await resolveMediaUrl(audioFile.url);
+    const resp = await fetch(resolved);
     const buffer = Buffer.from(await resp.arrayBuffer());
     const tmpPath = path.join(ensureUploadsDir(), `whisper-tmp-${Date.now()}.mp3`);
     fs.writeFileSync(tmpPath, buffer);
@@ -633,18 +658,73 @@ async function executeOutputStep(
   return input;
 }
 
+async function parsePdfBuffer(buffer: Buffer): Promise<string> {
+  try {
+    const pdfParse = (await import("pdf-parse")).default;
+    const data = await pdfParse(buffer);
+    return data.text || "[PDF contained no extractable text]";
+  } catch (err) {
+    return `[PDF parse error: ${err instanceof Error ? err.message : "unknown"}]`;
+  }
+}
+
 async function fetchDocumentText(fileUrl: string): Promise<string> {
   try {
-    const resolvedUrl = resolveFileUrl(fileUrl);
-    const resp = await fetch(resolvedUrl);
+    // Local files: read directly from disk (more reliable than HTTP self-fetch)
+    if (fileUrl.startsWith("/uploads/")) {
+      const filePath = path.join(process.cwd(), "public", fileUrl);
+      if (!fs.existsSync(filePath)) return `[File not found: ${fileUrl}]`;
+      const buffer = fs.readFileSync(filePath);
+      const ext = path.extname(fileUrl).toLowerCase();
+      if (ext === ".pdf") return parsePdfBuffer(buffer);
+      return buffer.toString("utf-8");
+    }
+
+    // S3 files: download via presigned URL if needed
+    let fetchUrl = fileUrl;
+    if (isS3Url(fileUrl)) {
+      const key = extractS3Key(fileUrl);
+      const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+      const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+      const bucket = process.env.S3_BUCKET;
+      if (key && accessKeyId && secretAccessKey && bucket) {
+        try {
+          const s3 = new S3Client({
+            region: process.env.S3_REGION || "eu-west-1",
+            credentials: { accessKeyId, secretAccessKey },
+          });
+          fetchUrl = await getSignedUrl(
+            s3,
+            new GetObjectCommand({ Bucket: bucket, Key: key }),
+            { expiresIn: 300 }
+          );
+        } catch {}
+      }
+    }
+
+    const resp = await fetch(fetchUrl);
     if (!resp.ok) return `[Could not fetch document: ${fileUrl}]`;
     const contentType = resp.headers.get("content-type") || "";
-    if (contentType.includes("text") || contentType.includes("json") || contentType.includes("xml")) {
+
+    if (contentType.includes("pdf") || fileUrl.toLowerCase().endsWith(".pdf")) {
+      const buffer = Buffer.from(await resp.arrayBuffer());
+      return parsePdfBuffer(buffer);
+    }
+
+    if (
+      contentType.includes("text") ||
+      contentType.includes("json") ||
+      contentType.includes("xml") ||
+      contentType.includes("csv") ||
+      contentType.includes("markdown")
+    ) {
       return await resp.text();
     }
-    return `[Document attached: ${fileUrl}]`;
-  } catch {
-    return `[Could not fetch document: ${fileUrl}]`;
+
+    // Fallback: try reading as text
+    return await resp.text();
+  } catch (err) {
+    return `[Could not read document: ${fileUrl}] ${err instanceof Error ? err.message : ""}`;
   }
 }
 
@@ -836,16 +916,16 @@ async function executeFalStep(
     resolvedParams.video_url = await resolveFileUrlForFal(videoFiles[0].url, videoFiles[0].mimeType);
   }
 
+  const needsResolution = (v: string) =>
+    isS3Url(v) || v.startsWith("/uploads/") || extractMediaS3Key(v) !== null;
+
   for (const [key, val] of Object.entries(resolvedParams)) {
-    if (
-      typeof val === "string" &&
-      (isS3Url(val) || val.startsWith("/uploads/"))
-    ) {
+    if (typeof val === "string" && needsResolution(val)) {
       resolvedParams[key] = await resolveFileUrlForFal(val);
     } else if (Array.isArray(val)) {
       resolvedParams[key] = await Promise.all(
         val.map((v) =>
-          typeof v === "string" && (isS3Url(v) || v.startsWith("/uploads/"))
+          typeof v === "string" && needsResolution(v)
             ? resolveFileUrlForFal(v)
             : v
         )
