@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -18,6 +18,7 @@ import {
   type EdgeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { Undo2, Redo2 } from "lucide-react";
 import BasicNode from "./StepNode";
 import InputNode from "./InputNode";
 import OutputNode from "./OutputNode";
@@ -34,6 +35,11 @@ function WorkflowCanvasInner() {
   const setNodes = useWorkflowStore((s) => s.setNodes);
   const setEdges = useWorkflowStore((s) => s.setEdges);
   const setSelectedNodeId = useWorkflowStore((s) => s.setSelectedNodeId);
+  const takeSnapshot = useWorkflowStore((s) => s.takeSnapshot);
+  const undo = useWorkflowStore((s) => s.undo);
+  const redo = useWorkflowStore((s) => s.redo);
+  const canUndo = useWorkflowStore((s) => s._past.length > 0);
+  const canRedo = useWorkflowStore((s) => s._future.length > 0);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
 
@@ -59,25 +65,36 @@ function WorkflowCanvasInner() {
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => {
+      if (changes.some((c) => c.type === "remove")) {
+        takeSnapshot();
+      }
       setNodes(applyNodeChanges(changes, nodes) as Node<StepNodeData>[]);
     },
-    [nodes, setNodes]
+    [nodes, setNodes, takeSnapshot]
   );
 
   const onEdgesChange: OnEdgesChange = useCallback(
     (changes) => {
+      if (changes.some((c) => c.type === "remove")) {
+        takeSnapshot();
+      }
       setEdges(applyEdgeChanges(changes, edges));
     },
-    [edges, setEdges]
+    [edges, setEdges, takeSnapshot]
   );
 
   const onConnect: OnConnect = useCallback(
     (params) => {
+      takeSnapshot();
       setEdges(addEdge({ ...params, animated: true }, edges));
       playConnect();
     },
-    [edges, setEdges]
+    [edges, setEdges, takeSnapshot]
   );
+
+  const onNodeDragStart = useCallback(() => {
+    takeSnapshot();
+  }, [takeSnapshot]);
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -93,7 +110,7 @@ function WorkflowCanvasInner() {
   }, [setSelectedNodeId]);
 
   const onPaneContextMenu = useCallback(
-    (event: React.MouseEvent) => {
+    (event: React.MouseEvent | MouseEvent) => {
       event.preventDefault();
       const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
       setContextMenu({
@@ -116,6 +133,35 @@ function WorkflowCanvasInner() {
     },
     []
   );
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (
+        (isMod && e.key === "z" && e.shiftKey) ||
+        (isMod && e.key === "y")
+      ) {
+        e.preventDefault();
+        redo();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo]);
 
   const toggleFullscreen = useCallback(() => {
     if (!wrapperRef.current) return;
@@ -146,6 +192,7 @@ function WorkflowCanvasInner() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeDragStart={onNodeDragStart}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         onPaneContextMenu={onPaneContextMenu}
@@ -167,6 +214,28 @@ function WorkflowCanvasInner() {
           maskColor="rgba(0,0,0,0.1)"
         />
       </ReactFlow>
+
+      {/* Undo / Redo toolbar */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg px-1.5 py-1 z-10">
+        <button
+          onClick={undo}
+          disabled={!canUndo}
+          title="Undo (⌘Z)"
+          className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          <Undo2 className="w-4 h-4" />
+        </button>
+        <div className="w-px h-5 bg-gray-200 dark:bg-gray-700" />
+        <button
+          onClick={redo}
+          disabled={!canRedo}
+          title="Redo (⌘⇧Z)"
+          className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          <Redo2 className="w-4 h-4" />
+        </button>
+      </div>
+
       <CanvasContextMenu
         menu={contextMenu}
         onClose={() => setContextMenu(null)}

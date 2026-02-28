@@ -332,7 +332,7 @@ export default function CanvasContextMenu({
   return (
     <div
       ref={ref}
-      className="fixed z-50 min-w-[200px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-100"
+      className="fixed z-50 min-w-[200px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl p-1.5 animate-ctx-menu-in"
       style={{ left: menu.position.x, top: menu.position.y }}
     >
       {menu.kind === "pane" && (

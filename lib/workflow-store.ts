@@ -62,6 +62,13 @@ export interface StepNodeData {
   [key: string]: unknown;
 }
 
+interface CanvasSnapshot {
+  nodes: Node<StepNodeData>[];
+  edges: Edge[];
+}
+
+const MAX_HISTORY = 50;
+
 interface WorkflowStore {
   nodes: Node<StepNodeData>[];
   edges: Edge[];
@@ -74,6 +81,9 @@ interface WorkflowStore {
   exampleInput: string;
   exampleOutput: string;
   editingWorkflowId: string | null;
+
+  _past: CanvasSnapshot[];
+  _future: CanvasSnapshot[];
 
   setNodes: (nodes: Node<StepNodeData>[]) => void;
   setEdges: (edges: Edge[]) => void;
@@ -89,6 +99,9 @@ interface WorkflowStore {
   setExampleInput: (input: string) => void;
   setExampleOutput: (output: string) => void;
   setEditingWorkflowId: (id: string | null) => void;
+  takeSnapshot: () => void;
+  undo: () => void;
+  redo: () => void;
   reset: () => void;
 }
 
@@ -104,28 +117,73 @@ const INITIAL_STATE = {
   exampleInput: "",
   exampleOutput: "",
   editingWorkflowId: null as string | null,
+  _past: [] as CanvasSnapshot[],
+  _future: [] as CanvasSnapshot[],
 };
 
 export const useWorkflowStore = create<WorkflowStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...INITIAL_STATE,
+
+      takeSnapshot: () => {
+        const { nodes, edges, _past } = get();
+        set({
+          _past: [..._past.slice(-(MAX_HISTORY - 1)), { nodes, edges }],
+          _future: [],
+        });
+      },
+
+      undo: () => {
+        const { _past, _future, nodes, edges } = get();
+        if (_past.length === 0) return;
+        const previous = _past[_past.length - 1];
+        set({
+          _past: _past.slice(0, -1),
+          _future: [{ nodes, edges }, ..._future],
+          nodes: previous.nodes,
+          edges: previous.edges,
+        });
+      },
+
+      redo: () => {
+        const { _past, _future, nodes, edges } = get();
+        if (_future.length === 0) return;
+        const next = _future[0];
+        set({
+          _past: [..._past, { nodes, edges }],
+          _future: _future.slice(1),
+          nodes: next.nodes,
+          edges: next.edges,
+        });
+      },
 
       setNodes: (nodes) => set({ nodes }),
       setEdges: (edges) => set({ edges }),
-      addNode: (node) => set((s) => ({ nodes: [...s.nodes, node] })),
+      addNode: (node) => {
+        const { nodes, edges, _past } = get();
+        set({
+          _past: [..._past.slice(-(MAX_HISTORY - 1)), { nodes, edges }],
+          _future: [],
+          nodes: [...nodes, node],
+        });
+      },
       updateNodeData: (nodeId, data) =>
         set((s) => ({
           nodes: s.nodes.map((n) =>
             n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n
           ),
         })),
-      removeNode: (nodeId) =>
-        set((s) => ({
-          nodes: s.nodes.filter((n) => n.id !== nodeId),
-          edges: s.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
-          selectedNodeId: s.selectedNodeId === nodeId ? null : s.selectedNodeId,
-        })),
+      removeNode: (nodeId) => {
+        const { nodes, edges, selectedNodeId, _past } = get();
+        set({
+          _past: [..._past.slice(-(MAX_HISTORY - 1)), { nodes, edges }],
+          _future: [],
+          nodes: nodes.filter((n) => n.id !== nodeId),
+          edges: edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
+          selectedNodeId: selectedNodeId === nodeId ? null : selectedNodeId,
+        });
+      },
       setSelectedNodeId: (id) => set({ selectedNodeId: id }),
       setWorkflowName: (name) => set({ workflowName: name }),
       setWorkflowDescription: (desc) => set({ workflowDescription: desc }),

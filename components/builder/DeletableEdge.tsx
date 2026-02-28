@@ -6,6 +6,7 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import { X } from "lucide-react";
+import { useWorkflowStore } from "@/lib/workflow-store";
 
 export default function DeletableEdge({
   id,
@@ -19,6 +20,7 @@ export default function DeletableEdge({
   markerEnd,
 }: EdgeProps) {
   const { setEdges } = useReactFlow();
+  const takeSnapshot = useWorkflowStore((s) => s.takeSnapshot);
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -41,9 +43,10 @@ export default function DeletableEdge({
           className="nodrag nopan"
         >
           <button
-            onClick={() =>
-              setEdges((edges) => edges.filter((e) => e.id !== id))
-            }
+            onClick={() => {
+              takeSnapshot();
+              setEdges((edges) => edges.filter((e) => e.id !== id));
+            }}
             className="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-500 hover:bg-red-500 hover:border-red-500 hover:text-white transition-colors opacity-0 hover:opacity-100 group-hover:opacity-100"
             style={{ opacity: undefined }}
             title="Remove connection"
