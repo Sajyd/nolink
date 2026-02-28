@@ -105,6 +105,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             if (step.fileBindings && step.fileBindings.length > 0) config.fileBindings = step.fileBindings;
             if (step.inputParameters && step.inputParameters.length > 0) config.inputParameters = step.inputParameters;
             return {
+              ...(step.nodeId && { id: step.nodeId }),
               order: step.order,
               name: step.name || `Step ${step.order}`,
               stepType: step.stepType || "BASIC",

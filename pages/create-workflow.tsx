@@ -109,6 +109,7 @@ export default function CreateWorkflow() {
         );
         const isCustomApi = n.type === "customApiNode";
         return {
+          nodeId: n.id,
           order: n.data.order,
           name: n.data.label,
           stepType: stepTypeMap[n.type || "basicNode"] || "BASIC",
