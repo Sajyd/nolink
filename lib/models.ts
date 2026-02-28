@@ -1,4 +1,4 @@
-export type ModelCategory = "text" | "image" | "video" | "audio" | "document";
+export type ModelCategory = "text" | "image" | "video" | "audio";
 export type ModelProvider = "openai" | "anthropic" | "google" | "xai" | "meta" | "fal" | "elevenlabs" | "stability";
 
 export interface ModelParam {
@@ -39,7 +39,7 @@ export const TEXT_MODELS: AIModel[] = [
     provider: "openai",
     category: "text",
     costPerUse: 8,
-    description: "OpenAI's most capable reasoning model",
+    description: "Best model for coding and agentic tasks, accepts files",
     params: [
       { key: "prompt", label: "System Prompt", type: "textarea", required: true, bindable: true },
       { key: "max_tokens", label: "Max Tokens", type: "number", default: 4096, min: 1, max: 32000 },
@@ -47,12 +47,38 @@ export const TEXT_MODELS: AIModel[] = [
     ],
   },
   {
-    id: "gpt-4o",
-    name: "GPT-4o",
+    id: "gpt-5.2-pro",
+    name: "GPT-5.2 Pro",
     provider: "openai",
     category: "text",
-    costPerUse: 5,
-    description: "Fast multimodal model with vision and text",
+    costPerUse: 12,
+    description: "Smarter and more precise responses, accepts files",
+    params: [
+      { key: "prompt", label: "System Prompt", type: "textarea", required: true, bindable: true },
+      { key: "max_tokens", label: "Max Tokens", type: "number", default: 4096, min: 1, max: 32000 },
+      { key: "temperature", label: "Temperature", type: "number", default: 0.7, min: 0, max: 2 },
+    ],
+  },
+  {
+    id: "gpt-5",
+    name: "GPT-5",
+    provider: "openai",
+    category: "text",
+    costPerUse: 6,
+    description: "Intelligent reasoning model for coding and agentic tasks",
+    params: [
+      { key: "prompt", label: "System Prompt", type: "textarea", required: true, bindable: true },
+      { key: "max_tokens", label: "Max Tokens", type: "number", default: 4096, min: 1, max: 32000 },
+      { key: "temperature", label: "Temperature", type: "number", default: 0.7, min: 0, max: 2 },
+    ],
+  },
+  {
+    id: "gpt-5-mini",
+    name: "GPT-5 Mini",
+    provider: "openai",
+    category: "text",
+    costPerUse: 3,
+    description: "Faster, cost-efficient for well-defined tasks",
     params: [
       { key: "prompt", label: "System Prompt", type: "textarea", required: true, bindable: true },
       { key: "max_tokens", label: "Max Tokens", type: "number", default: 4096, min: 1, max: 16000 },
@@ -60,15 +86,28 @@ export const TEXT_MODELS: AIModel[] = [
     ],
   },
   {
-    id: "gpt-4o-mini",
-    name: "GPT-4o Mini",
+    id: "gpt-5-nano",
+    name: "GPT-5 Nano",
     provider: "openai",
     category: "text",
     costPerUse: 1,
-    description: "Fast and affordable for simple tasks",
+    description: "Fastest, most cost-efficient GPT-5 variant",
     params: [
       { key: "prompt", label: "System Prompt", type: "textarea", required: true, bindable: true },
       { key: "max_tokens", label: "Max Tokens", type: "number", default: 4096, min: 1, max: 16000 },
+      { key: "temperature", label: "Temperature", type: "number", default: 0.7, min: 0, max: 2 },
+    ],
+  },
+  {
+    id: "gpt-4.1",
+    name: "GPT-4.1",
+    provider: "openai",
+    category: "text",
+    costPerUse: 4,
+    description: "Smartest non-reasoning model",
+    params: [
+      { key: "prompt", label: "System Prompt", type: "textarea", required: true, bindable: true },
+      { key: "max_tokens", label: "Max Tokens", type: "number", default: 4096, min: 1, max: 32000 },
       { key: "temperature", label: "Temperature", type: "number", default: 0.7, min: 0, max: 2 },
     ],
   },
@@ -1010,35 +1049,6 @@ export const AUDIO_MODELS: AIModel[] = [
   },
 ];
 
-// ─── Document Models ───────────────────────────────────────────
-
-export const DOCUMENT_MODELS: AIModel[] = [
-  {
-    id: "gpt-5.2-doc",
-    name: "GPT-5.2 Document",
-    provider: "openai",
-    category: "document",
-    costPerUse: 8,
-    description: "Analyze documents, extract info, generate reports",
-    params: [
-      { key: "prompt", label: "Analysis Prompt", type: "textarea", required: true, bindable: true },
-      { key: "max_tokens", label: "Max Tokens", type: "number", default: 4096, min: 1, max: 32000 },
-    ],
-  },
-  {
-    id: "gemini-3-doc",
-    name: "Gemini 3 Document",
-    provider: "google",
-    category: "document",
-    costPerUse: 6,
-    description: "Google's multimodal document understanding",
-    params: [
-      { key: "prompt", label: "Analysis Prompt", type: "textarea", required: true, bindable: true },
-      { key: "max_tokens", label: "Max Tokens", type: "number", default: 4096, min: 1, max: 32000 },
-    ],
-  },
-];
-
 // ─── All Models ────────────────────────────────────────────────
 
 export const ALL_MODELS: AIModel[] = [
@@ -1047,7 +1057,6 @@ export const ALL_MODELS: AIModel[] = [
   ...FAL_IMAGE_MODELS,
   ...FAL_VIDEO_MODELS,
   ...AUDIO_MODELS,
-  ...DOCUMENT_MODELS,
   CUSTOM_FAL_MODEL,
 ];
 

@@ -17,7 +17,6 @@ import {
   getModelsByCategory,
   INPUT_ACCEPT_TYPES,
   type ModelParam,
-  type ModelCategory,
 } from "@/lib/models";
 import { useSession } from "next-auth/react";
 import { useRef } from "react";

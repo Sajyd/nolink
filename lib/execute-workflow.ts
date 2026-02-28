@@ -16,7 +16,7 @@ export async function runStep(
 
   if (isTextModel && openai) {
     try {
-      const model = step.aiModel.startsWith("gpt-4") ? "gpt-4o-mini" : "gpt-3.5-turbo";
+      const model = step.aiModel.startsWith("gpt-") ? "gpt-5-nano" : "gpt-5-nano";
       const completion = await openai.chat.completions.create({
         model,
         messages: [

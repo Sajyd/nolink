@@ -100,7 +100,7 @@ async function main() {
             order: 2,
             name: "Write Blog Post",
             stepType: "BASIC",
-            aiModel: "gpt-4o",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -113,7 +113,7 @@ async function main() {
             order: 3,
             name: "Generate Social Captions",
             stepType: "BASIC",
-            aiModel: "gpt-4o-mini",
+            aiModel: "gpt-5-nano",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -239,7 +239,7 @@ async function main() {
             order: 3,
             name: "Summarize & Extract",
             stepType: "BASIC",
-            aiModel: "gpt-4o",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -307,7 +307,7 @@ async function main() {
             order: 3,
             name: "Write Marketing Copy",
             stepType: "BASIC",
-            aiModel: "gpt-4o",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -375,7 +375,7 @@ async function main() {
             order: 3,
             name: "Generate Docs",
             stepType: "BASIC",
-            aiModel: "gpt-4o-mini",
+            aiModel: "gpt-5-nano",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -430,7 +430,7 @@ async function main() {
             order: 2,
             name: "Extract & Parse",
             stepType: "BASIC",
-            aiModel: "gpt-5.2-doc",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -443,7 +443,7 @@ async function main() {
             order: 3,
             name: "Generate Executive Report",
             stepType: "BASIC",
-            aiModel: "gpt-4o",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -573,7 +573,7 @@ async function main() {
             order: 2,
             name: "Polish Script",
             stepType: "BASIC",
-            aiModel: "gpt-4o-mini",
+            aiModel: "gpt-5-nano",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -640,7 +640,7 @@ async function main() {
             order: 2,
             name: "Brand Concept",
             stepType: "BASIC",
-            aiModel: "gpt-4o",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -726,7 +726,7 @@ async function main() {
             order: 3,
             name: "Generate Quiz",
             stepType: "BASIC",
-            aiModel: "gpt-4o-mini",
+            aiModel: "gpt-5-nano",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -781,7 +781,7 @@ async function main() {
             order: 2,
             name: "Extract Key Insights",
             stepType: "BASIC",
-            aiModel: "gpt-4o",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -849,7 +849,7 @@ async function main() {
             order: 2,
             name: "Research Hook Angles",
             stepType: "BASIC",
-            aiModel: "gpt-4o",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -917,7 +917,7 @@ async function main() {
             order: 2,
             name: "Analyze & Match",
             stepType: "BASIC",
-            aiModel: "gpt-4o",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -985,7 +985,7 @@ async function main() {
             order: 2,
             name: "Research & Strategy",
             stepType: "BASIC",
-            aiModel: "gpt-4o",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -1053,7 +1053,7 @@ async function main() {
             order: 2,
             name: "Deep Summarize",
             stepType: "BASIC",
-            aiModel: "gpt-5.2-doc",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -1066,7 +1066,7 @@ async function main() {
             order: 3,
             name: "Build Checklist",
             stepType: "BASIC",
-            aiModel: "gpt-4o",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -1133,7 +1133,7 @@ async function main() {
             order: 3,
             name: "Structure Minutes",
             stepType: "BASIC",
-            aiModel: "gpt-4o",
+            aiModel: "gpt-5.2",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:
@@ -1146,7 +1146,7 @@ async function main() {
             order: 4,
             name: "Polish & Format",
             stepType: "BASIC",
-            aiModel: "gpt-4o-mini",
+            aiModel: "gpt-5-nano",
             inputType: "TEXT",
             outputType: "TEXT",
             prompt:

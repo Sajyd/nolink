@@ -94,32 +94,74 @@ function fileToBase64(fileUrl: string): string | null {
 }
 
 async function resolveMediaUrl(fileUrl: string): Promise<string> {
+  console.log(`[media] resolveMediaUrl input: ${fileUrl.slice(0, 120)}`);
+
   if (isS3Url(fileUrl)) {
-    const key = extractS3Key(fileUrl);
+    const parsed = parseS3Url(fileUrl);
+    const key = parsed?.key || extractS3Key(fileUrl);
+    console.log(`[media] S3 URL detected, bucket=${parsed?.bucket}, region=${parsed?.region}, key=${key}`);
     if (key) {
-      const presigned = await presignS3Key(key);
-      if (presigned) return presigned;
+      try {
+        const presigned = await presignS3Key(key, parsed?.bucket, parsed?.region);
+        if (presigned) {
+          console.log(`[media] Presigned OK (${presigned.slice(0, 80)}...)`);
+          return presigned;
+        }
+        console.warn(`[media] presignS3Key returned null for key: ${key}`);
+      } catch (err) {
+        console.error(`[media] presignS3Key failed for key ${key}:`, err);
+      }
     }
   }
 
   const mediaKey = extractMediaS3Key(fileUrl);
   if (mediaKey) {
-    const presigned = await presignS3Key(mediaKey);
-    if (presigned) return presigned;
+    console.log(`[media] /api/media URL detected, S3 key: ${mediaKey}`);
+    try {
+      const presigned = await presignS3Key(mediaKey);
+      if (presigned) {
+        console.log(`[media] Presigned OK`);
+        return presigned;
+      }
+      console.warn(`[media] presignS3Key returned null for media key: ${mediaKey}`);
+    } catch (err) {
+      console.error(`[media] presignS3Key failed for media key ${mediaKey}:`, err);
+    }
   }
 
   if (fileUrl.startsWith("/uploads/")) {
     const s3Key = fileUrl.slice(1);
-    const presigned = await presignS3Key(s3Key);
-    if (presigned) return presigned;
+    console.log(`[media] Local path, trying S3 key: ${s3Key}`);
+    try {
+      const presigned = await presignS3Key(s3Key);
+      if (presigned) {
+        console.log(`[media] Presigned OK`);
+        return presigned;
+      }
+      console.warn(`[media] presignS3Key returned null for local key: ${s3Key}`);
+    } catch (err) {
+      console.error(`[media] presignS3Key failed for local key ${s3Key}:`, err);
+    }
     return resolveFileUrl(fileUrl);
   }
 
+  console.log(`[media] URL not resolved, returning as-is: ${fileUrl.slice(0, 120)}`);
   return fileUrl;
 }
 
 function getFilesByType(files: FileInput[], type: string): FileInput[] {
   return files.filter((f) => f.type === type);
+}
+
+async function buildDocSuffix(documentFiles: FileInput[]): Promise<string> {
+  if (documentFiles.length === 0) return "";
+  const docTexts = await Promise.all(
+    documentFiles.map(async (f) => {
+      const content = await fetchDocumentText(f.url);
+      return `--- Document: ${f.name || f.url} ---\n${content}`;
+    })
+  );
+  return "\n\n" + docTexts.join("\n\n");
 }
 
 // ── fal.ai file URL resolution ──────────────────────────────────
@@ -135,6 +177,24 @@ function extractS3Key(url: string): string | null {
   try {
     const parsed = new URL(url);
     return decodeURIComponent(parsed.pathname.slice(1));
+  } catch {
+    return null;
+  }
+}
+
+function parseS3Url(url: string): { bucket: string; region: string; key: string } | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname;
+    const m = host.match(/^(.+)\.s3[.\-]([a-z0-9-]+)\.amazonaws\.com$/);
+    if (m) {
+      return {
+        bucket: m[1],
+        region: m[2],
+        key: decodeURIComponent(parsed.pathname.slice(1)),
+      };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -190,21 +250,36 @@ function extractMediaS3Key(url: string): string | null {
   return match ? match[1] : null;
 }
 
-async function presignS3Key(key: string): Promise<string | null> {
-  const bucket = process.env.S3_BUCKET;
+async function presignS3Key(
+  key: string,
+  overrideBucket?: string,
+  overrideRegion?: string
+): Promise<string | null> {
+  const bucket = overrideBucket || process.env.S3_BUCKET;
   const accessKey = process.env.AWS_ACCESS_KEY_ID;
   const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
-  if (!bucket || !accessKey || !secretKey) return null;
+  if (!bucket || !accessKey || !secretKey) {
+    console.warn(`[media] presignS3Key: missing S3 config (bucket=${!!bucket}, key=${!!accessKey}, secret=${!!secretKey})`);
+    return null;
+  }
 
-  const s3 = new S3Client({
-    region: process.env.S3_REGION || "eu-west-1",
-    credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
-  });
-  return getSignedUrl(
-    s3,
-    new GetObjectCommand({ Bucket: bucket, Key: key }),
-    { expiresIn: 3600 }
-  );
+  try {
+    const region = overrideRegion || process.env.S3_REGION || "eu-west-1";
+    console.log(`[media] presignS3Key: bucket=${bucket}, region=${region}, key=${key.slice(0, 60)}`);
+    const s3 = new S3Client({
+      region,
+      credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+    });
+    const url = await getSignedUrl(
+      s3,
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+      { expiresIn: 3600 }
+    );
+    return url;
+  } catch (err) {
+    console.error(`[media] presignS3Key error for bucket=${bucket} region=${overrideRegion || process.env.S3_REGION} key=${key}:`, err);
+    return null;
+  }
 }
 
 async function resolveFileUrlForFal(
@@ -212,7 +287,10 @@ async function resolveFileUrlForFal(
   mimeType?: string
 ): Promise<string> {
   const resolved = await resolveMediaUrl(fileUrl);
-  if (resolved !== fileUrl) return resolved;
+  if (resolved !== fileUrl) {
+    console.log(`[fal] resolveFileUrlForFal: resolved via S3 presign`);
+    return resolved;
+  }
 
   // Last resort for local files: upload bytes directly to fal.ai storage
   if (fileUrl.startsWith("/uploads/") && process.env.FAL_KEY) {
@@ -221,13 +299,19 @@ async function resolveFileUrlForFal(
       try {
         const fileBuffer = fs.readFileSync(filePath);
         const contentType = mimeType || "application/octet-stream";
-        return await uploadToFalStorage(fileBuffer, contentType, path.basename(fileUrl));
+        console.log(`[fal] Uploading local file to fal storage: ${filePath} (${fileBuffer.length} bytes)`);
+        const falUrl = await uploadToFalStorage(fileBuffer, contentType, path.basename(fileUrl));
+        console.log(`[fal] Uploaded to fal storage: ${falUrl.slice(0, 100)}`);
+        return falUrl;
       } catch (err) {
-        console.error("Failed to upload to fal.ai storage:", err);
+        console.error("[fal] Failed to upload to fal.ai storage:", err);
       }
+    } else {
+      console.warn(`[fal] Local file not found: ${filePath}`);
     }
   }
 
+  console.warn(`[fal] resolveFileUrlForFal: could not resolve, returning: ${resolved.slice(0, 120)}`);
   return resolved;
 }
 
@@ -329,20 +413,23 @@ async function persistMediaToS3(
 }
 
 const OPENAI_MODEL_MAP: Record<string, string> = {
-  "gpt-5.2": "gpt-4o",
-  "gpt-4o": "gpt-4o",
-  "gpt-4o-mini": "gpt-4o-mini",
-  "gpt-5.2-doc": "gpt-4o",
-  "gemini-3-doc": "gpt-4o",
-  "claude-4-opus": "gpt-4o",
-  "claude-4-sonnet": "gpt-4o",
-  "gemini-3": "gpt-4o",
-  "grok-3": "gpt-4o",
-  "llama-4": "gpt-4o-mini",
+  "gpt-5.2": "gpt-5.2",
+  "gpt-5.2-pro": "gpt-5.2-pro",
+  "gpt-5": "gpt-5",
+  "gpt-5-mini": "gpt-5-mini",
+  "gpt-5-nano": "gpt-5-nano",
+  "gpt-4.1": "gpt-4.1",
+  "gpt-4o": "gpt-4.1",
+  "gpt-4o-mini": "gpt-5-nano",
+  "llama-4": "gpt-5-nano",
 };
 
-function resolveOpenAIFallbackModel(modelId: string): string {
-  return OPENAI_MODEL_MAP[modelId] || "gpt-4o";
+function resolveOpenAIModel(modelId: string): string {
+  return OPENAI_MODEL_MAP[modelId] || "gpt-5.2";
+}
+
+function isOpenAIModel(modelId: string): boolean {
+  return modelId in OPENAI_MODEL_MAP;
 }
 
 // ── Provider-specific text generation ───────────────────────────
@@ -359,7 +446,7 @@ async function generateWithAnthropic(
 
   const claudeModel =
     modelId === "claude-4-opus"
-      ? "claude-sonnet-4-20250514"
+      ? "claude-opus-4-20250514"
       : "claude-sonnet-4-20250514";
 
   const contentParts: any[] = [];
@@ -434,7 +521,7 @@ async function generateWithGemini(
   parts.push({ text: userMessage });
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${key}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -485,39 +572,60 @@ async function generateTextWithOpenAI(
   userMessage: string,
   params: Record<string, unknown>,
   modelId: string,
-  imageFiles: FileInput[]
+  imageFiles: FileInput[] = [],
+  documentFiles: FileInput[] = []
 ): Promise<string> {
   const openai = getOpenAI();
-  const apiModel = resolveOpenAIFallbackModel(modelId);
+  const apiModel = resolveOpenAIModel(modelId);
 
-  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: systemPrompt },
-  ];
+  const userContent: any[] = [];
 
-  if (imageFiles.length > 0) {
-    const contentParts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
-      { type: "text", text: userMessage || "Analyze this image." },
-    ];
-    for (const img of imageFiles) {
-      const url = await resolveMediaUrl(img.url);
-      contentParts.push({
-        type: "image_url",
-        image_url: { url },
-      });
-    }
-    messages.push({ role: "user", content: contentParts });
-  } else {
-    messages.push({ role: "user", content: userMessage });
+  if (userMessage) {
+    userContent.push({ type: "input_text", text: userMessage });
   }
 
-  const response = await openai.chat.completions.create({
+  for (const img of imageFiles) {
+    const url = await resolveMediaUrl(img.url);
+    console.log(`[openai] Adding image input: ${url.slice(0, 120)}`);
+    userContent.push({ type: "input_image", image_url: url });
+  }
+
+  for (const doc of documentFiles) {
+    const url = await resolveMediaUrl(doc.url);
+    console.log(`[openai] Adding file input: ${url.slice(0, 120)}`);
+    userContent.push({
+      type: "input_file",
+      file_url: url,
+      ...(doc.name ? { filename: doc.name } : {}),
+    });
+  }
+
+  if (userContent.length === 0) {
+    userContent.push({ type: "input_text", text: "Analyze the provided content." });
+  }
+
+  const input: any[] = [];
+
+  if (systemPrompt) {
+    input.push({
+      role: "developer",
+      content: [{ type: "input_text", text: systemPrompt }],
+    });
+  }
+
+  input.push({ role: "user", content: userContent });
+
+  console.log(`[openai] Calling Responses API – model: ${apiModel}, content parts: ${userContent.length}`);
+
+  const response = await openai.responses.create({
     model: apiModel,
-    messages,
-    max_tokens: (params.max_tokens as number) || 4096,
-    temperature: (params.temperature as number) || 0.7,
+    input,
+    ...(params.temperature != null ? { temperature: params.temperature as number } : {}),
   });
 
-  return response.choices[0]?.message?.content || "";
+  const text = response.output_text || "";
+  console.log(`[openai] Response received – ${text.length} chars`);
+  return text;
 }
 
 // ── Audio executors ─────────────────────────────────────────────
@@ -660,51 +768,47 @@ async function executeOutputStep(
 
 async function parsePdfBuffer(buffer: Buffer): Promise<string> {
   try {
+    console.log(`[doc] Parsing PDF buffer (${buffer.length} bytes)`);
     const pdfParse = (await import("pdf-parse")).default;
     const data = await pdfParse(buffer);
-    return data.text || "[PDF contained no extractable text]";
+    const text = data.text || "";
+    console.log(`[doc] PDF parsed: ${data.numpages} pages, ${text.length} chars extracted`);
+    if (!text) return "[PDF contained no extractable text]";
+    return text;
   } catch (err) {
+    console.error("[doc] PDF parse failed:", err);
     return `[PDF parse error: ${err instanceof Error ? err.message : "unknown"}]`;
   }
 }
 
 async function fetchDocumentText(fileUrl: string): Promise<string> {
+  console.log(`[doc] fetchDocumentText called with: ${fileUrl}`);
   try {
     // Local files: read directly from disk (more reliable than HTTP self-fetch)
     if (fileUrl.startsWith("/uploads/")) {
       const filePath = path.join(process.cwd(), "public", fileUrl);
-      if (!fs.existsSync(filePath)) return `[File not found: ${fileUrl}]`;
+      if (!fs.existsSync(filePath)) {
+        console.log(`[doc] Local file not found: ${filePath}`);
+        return `[File not found: ${fileUrl}]`;
+      }
       const buffer = fs.readFileSync(filePath);
+      console.log(`[doc] Local file read: ${buffer.length} bytes`);
       const ext = path.extname(fileUrl).toLowerCase();
       if (ext === ".pdf") return parsePdfBuffer(buffer);
       return buffer.toString("utf-8");
     }
 
-    // S3 files: download via presigned URL if needed
-    let fetchUrl = fileUrl;
-    if (isS3Url(fileUrl)) {
-      const key = extractS3Key(fileUrl);
-      const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-      const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-      const bucket = process.env.S3_BUCKET;
-      if (key && accessKeyId && secretAccessKey && bucket) {
-        try {
-          const s3 = new S3Client({
-            region: process.env.S3_REGION || "eu-west-1",
-            credentials: { accessKeyId, secretAccessKey },
-          });
-          fetchUrl = await getSignedUrl(
-            s3,
-            new GetObjectCommand({ Bucket: bucket, Key: key }),
-            { expiresIn: 300 }
-          );
-        } catch {}
-      }
-    }
+    // S3 / remote files: resolve to presigned URL if needed
+    let fetchUrl = await resolveMediaUrl(fileUrl);
+    console.log(`[doc] Resolved URL: ${fetchUrl.slice(0, 120)}...`);
 
     const resp = await fetch(fetchUrl);
-    if (!resp.ok) return `[Could not fetch document: ${fileUrl}]`;
+    if (!resp.ok) {
+      console.error(`[doc] Fetch failed: ${resp.status} ${resp.statusText} for ${fileUrl}`);
+      return `[Could not fetch document: ${resp.status} ${resp.statusText}]`;
+    }
     const contentType = resp.headers.get("content-type") || "";
+    console.log(`[doc] Fetched OK, content-type: ${contentType}, size: ${resp.headers.get("content-length") || "unknown"}`);
 
     if (contentType.includes("pdf") || fileUrl.toLowerCase().endsWith(".pdf")) {
       const buffer = Buffer.from(await resp.arrayBuffer());
@@ -724,6 +828,7 @@ async function fetchDocumentText(fileUrl: string): Promise<string> {
     // Fallback: try reading as text
     return await resp.text();
   } catch (err) {
+    console.error(`[doc] fetchDocumentText error for ${fileUrl}:`, err);
     return `[Could not read document: ${fileUrl}] ${err instanceof Error ? err.message : ""}`;
   }
 }
@@ -756,42 +861,43 @@ async function executeBasicStep(
     ? resolveInput(rawSystemPrompt)
     : "";
 
-  // ── Text & Document models ──
-  if (model.category === "text" || model.category === "document") {
+  // ── Text models ──
+  if (model.category === "text") {
     const imageFiles = getFilesByType(input.files, "image");
     const documentFiles = getFilesByType(input.files, "document");
 
-    let docSuffix = "";
-    if (documentFiles.length > 0) {
-      const docTexts = await Promise.all(
-        documentFiles.map(async (f) => {
-          const content = await fetchDocumentText(f.url);
-          return `--- Document: ${f.name || f.url} ---\n${content}`;
-        })
-      );
-      docSuffix = "\n\n" + docTexts.join("\n\n");
-    }
-
     const systemMsg = resolvedSystemPrompt;
-    const userMsg = resolvedUserPrompt + docSuffix;
 
     let result: string | null = null;
 
-    if (model.provider === "anthropic") {
+    if (model.provider === "openai" || isOpenAIModel(step.aiModel)) {
+      result = await generateTextWithOpenAI(
+        systemMsg,
+        resolvedUserPrompt,
+        params,
+        step.aiModel,
+        imageFiles,
+        documentFiles
+      );
+    } else if (model.provider === "anthropic") {
+      const userMsg = resolvedUserPrompt + (await buildDocSuffix(documentFiles));
       result = await generateWithAnthropic(systemMsg, userMsg, params, step.aiModel, imageFiles);
     } else if (model.provider === "google") {
+      const userMsg = resolvedUserPrompt + (await buildDocSuffix(documentFiles));
       result = await generateWithGemini(systemMsg, userMsg, params, imageFiles);
     } else if (model.provider === "xai") {
+      const userMsg = resolvedUserPrompt + (await buildDocSuffix(documentFiles));
       result = await generateWithXai(systemMsg, userMsg, params);
     }
 
     if (result === null) {
       result = await generateTextWithOpenAI(
         systemMsg,
-        userMsg,
+        resolvedUserPrompt,
         params,
         step.aiModel,
-        imageFiles
+        imageFiles,
+        documentFiles
       );
     }
 
@@ -902,7 +1008,10 @@ async function executeFalStep(
   if (imageFiles.length > 0 && !resolvedParams.image_urls && acceptsParam("image_urls")) {
     const urls: string[] = [];
     for (const f of imageFiles) {
-      urls.push(await resolveFileUrlForFal(f.url, f.mimeType));
+      console.log(`[fal] Resolving image file: ${f.url.slice(0, 120)} (type=${f.type}, mime=${f.mimeType})`);
+      const resolved = await resolveFileUrlForFal(f.url, f.mimeType);
+      console.log(`[fal] Resolved to: ${resolved.slice(0, 120)}`);
+      urls.push(resolved);
     }
     resolvedParams.image_urls = urls;
   }
@@ -943,6 +1052,13 @@ async function executeFalStep(
 
   if (process.env.FAL_KEY) {
     try {
+      const logParams = { ...resolvedParams };
+      for (const [k, v] of Object.entries(logParams)) {
+        if (typeof v === "string" && v.length > 150) logParams[k] = v.slice(0, 150) + "...";
+        if (Array.isArray(v)) logParams[k] = v.map((i) => typeof i === "string" && i.length > 150 ? i.slice(0, 150) + "..." : i);
+      }
+      console.log(`[fal] Calling ${falEndpoint} with params:`, JSON.stringify(logParams, null, 2));
+
       const response = await fetch(`https://fal.run/${falEndpoint}`, {
         method: "POST",
         headers: {

@@ -87,7 +87,7 @@ const NODE_TEMPLATES: {
     defaults: {
       label: "",
       stepType: "basicNode",
-      aiModel: "gpt-4o",
+      aiModel: "gpt-5.2",
       inputType: "TEXT",
       outputType: "TEXT",
       prompt: "{{input}}",
