@@ -3,7 +3,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
 import Head from "next/head";
 import dynamic from "next/dynamic";
-import { ArrowLeft, Zap, Loader2, Check, CloudUpload } from "lucide-react";
+import { ArrowLeft, Zap, Loader2, Check, CloudUpload, Undo2, Redo2 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import BuilderToolbar from "@/components/builder/BuilderToolbar";
@@ -340,6 +340,24 @@ export default function EditWorkflow() {
               <span className="text-xs text-gray-400 font-mono truncate max-w-[200px]">
                 {store.workflowName || "Untitled"}
               </span>
+            </div>
+            <div className="ml-2 flex items-center gap-0.5 border border-gray-200 dark:border-gray-700 rounded-lg p-0.5">
+              <button
+                onClick={() => store.undo()}
+                disabled={store._past.length === 0}
+                title="Undo (⌘Z)"
+                className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => store.redo()}
+                disabled={store._future.length === 0}
+                title="Redo (⌘⇧Z)"
+                className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <Redo2 className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
           <div className="flex items-center gap-3">

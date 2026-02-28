@@ -18,7 +18,6 @@ import {
   type EdgeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Undo2, Redo2 } from "lucide-react";
 import BasicNode from "./StepNode";
 import InputNode from "./InputNode";
 import OutputNode from "./OutputNode";
@@ -38,8 +37,6 @@ function WorkflowCanvasInner() {
   const takeSnapshot = useWorkflowStore((s) => s.takeSnapshot);
   const undo = useWorkflowStore((s) => s.undo);
   const redo = useWorkflowStore((s) => s.redo);
-  const canUndo = useWorkflowStore((s) => s._past.length > 0);
-  const canRedo = useWorkflowStore((s) => s._future.length > 0);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
 
@@ -214,27 +211,6 @@ function WorkflowCanvasInner() {
           maskColor="rgba(0,0,0,0.1)"
         />
       </ReactFlow>
-
-      {/* Undo / Redo toolbar */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg px-1.5 py-1 z-10">
-        <button
-          onClick={undo}
-          disabled={!canUndo}
-          title="Undo (⌘Z)"
-          className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <Undo2 className="w-4 h-4" />
-        </button>
-        <div className="w-px h-5 bg-gray-200 dark:bg-gray-700" />
-        <button
-          onClick={redo}
-          disabled={!canRedo}
-          title="Redo (⌘⇧Z)"
-          className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <Redo2 className="w-4 h-4" />
-        </button>
-      </div>
 
       <CanvasContextMenu
         menu={contextMenu}
