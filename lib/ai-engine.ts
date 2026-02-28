@@ -596,7 +596,6 @@ async function generateTextWithOpenAI(
     userContent.push({
       type: "input_file",
       file_url: url,
-      ...(doc.name ? { filename: doc.name } : {}),
     });
   }
 
