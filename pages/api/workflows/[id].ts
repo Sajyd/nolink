@@ -60,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    const { name, description, category, priceInNolinks, isPublic, exampleInput, exampleOutput, steps } = req.body;
+    const { name, description, category, priceInNolinks, isPublic, exampleInput, exampleOutput, steps, edges } = req.body;
 
     if (steps && Array.isArray(steps)) {
       const stepsData = steps.map((step: any) => {
@@ -109,6 +109,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             ...(isPublic !== undefined && { isPublic }),
             ...(exampleInput !== undefined && { exampleInput }),
             ...(exampleOutput !== undefined && { exampleOutput }),
+            ...(edges !== undefined && { edges }),
             steps: { create: stepsData },
           },
           include: { steps: true },
@@ -128,6 +129,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ...(isPublic !== undefined && { isPublic }),
         ...(exampleInput !== undefined && { exampleInput }),
         ...(exampleOutput !== undefined && { exampleOutput }),
+        ...(edges !== undefined && { edges }),
       },
     });
 

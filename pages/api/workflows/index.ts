@@ -54,7 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const session = await getServerSession(req, res, authOptions);
     if (!session) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, description, category, priceInNolinks, isPublic, steps, exampleInput, exampleOutput } = req.body;
+    const { name, description, category, priceInNolinks, isPublic, steps, exampleInput, exampleOutput, edges } = req.body;
 
     if (!steps || steps.length === 0) {
       return res.status(400).json({ error: "At least one step is required" });
@@ -89,6 +89,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         creatorId: session.user.id,
         exampleInput: exampleInput || null,
         exampleOutput: exampleOutput || null,
+        edges: edges || [],
         steps: {
           create: steps.map((step: any) => {
             const config: Record<string, unknown> = { ...(step.config || {}) };

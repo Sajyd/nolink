@@ -77,6 +77,7 @@ export default function CreateWorkflow() {
       isPublic: s.isPublic,
       exampleInput: s.exampleInput || null,
       exampleOutput: s.exampleOutput || null,
+      edges: s.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
       steps: s.nodes.map((n) => {
         const stepTypeMap: Record<string, string> = {
           inputNode: "INPUT",

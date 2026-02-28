@@ -90,7 +90,6 @@ export default function EditWorkflow() {
       store.setExampleOutput(wf.exampleOutput || "");
 
       const nodes: Node<StepNodeData>[] = [];
-      const edges: Edge[] = [];
 
       const sortedSteps = [...wf.steps].sort((a: any, b: any) => a.order - b.order);
 
@@ -153,12 +152,25 @@ export default function EditWorkflow() {
           position: { x: step.positionX || i * 300, y: step.positionY || 100 },
           data: nodeData,
         });
+      }
 
-        if (i > 0) {
+      // Use stored edges if available, fall back to linear chain for legacy workflows
+      let edges: Edge[];
+      if (wf.edges && Array.isArray(wf.edges) && wf.edges.length > 0) {
+        edges = (wf.edges as { id: string; source: string; target: string }[]).map((e) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          animated: true,
+        }));
+      } else {
+        edges = [];
+        for (let i = 1; i < sortedSteps.length; i++) {
           edges.push({
-            id: `e-${sortedSteps[i - 1].id}-${step.id}`,
+            id: `e-${sortedSteps[i - 1].id}-${sortedSteps[i].id}`,
             source: sortedSteps[i - 1].id,
-            target: step.id,
+            target: sortedSteps[i].id,
+            animated: true,
           });
         }
       }
@@ -182,6 +194,7 @@ export default function EditWorkflow() {
       isPublic: s.isPublic,
       exampleInput: s.exampleInput || null,
       exampleOutput: s.exampleOutput || null,
+      edges: s.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
       steps: s.nodes.map((n) => {
         const stepTypeMap: Record<string, string> = {
           inputNode: "INPUT",
