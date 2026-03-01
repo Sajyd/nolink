@@ -94,7 +94,7 @@ const NODE_TEMPLATES: {
     rfType: "replicateNode",
     label: "Replicate Node",
     icon: Box,
-    color: "text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800",
+    color: "text-teal-500 bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800",
     description: "FLUX, SDXL, Recraft, Minimax Video, Luma and more",
     defaults: {
       label: "",
@@ -161,12 +161,21 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
   const addNode = (templateIdx: number) => {
     const template = NODE_TEMPLATES[templateIdx];
     const order = store.nodes.length + 1;
-    const xOffset = (order - 1) * 300;
+
+    let x = 100;
+    let y = 100;
+    if (store.nodes.length > 0) {
+      const rightmost = store.nodes.reduce((best, n) =>
+        n.position.x > best.position.x ? n : best
+      );
+      x = rightmost.position.x + 300;
+      y = rightmost.position.y;
+    }
 
     const newNode: Node<StepNodeData> = {
       id: uuid(),
       type: template.rfType,
-      position: { x: xOffset, y: 100 },
+      position: { x, y },
       data: {
         ...template.defaults,
         label: template.defaults.label || `Step ${order}`,
@@ -378,7 +387,7 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
                 node.type === "inputNode" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" :
                 node.type === "outputNode" ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" :
                 node.type === "falAiNode" ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" :
-                node.type === "replicateNode" ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400" :
+                node.type === "replicateNode" ? "bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400" :
                 node.type === "customApiNode" ? "bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400" :
                 "bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400";
 

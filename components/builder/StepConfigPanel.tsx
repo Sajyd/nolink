@@ -112,7 +112,7 @@ export default function StepConfigPanel() {
           {nodeType === "inputNode" && <Upload className="w-4 h-4 text-emerald-500" />}
           {nodeType === "outputNode" && <Download className="w-4 h-4 text-violet-500" />}
           {nodeType === "falAiNode" && <Sparkles className="w-4 h-4 text-amber-500" />}
-          {nodeType === "replicateNode" && <Box className="w-4 h-4 text-indigo-500" />}
+          {nodeType === "replicateNode" && <Box className="w-4 h-4 text-teal-500" />}
           {nodeType === "customApiNode" && <Globe className="w-4 h-4 text-rose-500" />}
           {(nodeType === "basicNode" || nodeType === "stepNode") && <Settings2 className="w-4 h-4 text-brand-500" />}
           Configure {
@@ -1507,16 +1507,16 @@ function ReplicateNodeConfig({
       {selectedModel && !isCustomModel && (
         <div className="space-y-1">
           {selectedModel.comingSoon && (
-            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800">
-              <Clock className="w-3.5 h-3.5 text-indigo-500" />
-              <span className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
+            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
+              <Clock className="w-3.5 h-3.5 text-teal-500" />
+              <span className="text-[11px] font-medium text-teal-600 dark:text-teal-400">
                 Coming Soon
               </span>
             </div>
           )}
           <p className="text-[10px] text-gray-400">{selectedModel.description}</p>
           {selectedModel.replicateModel && (
-            <p className="text-[10px] font-mono text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-1 rounded">
+            <p className="text-[10px] font-mono text-teal-500 bg-teal-50 dark:bg-teal-900/20 px-2 py-1 rounded">
               {selectedModel.replicateModel}
             </p>
           )}
@@ -1536,6 +1536,15 @@ function ReplicateNodeConfig({
 
 // ─── Custom Replicate Model Editor ──────────────────────────────
 
+interface ReplicateSearchResult {
+  modelId: string;
+  name: string;
+  owner: string;
+  description: string;
+  coverImageUrl: string;
+  runCount: number;
+}
+
 function CustomReplicateModelEditor({
   nodeId,
   data,
@@ -1550,9 +1559,124 @@ function CustomReplicateModelEditor({
   const replicateModel = data.customReplicateModel || "";
   const customReplicatePrice: number = data.customReplicatePrice ?? 0;
 
+  const [fetching, setFetching] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [modelMeta, setModelMeta] = useState<{
+    name: string;
+    owner: string;
+    description: string;
+    unitPriceUsd: number;
+    unit: string;
+    runCount: number;
+  } | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ReplicateSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
   const setReplicateModel = (value: string) => {
     updateNodeData(nodeId, { customReplicateModel: value });
   };
+
+  const searchModels = useCallback(async (query: string) => {
+    if (query.trim().length < 2) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await fetch(
+        `/api/replicate/search-models?q=${encodeURIComponent(query.trim())}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setSearchResults(data.models || []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  const handleSearchInput = (value: string) => {
+    setSearchQuery(value);
+    setShowDropdown(true);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => searchModels(value), 300);
+  };
+
+  const selectModel = (model: ReplicateSearchResult) => {
+    setSearchQuery("");
+    setSearchResults([]);
+    setShowDropdown(false);
+    setReplicateModel(model.modelId);
+    fetchModelInfoFor(model.modelId);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const fetchModelInfoFor = async (modelId: string) => {
+    if (!modelId.trim()) return;
+    setFetching(true);
+    setFetchError(null);
+    setModelMeta(null);
+    try {
+      const res = await fetch(
+        `/api/replicate/model-info?model_id=${encodeURIComponent(modelId.trim())}`
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const info = await res.json();
+
+      setModelMeta({
+        name: info.name,
+        owner: info.owner,
+        description: info.description,
+        unitPriceUsd: info.unitPriceUsd,
+        unit: info.unit,
+        runCount: info.runCount,
+      });
+
+      updateNodeData(nodeId, { customReplicatePrice: info.costPerUse });
+
+      if (info.params && info.params.length > 0) {
+        const currentParams: CustomReplicateParam[] = data.customReplicateParams || [];
+        const existingKeys = new Set(currentParams.map((p: CustomReplicateParam) => p.key));
+        const newParams: CustomReplicateParam[] = info.params
+          .filter((p: any) => !existingKeys.has(p.key))
+          .map((p: any) => ({
+            key: p.key,
+            value: p.default ?? "",
+          }));
+        if (newParams.length > 0) {
+          updateNodeData(nodeId, {
+            customReplicateParams: [...currentParams, ...newParams],
+          });
+        }
+      }
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Failed to fetch");
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  const fetchModelInfo = () => fetchModelInfoFor(replicateModel);
 
   const addParam = () => {
     updateNodeData(nodeId, {
@@ -1582,22 +1706,133 @@ function CustomReplicateModelEditor({
         </span>
       </div>
 
+      {/* Search Replicate models */}
+      <div ref={searchRef} className="relative">
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+          Search Replicate Models
+        </label>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+          {searching && (
+            <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 animate-spin" />
+          )}
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => handleSearchInput(e.target.value)}
+            onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+            className="input-field text-xs pl-8 pr-8 w-full"
+            placeholder="Search by name, e.g. flux, sdxl, minimax…"
+          />
+        </div>
+
+        {showDropdown && searchResults.length > 0 && (
+          <div className="absolute z-50 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg">
+            {searchResults.map((model) => (
+              <button
+                key={model.modelId}
+                onClick={() => selectModel(model)}
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-b-0"
+              >
+                <div className="flex items-center gap-2">
+                  {model.coverImageUrl && (
+                    <img
+                      src={model.coverImageUrl}
+                      alt=""
+                      className="w-8 h-8 rounded object-cover shrink-0"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
+                      {model.owner}/{model.name}
+                    </div>
+                    <div className="text-[10px] text-gray-400 truncate">
+                      {model.description?.slice(0, 80) || "No description"}
+                    </div>
+                    {model.runCount > 0 && (
+                      <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                        {model.runCount.toLocaleString()} runs
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {showDropdown && searchQuery.trim().length >= 2 && !searching && searchResults.length === 0 && (
+          <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg px-3 py-3">
+            <p className="text-xs text-gray-400 text-center">No models found</p>
+          </div>
+        )}
+      </div>
+
+      {/* Model ID input with fetch button */}
       <div>
         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
           Replicate Model
         </label>
-        <input
-          type="text"
-          value={replicateModel}
-          onChange={(e) => setReplicateModel(e.target.value)}
-          className="input-field text-xs font-mono"
-          placeholder="owner/model-name (e.g. stability-ai/sdxl)"
-        />
+        <div className="flex gap-1.5">
+          <input
+            type="text"
+            value={replicateModel}
+            onChange={(e) => setReplicateModel(e.target.value)}
+            className="input-field text-xs font-mono flex-1"
+            placeholder="owner/model-name (e.g. stability-ai/sdxl)"
+          />
+          <button
+            onClick={fetchModelInfo}
+            disabled={fetching || !replicateModel.trim()}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+          >
+            {fetching ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Search className="w-3.5 h-3.5" />
+            )}
+            {fetching ? "Fetching…" : "Fetch Info"}
+          </button>
+        </div>
         <p className="mt-1 text-[10px] text-gray-400">
-          Enter the Replicate model identifier in owner/name format.
+          Select a model above or enter an identifier manually and click Fetch Info.
         </p>
       </div>
 
+      {/* Fetch error */}
+      {fetchError && (
+        <div className="flex items-start gap-1.5 px-2 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+          <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
+          <span className="text-[11px] text-red-600 dark:text-red-400">{fetchError}</span>
+        </div>
+      )}
+
+      {/* Model metadata */}
+      {modelMeta && (
+        <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-2.5 space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+            <span className="text-[11px] font-semibold text-green-700 dark:text-green-400">
+              {modelMeta.owner}/{modelMeta.name}
+            </span>
+          </div>
+          <p className="text-[10px] text-gray-500 dark:text-gray-400">{modelMeta.description?.slice(0, 120)}</p>
+          <div className="flex items-center gap-3 text-[10px]">
+            {modelMeta.runCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 font-medium">
+                {modelMeta.runCount.toLocaleString()} runs
+              </span>
+            )}
+            {modelMeta.unitPriceUsd > 0 && (
+              <span className="text-gray-500">
+                ${modelMeta.unitPriceUsd.toFixed(4)} / {modelMeta.unit}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Step Price (read-only, auto-calculated) */}
       <div>
         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
           Step Price (Nolinks)
@@ -1605,18 +1840,22 @@ function CustomReplicateModelEditor({
         <div className="relative">
           <input
             type="number"
-            min={0}
+            min={1}
             value={customReplicatePrice}
-            onChange={(e) => updateNodeData(nodeId, { customReplicatePrice: parseInt(e.target.value) || 0 })}
-            className="input-field text-sm pl-8"
+            readOnly
+            className="input-field text-sm pl-8 bg-gray-50 dark:bg-gray-800/50 cursor-not-allowed"
           />
           <Zap className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-brand-500" />
         </div>
-        <p className="mt-1 text-[10px] text-gray-400">
-          Nolinks charged to the user per call to this Replicate model.
-        </p>
+        <div className="flex items-start gap-1 mt-1">
+          <Info className="w-3 h-3 text-gray-400 shrink-0 mt-0.5" />
+          <p className="text-[10px] text-gray-400">
+            Automatically calculated from Replicate pricing. Click Fetch Info to update.
+          </p>
+        </div>
       </div>
 
+      {/* Custom parameters */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400">
@@ -1633,7 +1872,8 @@ function CustomReplicateModelEditor({
 
         {customReplicateParams.length === 0 ? (
           <p className="text-[10px] text-gray-400">
-            No parameters yet. Add key-value pairs for the model input.
+            No parameters yet. Click Fetch Info above to auto-populate from
+            the model schema, or add key-value pairs manually.
           </p>
         ) : (
           <div className="space-y-2">
