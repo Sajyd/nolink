@@ -120,6 +120,7 @@ export default function CreateWorkflow() {
           customParams: validCustomParams.length > 0 ? validCustomParams : null,
           customFalEndpoint: isCustomFal ? (n.data.customFalEndpoint || null) : null,
           customFalParams: isCustomFal && validFalParams.length > 0 ? validFalParams : null,
+          customFalPrice: isCustomFal ? (n.data.customFalPrice ?? 0) : null,
           customApiUrl: isCustomApi ? (n.data.customApiUrl || null) : null,
           customApiMethod: isCustomApi ? (n.data.customApiMethod || "POST") : null,
           customApiHeaders: isCustomApi ? (n.data.customApiHeaders || []) : null,

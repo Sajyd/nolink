@@ -124,6 +124,8 @@ async function runWorkflowInBackground(
         (config.customFalEndpoint as string | undefined) || undefined,
       customFalParams:
         (config.customFalParams as { key: string; value: string }[] | undefined) || undefined,
+      customFalPrice:
+        (config.customFalPrice as number | undefined) ?? undefined,
       customApiUrl:
         (config.customApiUrl as string | undefined) || undefined,
       customApiMethod:

@@ -236,7 +236,7 @@ export default function Dashboard() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(`Payout of $${nlToUsd(amount)} initiated!`);
+        toast.success(`Payout of $${nlToUsd(amount)} initiated! Funds typically arrive in 1–2 business days.`);
         setPayoutAmount("");
         setEarnedBalance((b) => b - amount);
         fetchAll();
@@ -527,7 +527,7 @@ export default function Dashboard() {
                 <p className="text-4xl font-bold text-emerald-600">{earnedBalance} NL</p>
                 <p className="text-xl text-gray-500">${nlToUsd(earnedBalance)} USD</p>
               </div>
-              <p className="mt-2 text-xs text-gray-500">Earned from workflow commissions (70% of paid workflow runs). Use for your own workflows or withdraw to bank.</p>
+              <p className="mt-2 text-xs text-gray-500">Earned from workflow commissions (70% of paid workflow runs). Use for your own workflows or withdraw to bank (1–2 business days).</p>
             </div>
 
             {/* Stripe Connect status */}
@@ -608,6 +608,12 @@ export default function Dashboard() {
                   </p>
                 )}
                 <p className="mt-2 text-xs text-gray-400">Min {MINIMUM_PAYOUT_NL} NL (${ (MINIMUM_PAYOUT_NL * NL_TO_USD_CENTS / 100).toFixed(2)}) · Rate: 1 NL = ${(NL_TO_USD_CENTS / 100).toFixed(2)}</p>
+                <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                  <Clock className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-600 dark:text-blue-400">
+                    Withdrawals are processed via Stripe and typically take <span className="font-semibold">1–2 business days</span> to arrive in your bank account.
+                  </p>
+                </div>
               </div>
             )}
 

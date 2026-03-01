@@ -54,6 +54,7 @@ export interface StepNodeData {
   customParams?: CustomParam[];
   customFalEndpoint?: string;
   customFalParams?: CustomFalParam[];
+  customFalPrice?: number;
   customApiUrl?: string;
   customApiMethod?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   customApiHeaders?: CustomApiParam[];

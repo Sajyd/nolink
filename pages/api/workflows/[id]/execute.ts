@@ -117,6 +117,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       customParams: (config.customParams as StepCustomParam[] | undefined) || undefined,
       customFalEndpoint: (config.customFalEndpoint as string | undefined) || undefined,
       customFalParams: (config.customFalParams as { key: string; value: string }[] | undefined) || undefined,
+      customFalPrice: (config.customFalPrice as number | undefined) ?? undefined,
       customApiUrl: (config.customApiUrl as string | undefined) || undefined,
       customApiMethod: (config.customApiMethod as string | undefined) || undefined,
       customApiHeaders: (config.customApiHeaders as { key: string; value: string }[] | undefined) || undefined,

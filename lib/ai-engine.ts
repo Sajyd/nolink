@@ -45,6 +45,7 @@ export interface StepDefinition {
   customParams?: StepCustomParam[];
   customFalEndpoint?: string;
   customFalParams?: { key: string; value: string }[];
+  customFalPrice?: number;
   customApiUrl?: string;
   customApiMethod?: string;
   customApiHeaders?: { key: string; value: string }[];
@@ -73,7 +74,10 @@ export function estimateWorkflowCost(steps: StepDefinition[]): number {
   const apiCost = steps
     .filter((s) => s.stepType === "CUSTOM_API")
     .reduce((sum, s) => sum + (s.customApiPrice || 0), 0);
-  return estimateCostFromModels(modelIds) + apiCost;
+  const customFalCost = steps
+    .filter((s) => s.aiModel === "fal-custom")
+    .reduce((sum, s) => sum + (s.customFalPrice || 0), 0);
+  return estimateCostFromModels(modelIds) + apiCost + customFalCost;
 }
 
 function resolveFileUrl(fileUrl: string): string {

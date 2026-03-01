@@ -1,6 +1,9 @@
 // Monetization
 export const NL_TO_USD_CENTS = 2; // 1 NL = $0.02
 export const MINIMUM_PAYOUT_NL = 100; // minimum 100 NL ($4.00) to request payout
+
+// fal.ai USD → Nolinks conversion rate (includes platform margin)
+export const FAL_USD_TO_NL = 80;
 export const PAYOUT_ELIGIBLE_TIERS = ["PRO", "ENTERPRISE"] as const;
 
 // Workflow limits per subscription tier

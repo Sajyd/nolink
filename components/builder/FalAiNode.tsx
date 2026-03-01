@@ -46,6 +46,11 @@ function FalAiNode({ id, data, selected }: NodeProps) {
             <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
               PRO
             </span>
+            {(nodeData.customFalPrice ?? 0) > 0 && (
+              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                {nodeData.customFalPrice} NL
+              </span>
+            )}
           </div>
 
           {nodeData.customFalEndpoint ? (

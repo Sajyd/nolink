@@ -167,7 +167,10 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
   const customApiCost = store.nodes
     .filter((n) => n.type === "customApiNode")
     .reduce((sum, n) => sum + (n.data.customApiPrice ?? 0), 0);
-  const estimatedCost = estimateCostFromModels(modelIds) + customApiCost;
+  const customFalCost = store.nodes
+    .filter((n) => n.data.aiModel === "fal-custom")
+    .reduce((sum, n) => sum + (n.data.customFalPrice ?? 0), 0);
+  const estimatedCost = estimateCostFromModels(modelIds) + customApiCost + customFalCost;
 
   return (
     <div className="w-72 h-full border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col overflow-y-auto">
