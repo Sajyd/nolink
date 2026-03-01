@@ -1989,6 +1989,96 @@ const TRANSFORM_OPERATIONS: { value: TransformOperation; label: string; descript
   { value: "template", label: "Template", description: "Wrap input in a template" },
 ];
 
+// Reusable insertable field: text input or textarea with clickable param chips
+function InsertableInput({
+  value,
+  onChange,
+  placeholder,
+  chips,
+  multiline,
+  rows,
+  label,
+  labelColor,
+  description,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  chips: { token: string; label: string; color: string }[];
+  multiline?: boolean;
+  rows?: number;
+  label?: string;
+  labelColor?: string;
+  description?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
+
+  const insertAtCursor = (token: string) => {
+    const el = ref.current;
+    if (!el) {
+      onChange((value || "") + token);
+      return;
+    }
+    const start = el.selectionStart ?? (value || "").length;
+    const end = el.selectionEnd ?? start;
+    const before = (value || "").slice(0, start);
+    const after = (value || "").slice(end);
+    const next = before + token + after;
+    onChange(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + token.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
+  return (
+    <div>
+      {label && (
+        <label className={`block text-[10px] font-medium mb-0.5 ${labelColor || "text-gray-500"}`}>
+          {label}
+        </label>
+      )}
+      {description && <p className="text-[9px] text-gray-400 mb-1">{description}</p>}
+      {multiline ? (
+        <textarea
+          ref={ref as React.RefObject<HTMLTextAreaElement>}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="input-field text-xs font-mono"
+          rows={rows || 2}
+          placeholder={placeholder}
+        />
+      ) : (
+        <input
+          ref={ref as React.RefObject<HTMLInputElement>}
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="input-field text-xs font-mono"
+          placeholder={placeholder}
+        />
+      )}
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {chips.map((chip) => (
+            <button
+              key={chip.token}
+              type="button"
+              onClick={() => insertAtCursor(chip.token)}
+              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-medium border transition-all cursor-pointer hover:scale-105 active:scale-95 ${chip.color}`}
+              title={`Insert ${chip.token}`}
+            >
+              <Plus className="w-2.5 h-2.5" />
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LogicNodeConfig({
   nodeId,
   data,
@@ -2050,6 +2140,39 @@ function LogicNodeConfig({
 
   const needsRightOperand = !["is_empty", "is_not_empty"].includes(condition.operator);
 
+  // Build the insertable chips from connected inputs
+  const inputChips: { token: string; label: string; color: string }[] = [
+    {
+      token: "{{input}}",
+      label: "input",
+      color: "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40",
+    },
+    ...inputBindOptions.map((opt) => ({
+      token: opt.value.startsWith("{{") ? opt.value : `{{${opt.value}}}`,
+      label: opt.label,
+      color: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40",
+    })),
+  ];
+
+  const loopItemChips: { token: string; label: string; color: string }[] = [
+    {
+      token: "{{item}}",
+      label: "item",
+      color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/40",
+    },
+    {
+      token: "{{index}}",
+      label: "index (0)",
+      color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/40",
+    },
+    {
+      token: "{{index1}}",
+      label: "index (1)",
+      color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/40",
+    },
+    ...inputChips,
+  ];
+
   return (
     <div className="space-y-4">
       {/* Mode selector */}
@@ -2085,19 +2208,13 @@ function LogicNodeConfig({
             Condition
           </h4>
 
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-0.5">Left operand</label>
-            <input
-              type="text"
-              value={condition.leftOperand}
-              onChange={(e) => updateCondition({ leftOperand: e.target.value })}
-              className="input-field text-xs font-mono"
-              placeholder="{{input}}"
-            />
-            <p className="text-[9px] text-gray-400 mt-0.5">
-              Use {"{{input}}"} for previous step output
-            </p>
-          </div>
+          <InsertableInput
+            label="Left operand"
+            value={condition.leftOperand}
+            onChange={(v) => updateCondition({ leftOperand: v })}
+            placeholder="{{input}}"
+            chips={inputChips}
+          />
 
           <div>
             <label className="block text-[10px] text-gray-500 mb-0.5">Operator</label>
@@ -2113,60 +2230,37 @@ function LogicNodeConfig({
           </div>
 
           {needsRightOperand && (
-            <div>
-              <label className="block text-[10px] text-gray-500 mb-0.5">Compare to</label>
-              <input
-                type="text"
-                value={condition.rightOperand}
-                onChange={(e) => updateCondition({ rightOperand: e.target.value })}
-                className="input-field text-xs font-mono"
-                placeholder="value to compare..."
-              />
-            </div>
+            <InsertableInput
+              label="Compare to"
+              value={condition.rightOperand}
+              onChange={(v) => updateCondition({ rightOperand: v })}
+              placeholder="value to compare..."
+              chips={inputChips}
+            />
           )}
 
-          <div className="border-t border-amber-200 dark:border-amber-800 pt-3 space-y-2">
-            <div>
-              <label className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mb-0.5">
-                Then (output if true)
-              </label>
-              <textarea
-                value={condition.thenOutput}
-                onChange={(e) => updateCondition({ thenOutput: e.target.value })}
-                className="input-field text-xs font-mono"
-                rows={2}
-                placeholder="{{input}}"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] text-red-500 dark:text-red-400 font-medium mb-0.5">
-                Else (output if false)
-              </label>
-              <textarea
-                value={condition.elseOutput}
-                onChange={(e) => updateCondition({ elseOutput: e.target.value })}
-                className="input-field text-xs font-mono"
-                rows={2}
-                placeholder="Empty or fallback value..."
-              />
-            </div>
+          <div className="border-t border-amber-200 dark:border-amber-800 pt-3 space-y-3">
+            <InsertableInput
+              label="Then (output if true)"
+              labelColor="text-emerald-600 dark:text-emerald-400"
+              value={condition.thenOutput}
+              onChange={(v) => updateCondition({ thenOutput: v })}
+              placeholder="{{input}}"
+              chips={inputChips}
+              multiline
+              rows={2}
+            />
+            <InsertableInput
+              label="Else (output if false)"
+              labelColor="text-red-500 dark:text-red-400"
+              value={condition.elseOutput}
+              onChange={(v) => updateCondition({ elseOutput: v })}
+              placeholder="Empty or fallback value..."
+              chips={inputChips}
+              multiline
+              rows={2}
+            />
           </div>
-
-          {inputBindOptions.length > 0 && (
-            <div className="space-y-1">
-              <p className="text-[9px] font-medium text-gray-400 uppercase tracking-wider">Available inputs</p>
-              <div className="flex flex-wrap gap-1">
-                {inputBindOptions.map((opt) => (
-                  <span
-                    key={opt.value}
-                    className="inline-block px-1.5 py-0.5 rounded text-[9px] font-mono bg-gray-100 dark:bg-gray-800 text-gray-500"
-                  >
-                    {`{{${opt.value}}}`}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -2195,19 +2289,16 @@ function LogicNodeConfig({
             </p>
           </div>
 
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-0.5">Item template</label>
-            <textarea
-              value={loop.itemTemplate}
-              onChange={(e) => updateLoop({ itemTemplate: e.target.value })}
-              className="input-field text-xs font-mono"
-              rows={3}
-              placeholder="Process: {{item}} (index: {{index}})"
-            />
-            <p className="text-[9px] text-gray-400 mt-0.5">
-              {"{{item}}"} = current item, {"{{index}}"} = 0-based index, {"{{index1}}"} = 1-based
-            </p>
-          </div>
+          <InsertableInput
+            label="Item template"
+            description="Applied to each item after splitting"
+            value={loop.itemTemplate}
+            onChange={(v) => updateLoop({ itemTemplate: v })}
+            placeholder="Process: {{item}} (index: {{index}})"
+            chips={loopItemChips}
+            multiline
+            rows={3}
+          />
 
           <div>
             <label className="block text-[10px] text-gray-500 mb-0.5">Join results with</label>
@@ -2250,26 +2341,20 @@ function LogicNodeConfig({
 
           {transform.operation === "replace" && (
             <>
-              <div>
-                <label className="block text-[10px] text-gray-500 mb-0.5">Find</label>
-                <input
-                  type="text"
-                  value={transform.operand || ""}
-                  onChange={(e) => updateTransform({ operand: e.target.value })}
-                  className="input-field text-xs font-mono"
-                  placeholder="text to find..."
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] text-gray-500 mb-0.5">Replace with</label>
-                <input
-                  type="text"
-                  value={transform.replacement || ""}
-                  onChange={(e) => updateTransform({ replacement: e.target.value })}
-                  className="input-field text-xs font-mono"
-                  placeholder="replacement text..."
-                />
-              </div>
+              <InsertableInput
+                label="Find"
+                value={transform.operand || ""}
+                onChange={(v) => updateTransform({ operand: v })}
+                placeholder="text to find..."
+                chips={inputChips}
+              />
+              <InsertableInput
+                label="Replace with"
+                value={transform.replacement || ""}
+                onChange={(v) => updateTransform({ replacement: v })}
+                placeholder="replacement text..."
+                chips={inputChips}
+              />
             </>
           )}
 
@@ -2340,19 +2425,15 @@ function LogicNodeConfig({
           )}
 
           {transform.operation === "template" && (
-            <div>
-              <label className="block text-[10px] text-gray-500 mb-0.5">Template</label>
-              <textarea
-                value={transform.operand || ""}
-                onChange={(e) => updateTransform({ operand: e.target.value })}
-                className="input-field text-xs font-mono"
-                rows={3}
-                placeholder="The result is: {{input}}"
-              />
-              <p className="text-[9px] text-gray-400 mt-0.5">
-                {"{{input}}"} will be replaced with the incoming text
-              </p>
-            </div>
+            <InsertableInput
+              label="Template"
+              value={transform.operand || ""}
+              onChange={(v) => updateTransform({ operand: v })}
+              placeholder="The result is: {{input}}"
+              chips={inputChips}
+              multiline
+              rows={3}
+            />
           )}
         </div>
       )}
