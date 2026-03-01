@@ -319,10 +319,42 @@ async function resolveFileUrlForFal(
   return resolved;
 }
 
-function ensureUploadsDir(): string {
-  const dir = path.join(process.cwd(), "public", "uploads");
+function ensureTmpDir(): string {
+  const dir = "/tmp/nolink-uploads";
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+async function persistBufferToS3(
+  buffer: Buffer,
+  ext: string,
+  contentType: string
+): Promise<string | null> {
+  const bucket = process.env.S3_BUCKET;
+  const accessKey = process.env.AWS_ACCESS_KEY_ID;
+  const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
+  if (!bucket || !accessKey || !secretKey) return null;
+
+  try {
+    const region = process.env.S3_REGION || "eu-west-1";
+    const key = `results/${uuidv4()}${ext}`;
+    const s3 = new S3Client({
+      region,
+      credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+    });
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      })
+    );
+    return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+  } catch (err) {
+    console.error("Failed to persist buffer to S3:", err);
+    return null;
+  }
 }
 
 // ── Persist media results to S3 ─────────────────────────────────
@@ -339,6 +371,11 @@ const MEDIA_CONTENT_TYPE_MAP: Record<string, string> = {
   ".mp4": "video/mp4",
   ".webm": "video/webm",
   ".mov": "video/quicktime",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".m4a": "audio/mp4",
+  ".ogg": "audio/ogg",
+  ".flac": "audio/flac",
 };
 
 const CONTENT_TYPE_EXT_MAP: Record<string, string> = {
@@ -349,12 +386,18 @@ const CONTENT_TYPE_EXT_MAP: Record<string, string> = {
   "video/mp4": ".mp4",
   "video/webm": ".webm",
   "video/quicktime": ".mov",
+  "audio/mpeg": ".mp3",
+  "audio/mp3": ".mp3",
+  "audio/wav": ".wav",
+  "audio/mp4": ".m4a",
+  "audio/ogg": ".ogg",
+  "audio/flac": ".flac",
 };
 
 function guessExtFromUrl(url: string): string {
   try {
     const pathname = new URL(url).pathname;
-    const match = pathname.match(/\.(png|jpe?g|gif|webp|mp4|webm|mov)$/i);
+    const match = pathname.match(/\.(png|jpe?g|gif|webp|mp4|webm|mov|mp3|wav|m4a|ogg|flac)$/i);
     return match ? `.${match[1].toLowerCase().replace("jpeg", "jpg")}` : "";
   } catch {
     return "";
@@ -370,7 +413,7 @@ function isTemporaryMediaUrl(url: string): boolean {
 
 async function persistMediaToS3(
   mediaUrl: string,
-  mediaType: "image" | "video"
+  mediaType: "image" | "video" | "audio"
 ): Promise<string | null> {
   const bucket = process.env.S3_BUCKET;
   const accessKey = process.env.AWS_ACCESS_KEY_ID;
@@ -388,7 +431,8 @@ async function persistMediaToS3(
 
     let ext = CONTENT_TYPE_EXT_MAP[responseContentType] || guessExtFromUrl(mediaUrl);
     if (!ext) {
-      ext = mediaType === "image" ? ".png" : ".mp4";
+      const fallbackExt: Record<string, string> = { image: ".png", video: ".mp4", audio: ".mp3" };
+      ext = fallbackExt[mediaType];
     }
 
     const contentType = responseContentType || MEDIA_CONTENT_TYPE_MAP[ext] || `${mediaType}/${ext.slice(1)}`;
@@ -661,7 +705,7 @@ async function executeWhisperStep(
     const resolved = await resolveMediaUrl(audioFile.url);
     const resp = await fetch(resolved);
     const buffer = Buffer.from(await resp.arrayBuffer());
-    const tmpPath = path.join(ensureUploadsDir(), `whisper-tmp-${Date.now()}.mp3`);
+    const tmpPath = path.join(ensureTmpDir(), `whisper-tmp-${Date.now()}.mp3`);
     fs.writeFileSync(tmpPath, buffer);
 
     try {
@@ -695,12 +739,17 @@ async function executeOpenAITtsStep(
     speed: (step.params?.speed as number) || 1.0,
   });
 
-  const dir = ensureUploadsDir();
-  const fileName = `tts-${Date.now()}.mp3`;
-  const filePath = path.join(dir, fileName);
   const buffer = Buffer.from(await response.arrayBuffer());
-  fs.writeFileSync(filePath, buffer);
+  const fileName = `tts-${Date.now()}.mp3`;
 
+  const s3Url = await persistBufferToS3(buffer, ".mp3", "audio/mpeg");
+  if (s3Url) {
+    return { text: s3Url, files: [{ url: s3Url, type: "audio", name: fileName }] };
+  }
+
+  const dir = ensureTmpDir();
+  const filePath = path.join(dir, fileName);
+  fs.writeFileSync(filePath, buffer);
   const url = `/uploads/${fileName}`;
   return { text: url, files: [{ url, type: "audio", name: fileName }] };
 }
@@ -717,7 +766,7 @@ async function executeElevenLabsTtsStep(
     return executeOpenAITtsStep(step, { ...input, text: textToSpeak });
   }
 
-  const voiceId = (step.params?.voice_id as string) || "rachel";
+  const voiceId = (step.params?.voice_id as string) || "21m00Tcm4TlvDq8ikWAM";
   const response = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
     {
@@ -743,12 +792,17 @@ async function executeElevenLabsTtsStep(
     return executeOpenAITtsStep(step, { ...input, text: textToSpeak });
   }
 
-  const dir = ensureUploadsDir();
-  const fileName = `elevenlabs-${Date.now()}.mp3`;
-  const filePath = path.join(dir, fileName);
   const buffer = Buffer.from(await response.arrayBuffer());
-  fs.writeFileSync(filePath, buffer);
+  const fileName = `elevenlabs-${Date.now()}.mp3`;
 
+  const s3Url = await persistBufferToS3(buffer, ".mp3", "audio/mpeg");
+  if (s3Url) {
+    return { text: s3Url, files: [{ url: s3Url, type: "audio", name: fileName }] };
+  }
+
+  const dir = ensureTmpDir();
+  const filePath = path.join(dir, fileName);
+  fs.writeFileSync(filePath, buffer);
   const url = `/uploads/${fileName}`;
   return { text: url, files: [{ url, type: "audio", name: fileName }] };
 }
@@ -921,11 +975,17 @@ async function executeBasicStep(
 
       let url = response.data?.[0]?.url || "";
       if (!url && response.data?.[0]?.b64_json) {
-        const dir = ensureUploadsDir();
-        const fileName = `gpt-img-${Date.now()}.png`;
-        const filePath = path.join(dir, fileName);
-        fs.writeFileSync(filePath, Buffer.from(response.data[0].b64_json, "base64"));
-        url = `/uploads/${fileName}`;
+        const imgBuffer = Buffer.from(response.data[0].b64_json, "base64");
+        const s3Url = await persistBufferToS3(imgBuffer, ".png", "image/png");
+        if (s3Url) {
+          url = s3Url;
+        } else {
+          const dir = ensureTmpDir();
+          const fileName = `gpt-img-${Date.now()}.png`;
+          const filePath = path.join(dir, fileName);
+          fs.writeFileSync(filePath, imgBuffer);
+          url = `/uploads/${fileName}`;
+        }
       }
       return { text: url, files: url ? [{ url, type: "image", name: "generated.png" }] : [] };
     }
@@ -1427,22 +1487,28 @@ export async function executeStep(
     stepOutput = { text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`, files: [] };
   }
 
-  // Persist image/video results to S3 so they survive provider URL expiry
+  // Persist image/video/audio results to S3 so they survive provider URL expiry
+  const persistableTypes: Record<string, "image" | "video" | "audio"> = {
+    IMAGE: "image",
+    VIDEO: "video",
+    AUDIO: "audio",
+  };
+  const mediaType = persistableTypes[step.outputType];
   const shouldPersist =
-    (step.outputType === "IMAGE" || step.outputType === "VIDEO") &&
+    mediaType &&
     stepOutput.text &&
     isTemporaryMediaUrl(stepOutput.text.trim());
 
-  if (shouldPersist) {
-    const mediaType = step.outputType === "IMAGE" ? "image" as const : "video" as const;
+  if (shouldPersist && mediaType) {
     const originalUrl = stepOutput.text.trim();
     const s3Url = await persistMediaToS3(originalUrl, mediaType);
     if (s3Url) {
+      const extMap: Record<string, string> = { image: "png", video: "mp4", audio: "mp3" };
       stepOutput = {
         text: s3Url,
         files: stepOutput.files.length > 0
           ? stepOutput.files.map((f) => f.url === originalUrl ? { ...f, url: s3Url } : f)
-          : [{ url: s3Url, type: mediaType, name: `generated.${mediaType === "image" ? "png" : "mp4"}` }],
+          : [{ url: s3Url, type: mediaType, name: `generated.${extMap[mediaType]}` }],
       };
     }
   }

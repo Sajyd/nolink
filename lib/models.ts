@@ -1069,13 +1069,13 @@ export const AUDIO_MODELS: AIModel[] = [
     description: "Premium text-to-speech with natural voices",
     params: [
       { key: "text", label: "Text to Speak", type: "textarea", required: true, bindable: true },
-      { key: "voice_id", label: "Voice", type: "select", default: "rachel", options: [
-        { label: "Rachel", value: "rachel" },
-        { label: "Adam", value: "adam" },
-        { label: "Antoni", value: "antoni" },
-        { label: "Bella", value: "bella" },
-        { label: "Domi", value: "domi" },
-        { label: "Elli", value: "elli" },
+      { key: "voice_id", label: "Voice", type: "select", default: "21m00Tcm4TlvDq8ikWAM", options: [
+        { label: "Rachel", value: "21m00Tcm4TlvDq8ikWAM" },
+        { label: "Adam", value: "pNInz6obpgDQGcFmaJgB" },
+        { label: "Antoni", value: "ErXwobaYiN019PkySvjV" },
+        { label: "Bella", value: "EXAVITQu4vr4xnSDxMaL" },
+        { label: "Domi", value: "AZnzlk1XvdvUeBnXmlld" },
+        { label: "Elli", value: "MF3mGyEYCl7XYWbV9V6O" },
       ]},
       { key: "stability", label: "Stability", type: "number", default: 0.5, min: 0, max: 1 },
       { key: "similarity_boost", label: "Similarity", type: "number", default: 0.75, min: 0, max: 1 },
