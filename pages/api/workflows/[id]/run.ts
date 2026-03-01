@@ -189,8 +189,17 @@ async function runWorkflowInBackground(
     customParamMap[key] = String(val ?? "");
   }
 
+  // Build parent map from edges so we can merge outputs from all parents
+  const edgeList = (workflow.edges as { source: string; target: string }[] | null) || [];
+  const parentMap: Record<string, string[]> = {};
+  for (const e of edgeList) {
+    if (!parentMap[e.target]) parentMap[e.target] = [];
+    parentMap[e.target].push(e.source);
+  }
+  const stepOutputMap: Record<string, { text: string; files: FileInput[] }> = {};
+
   const resolveCP = (text: string) =>
-    text.replace(/\{\{(\w+)\}\}/g, (m, name) =>
+    text.replace(/\{\{([^}]+)\}\}/g, (m, name) =>
       name === "input"
         ? m
         : customParamMap[name] !== undefined
@@ -201,6 +210,24 @@ async function runWorkflowInBackground(
   for (const step of sortedSteps) {
     if (step.stepType === "INPUT" && perStepInputMap[step.id]) {
       currentInput = perStepInputMap[step.id];
+    }
+
+    // Merge outputs from all parent steps into currentInput
+    const parents = parentMap[step.id];
+    if (parents && parents.length > 0) {
+      const parentOutputs = parents.map((pid) => stepOutputMap[pid]).filter(Boolean);
+      if (parentOutputs.length > 0) {
+        const mergedText = parentOutputs.map((o) => o.text).filter(Boolean).join("\n\n");
+        const mergedFiles = parentOutputs.flatMap((o) => o.files || []);
+        currentInput = { text: mergedText || currentInput.text, files: [...mergedFiles, ...currentInput.files] };
+        // Deduplicate files by url
+        const seen = new Set<string>();
+        currentInput.files = currentInput.files.filter((f) => {
+          if (seen.has(f.url)) return false;
+          seen.add(f.url);
+          return true;
+        });
+      }
     }
 
     if (step.customParams) {
@@ -217,6 +244,11 @@ async function runWorkflowInBackground(
       for (const [k, v] of Object.entries(resolvedStep.params)) {
         if (typeof v === "string") {
           (resolvedStep.params as Record<string, unknown>)[k] = resolveCP(v);
+        }
+        if (Array.isArray(v)) {
+          (resolvedStep.params as Record<string, unknown>)[k] = v.map((item) =>
+            typeof item === "string" ? resolveCP(item) : item
+          );
         }
       }
     }
@@ -265,6 +297,14 @@ async function runWorkflowInBackground(
       const { _nextInput, ...stepResult } = result;
       allResults.push(stepResult);
       currentInput = _nextInput;
+
+      // Store per-step outputs so downstream steps can reference them
+      stepOutputMap[step.id] = _nextInput;
+      customParamMap[`step_${step.id}_output`] = _nextInput.text;
+      for (const f of _nextInput.files) {
+        const key = `step_${step.id}_${f.type}`;
+        if (!customParamMap[key]) customParamMap[key] = f.url;
+      }
 
       // Persist intermediate progress
       await prisma.execution.update({

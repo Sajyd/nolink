@@ -72,10 +72,21 @@ export default function StepConfigPanel() {
           label: `${pn.data.label || `Input ${idx + 1}`}: ${type}`,
         }));
       }
-      return [{
-        value: "{{input}}",
-        label: pn.data.label || "Previous node",
-      }];
+      const nodeLabel = pn.data.label || "Previous node";
+      const opts: { value: string; label: string }[] = [
+        { value: `step_${pn.id}_output`, label: `${nodeLabel}: text output` },
+      ];
+      const outType = (pn.data.outputType || "TEXT").toLowerCase();
+      if (outType === "image" || pn.type === "falAiNode") {
+        opts.push({ value: `step_${pn.id}_image`, label: `${nodeLabel}: image` });
+      }
+      if (outType === "video") {
+        opts.push({ value: `step_${pn.id}_video`, label: `${nodeLabel}: video` });
+      }
+      if (outType === "audio") {
+        opts.push({ value: `step_${pn.id}_audio`, label: `${nodeLabel}: audio` });
+      }
+      return opts;
     }),
     // Input parameters from connected input nodes
     ...parentNodes
