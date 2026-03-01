@@ -114,7 +114,12 @@ export default function EditWorkflow() {
                 }
               });
               modelParams.image_urls = urls;
-            } else if (typeof val === "string" && val.startsWith("{{") && val.endsWith("}}")) {
+            } else if (
+              key !== "prompt" &&
+              typeof val === "string" &&
+              val.startsWith("{{") &&
+              val.endsWith("}}")
+            ) {
               paramBindings[key] = val;
             } else {
               modelParams[key] = val;
