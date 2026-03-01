@@ -180,7 +180,7 @@ function WorkflowCanvasInner() {
     switch (node.type) {
       case "inputNode": return "#10b981";
       case "outputNode": return "#8b5cf6";
-      case "falAiNode": return "#f59e0b";
+      case "falAiNode": return "#ed0548";
       case "replicateNode": return "#FF5C00";
       case "customApiNode": return "#f43f5e";
       default: return "#4c6ef5";

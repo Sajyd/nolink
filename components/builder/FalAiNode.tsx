@@ -24,11 +24,11 @@ function FalAiNode({ id, data, selected }: NodeProps) {
     <NodeShell
       id={id}
       selected={selected}
-      accentColor="border-amber-500 shadow-amber-500/20"
-      headerBg="bg-amber-50 dark:bg-amber-900/20"
+      accentColor="border-pink-500 shadow-pink-500/20"
+      headerBg="bg-pink-50 dark:bg-pink-900/20"
       headerLabel={`Step ${stepNumber || nodeData.order}`}
       headerBadge={
-        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gradient-to-r from-amber-500 to-orange-500 text-white">
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#ed0548] text-white">
           fal.ai
         </span>
       }
@@ -47,14 +47,14 @@ function FalAiNode({ id, data, selected }: NodeProps) {
               PRO
             </span>
             {(nodeData.customFalPrice ?? 0) > 0 && (
-              <span className="text-amber-600 dark:text-amber-400 font-medium">
+              <span className="text-pink-600 dark:text-pink-400 font-medium">
                 {nodeData.customFalPrice} NL
               </span>
             )}
           </div>
 
           {nodeData.customFalEndpoint ? (
-            <p className="text-[10px] font-mono text-amber-500 truncate">
+            <p className="text-[10px] font-mono text-pink-500 truncate">
               {nodeData.customFalEndpoint}
             </p>
           ) : (
@@ -90,15 +90,15 @@ function FalAiNode({ id, data, selected }: NodeProps) {
       ) : model ? (
         <>
           <div className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-            <Sparkles className="w-3 h-3 text-amber-500" />
+            <Sparkles className="w-3 h-3 text-pink-500" />
             <span className="truncate">{model.name}</span>
             {model.comingSoon ? (
-              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+              <span className="flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.5 rounded bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400">
                 <Clock className="w-2.5 h-2.5" />
                 SOON
               </span>
             ) : (
-              <span className="text-amber-600 dark:text-amber-400 font-medium">
+              <span className="text-pink-600 dark:text-pink-400 font-medium">
                 {model.costPerUse} NL
               </span>
             )}

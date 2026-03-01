@@ -100,7 +100,7 @@ const NODE_TEMPLATES: {
     rfType: "falAiNode",
     label: "fal.ai Node",
     icon: Sparkles,
-    iconColor: "text-amber-500",
+    iconColor: "text-pink-500",
     defaults: {
       label: "",
       stepType: "falAiNode",

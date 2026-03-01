@@ -111,7 +111,7 @@ export default function StepConfigPanel() {
         <h3 className="font-semibold text-sm flex items-center gap-2">
           {nodeType === "inputNode" && <Upload className="w-4 h-4 text-emerald-500" />}
           {nodeType === "outputNode" && <Download className="w-4 h-4 text-violet-500" />}
-          {nodeType === "falAiNode" && <Sparkles className="w-4 h-4 text-amber-500" />}
+          {nodeType === "falAiNode" && <Sparkles className="w-4 h-4 text-pink-500" />}
           {nodeType === "replicateNode" && <Box className="w-4 h-4 text-orange-500" />}
           {nodeType === "customApiNode" && <Globe className="w-4 h-4 text-rose-500" />}
           {(nodeType === "basicNode" || nodeType === "stepNode") && <Settings2 className="w-4 h-4 text-brand-500" />}
@@ -1389,16 +1389,16 @@ function FalAiNodeConfig({
       {selectedModel && !isCustomModel && (
         <div className="space-y-1">
           {selectedModel.comingSoon && (
-            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-              <Clock className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800">
+              <Clock className="w-3.5 h-3.5 text-pink-500" />
+              <span className="text-[11px] font-medium text-pink-600 dark:text-pink-400">
                 Coming Soon — Available Feb 24, 2026
               </span>
             </div>
           )}
           <p className="text-[10px] text-gray-400">{selectedModel.description}</p>
           {selectedModel.falEndpoint && (
-            <p className="text-[10px] font-mono text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">
+            <p className="text-[10px] font-mono text-pink-500 bg-pink-50 dark:bg-pink-900/20 px-2 py-1 rounded">
               {selectedModel.falEndpoint}
             </p>
           )}
