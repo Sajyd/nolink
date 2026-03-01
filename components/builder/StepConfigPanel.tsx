@@ -19,7 +19,7 @@ import {
   type ModelParam,
 } from "@/lib/models";
 import { useSession } from "next-auth/react";
-import { useRef } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { useState } from "react";
 import {
   X, Sparkles, Settings2, Upload, Download, Plus, Trash2, Variable,
@@ -1735,6 +1735,15 @@ function CustomApiNodeConfig({
   );
 }
 
+interface FalSearchResult {
+  endpointId: string;
+  name: string;
+  category: string;
+  description: string;
+  thumbnail: string;
+  tags: string[];
+}
+
 function CustomFalModelEditor({
   nodeId,
   data,
@@ -1759,18 +1768,73 @@ function CustomFalModelEditor({
     unit: string;
   } | null>(null);
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<FalSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
   const setEndpoint = (value: string) => {
     updateNodeData(nodeId, { customFalEndpoint: value });
   };
 
-  const fetchModelInfo = async () => {
-    if (!endpoint.trim()) return;
+  const searchModels = useCallback(async (query: string) => {
+    if (query.trim().length < 2) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await fetch(
+        `/api/fal/search-models?q=${encodeURIComponent(query.trim())}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setSearchResults(data.models || []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  const handleSearchInput = (value: string) => {
+    setSearchQuery(value);
+    setShowDropdown(true);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => searchModels(value), 300);
+  };
+
+  const selectModel = (model: FalSearchResult) => {
+    setSearchQuery("");
+    setSearchResults([]);
+    setShowDropdown(false);
+    setEndpoint(model.endpointId);
+    // auto-fetch info for the selected model
+    fetchModelInfoFor(model.endpointId);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const fetchModelInfoFor = async (endpointId: string) => {
+    if (!endpointId.trim()) return;
     setFetching(true);
     setFetchError(null);
     setModelMeta(null);
     try {
       const res = await fetch(
-        `/api/fal/model-info?endpoint_id=${encodeURIComponent(endpoint.trim())}`
+        `/api/fal/model-info?endpoint_id=${encodeURIComponent(endpointId.trim())}`
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: "Request failed" }));
@@ -1789,7 +1853,8 @@ function CustomFalModelEditor({
       updateNodeData(nodeId, { customFalPrice: info.costPerUse });
 
       if (info.params && info.params.length > 0) {
-        const existingKeys = new Set(customFalParams.map((p) => p.key));
+        const currentParams: CustomFalParam[] = data.customFalParams || [];
+        const existingKeys = new Set(currentParams.map((p: CustomFalParam) => p.key));
         const newParams: CustomFalParam[] = info.params
           .filter((p: any) => !existingKeys.has(p.key))
           .map((p: any) => ({
@@ -1798,7 +1863,7 @@ function CustomFalModelEditor({
           }));
         if (newParams.length > 0) {
           updateNodeData(nodeId, {
-            customFalParams: [...customFalParams, ...newParams],
+            customFalParams: [...currentParams, ...newParams],
           });
         }
       }
@@ -1808,6 +1873,8 @@ function CustomFalModelEditor({
       setFetching(false);
     }
   };
+
+  const fetchModelInfo = () => fetchModelInfoFor(endpoint);
 
   const addParam = () => {
     updateNodeData(nodeId, {
@@ -1837,6 +1904,68 @@ function CustomFalModelEditor({
         </span>
       </div>
 
+      {/* Search fal.ai models */}
+      <div ref={searchRef} className="relative">
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+          Search fal.ai Models
+        </label>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+          {searching && (
+            <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 animate-spin" />
+          )}
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => handleSearchInput(e.target.value)}
+            onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+            className="input-field text-xs pl-8 pr-8 w-full"
+            placeholder="Search by name, e.g. flux, wan, kling…"
+          />
+        </div>
+
+        {showDropdown && searchResults.length > 0 && (
+          <div className="absolute z-50 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg">
+            {searchResults.map((model) => (
+              <button
+                key={model.endpointId}
+                onClick={() => selectModel(model)}
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-b-0"
+              >
+                <div className="flex items-center gap-2">
+                  {model.thumbnail && (
+                    <img
+                      src={model.thumbnail}
+                      alt=""
+                      className="w-8 h-8 rounded object-cover shrink-0"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
+                      {model.name}
+                    </div>
+                    <div className="text-[10px] font-mono text-gray-400 truncate">
+                      {model.endpointId}
+                    </div>
+                    {model.category && (
+                      <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                        {model.category}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {showDropdown && searchQuery.trim().length >= 2 && !searching && searchResults.length === 0 && (
+          <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg px-3 py-3">
+            <p className="text-xs text-gray-400 text-center">No models found</p>
+          </div>
+        )}
+      </div>
+
       {/* Endpoint input with fetch button */}
       <div>
         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
@@ -1864,7 +1993,7 @@ function CustomFalModelEditor({
           </button>
         </div>
         <p className="mt-1 text-[10px] text-gray-400">
-          Enter the endpoint and click Fetch Info to auto-fill parameters and pricing.
+          Select a model above or enter an endpoint manually and click Fetch Info.
         </p>
       </div>
 
