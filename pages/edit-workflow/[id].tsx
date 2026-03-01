@@ -24,6 +24,7 @@ const STEP_TYPE_TO_NODE: Record<string, string> = {
   FAL_AI: "falAiNode",
   REPLICATE: "replicateNode",
   CUSTOM_API: "customApiNode",
+  LOGIC: "logicNode",
 };
 
 export default function EditWorkflow() {
@@ -155,6 +156,10 @@ export default function EditWorkflow() {
           customApiPrice: (config.customApiPrice as number) ?? undefined,
           fileBindings: (config.fileBindings as string[]) || undefined,
           inputParameters: (config.inputParameters as any[]) || undefined,
+          logicMode: (config.logicMode as any) || undefined,
+          logicCondition: (config.logicCondition as any) || undefined,
+          logicLoop: (config.logicLoop as any) || undefined,
+          logicTransform: (config.logicTransform as any) || undefined,
         };
 
         nodes.push({
@@ -215,6 +220,7 @@ export default function EditWorkflow() {
           basicNode: "BASIC",
           stepNode: "BASIC",
           customApiNode: "CUSTOM_API",
+          logicNode: "LOGIC",
         };
         const mergedParams = { ...(n.data.modelParams || {}) };
         const bindings = n.data.paramBindings || {};
@@ -241,6 +247,7 @@ export default function EditWorkflow() {
           (p: { key: string; value: string }) => p.key.trim() !== ""
         );
         const isCustomApi = n.type === "customApiNode";
+        const isLogic = n.type === "logicNode";
         return {
           nodeId: n.id,
           order: idx + 1,
@@ -270,6 +277,10 @@ export default function EditWorkflow() {
           inputParameters: (n.data.inputParameters || []).filter(
             (p: { name: string }) => p.name.trim() !== ""
           ),
+          logicMode: isLogic ? (n.data.logicMode || null) : null,
+          logicCondition: isLogic ? (n.data.logicCondition || null) : null,
+          logicLoop: isLogic ? (n.data.logicLoop || null) : null,
+          logicTransform: isLogic ? (n.data.logicTransform || null) : null,
           positionX: n.position.x,
           positionY: n.position.y,
         };

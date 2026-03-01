@@ -85,6 +85,7 @@ export default function CreateWorkflow() {
           basicNode: "BASIC",
           stepNode: "BASIC",
           customApiNode: "CUSTOM_API",
+          logicNode: "LOGIC",
         };
         const mergedParams = { ...(n.data.modelParams || {}) };
         const bindings = n.data.paramBindings || {};
@@ -111,6 +112,7 @@ export default function CreateWorkflow() {
           (p: { key: string; value: string }) => p.key.trim() !== ""
         );
         const isCustomApi = n.type === "customApiNode";
+        const isLogic = n.type === "logicNode";
         return {
           nodeId: n.id,
           order: idx + 1,
@@ -140,6 +142,10 @@ export default function CreateWorkflow() {
           inputParameters: (n.data.inputParameters || []).filter(
             (p: { name: string }) => p.name.trim() !== ""
           ),
+          logicMode: isLogic ? (n.data.logicMode || null) : null,
+          logicCondition: isLogic ? (n.data.logicCondition || null) : null,
+          logicLoop: isLogic ? (n.data.logicLoop || null) : null,
+          logicTransform: isLogic ? (n.data.logicTransform || null) : null,
           positionX: n.position.x,
           positionY: n.position.y,
         };

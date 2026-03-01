@@ -10,6 +10,7 @@ import {
   Sparkles,
   Box,
   Globe,
+  GitBranch,
   Save,
   Eye,
   EyeOff,
@@ -105,6 +106,30 @@ const NODE_TEMPLATES: {
       prompt: "",
       modelParams: {},
       paramBindings: {},
+    },
+  },
+  {
+    type: "logicNode",
+    rfType: "logicNode",
+    label: "Logic Gate",
+    icon: GitBranch,
+    color: "text-amber-500 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800",
+    description: "If/else conditions, loops, and text transforms — no code",
+    defaults: {
+      label: "",
+      stepType: "logicNode",
+      aiModel: "",
+      inputType: "TEXT",
+      outputType: "TEXT",
+      prompt: "",
+      logicMode: "condition",
+      logicCondition: {
+        leftOperand: "{{input}}",
+        operator: "is_not_empty",
+        rightOperand: "",
+        thenOutput: "{{input}}",
+        elseOutput: "",
+      },
     },
   },
   {
@@ -382,13 +407,15 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
                 node.type === "outputNode" ? "OUT" :
                 node.type === "falAiNode" ? "FAL" :
                 node.type === "replicateNode" ? "REP" :
-                node.type === "customApiNode" ? "API" : "AI";
+                node.type === "customApiNode" ? "API" :
+                node.type === "logicNode" ? "LOGIC" : "AI";
               const typeColor =
                 node.type === "inputNode" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" :
                 node.type === "outputNode" ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" :
                 node.type === "falAiNode" ? "bg-pink-100 text-pink-600 dark:bg-pink-900/30 dark:text-pink-400" :
                 node.type === "replicateNode" ? "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" :
                 node.type === "customApiNode" ? "bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400" :
+                node.type === "logicNode" ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" :
                 "bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400";
 
               return (

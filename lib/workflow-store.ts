@@ -2,7 +2,55 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Node, Edge } from "@xyflow/react";
 
-export type StepNodeType = "inputNode" | "outputNode" | "basicNode" | "falAiNode" | "replicateNode" | "customApiNode";
+export type StepNodeType = "inputNode" | "outputNode" | "basicNode" | "falAiNode" | "replicateNode" | "customApiNode" | "logicNode";
+
+// ─── Logic Node Types ──────────────────────────────────────────
+export type LogicMode = "condition" | "loop" | "transform";
+
+export type ConditionOperator =
+  | "equals"
+  | "not_equals"
+  | "contains"
+  | "not_contains"
+  | "starts_with"
+  | "ends_with"
+  | "greater_than"
+  | "less_than"
+  | "is_empty"
+  | "is_not_empty"
+  | "matches_regex";
+
+export type TransformOperation =
+  | "uppercase"
+  | "lowercase"
+  | "trim"
+  | "reverse"
+  | "length"
+  | "extract_json"
+  | "replace"
+  | "split"
+  | "join"
+  | "template";
+
+export interface LogicCondition {
+  leftOperand: string;
+  operator: ConditionOperator;
+  rightOperand: string;
+  thenOutput: string;
+  elseOutput: string;
+}
+
+export interface LogicLoop {
+  delimiter: string;
+  itemTemplate: string;
+  joinWith: string;
+}
+
+export interface LogicTransform {
+  operation: TransformOperation;
+  operand?: string;
+  replacement?: string;
+}
 
 export interface CustomParam {
   name: string;
@@ -70,6 +118,10 @@ export interface StepNodeData {
   customApiResultFields?: CustomApiResultField[];
   customApiPrice?: number;
   inputParameters?: InputParameter[];
+  logicMode?: LogicMode;
+  logicCondition?: LogicCondition;
+  logicLoop?: LogicLoop;
+  logicTransform?: LogicTransform;
   [key: string]: unknown;
 }
 

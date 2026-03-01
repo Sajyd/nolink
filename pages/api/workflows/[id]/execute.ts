@@ -128,6 +128,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       customApiResultFields: (config.customApiResultFields as { key: string; type: string }[] | undefined) || undefined,
       customApiPrice: (config.customApiPrice as number | undefined) ?? undefined,
       fileBindings: (config.fileBindings as string[] | undefined) || undefined,
+      logicMode: (config.logicMode as string | undefined) || undefined,
+      logicCondition: (config.logicCondition as any) || undefined,
+      logicLoop: (config.logicLoop as any) || undefined,
+      logicTransform: (config.logicTransform as any) || undefined,
     };
   });
 

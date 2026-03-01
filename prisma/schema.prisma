@@ -124,6 +124,7 @@ enum StepType {
   FAL_AI
   REPLICATE
   CUSTOM_API
+  LOGIC
 }
 
 model Step {

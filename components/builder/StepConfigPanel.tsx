@@ -28,7 +28,9 @@ import {
   X, Sparkles, Box, Settings2, Upload, Download, Plus, Trash2, Variable,
   Lock, Clock, Zap, Link2, Globe, Shield, AlertTriangle, SlidersHorizontal,
   Paperclip, Image, FileText, Music, Film, Search, Loader2, CheckCircle2, Info,
+  GitBranch,
 } from "lucide-react";
+import type { LogicMode, LogicCondition, LogicLoop, LogicTransform, ConditionOperator, TransformOperation } from "@/lib/workflow-store";
 
 const IO_TYPES = ["TEXT", "IMAGE", "AUDIO", "VIDEO", "DOCUMENT"];
 
@@ -114,6 +116,7 @@ export default function StepConfigPanel() {
           {nodeType === "falAiNode" && <Sparkles className="w-4 h-4 text-pink-500" />}
           {nodeType === "replicateNode" && <Box className="w-4 h-4 text-orange-500" />}
           {nodeType === "customApiNode" && <Globe className="w-4 h-4 text-rose-500" />}
+          {nodeType === "logicNode" && <GitBranch className="w-4 h-4 text-amber-500" />}
           {(nodeType === "basicNode" || nodeType === "stepNode") && <Settings2 className="w-4 h-4 text-brand-500" />}
           Configure {
             nodeType === "inputNode" ? "Input" :
@@ -121,6 +124,7 @@ export default function StepConfigPanel() {
             nodeType === "falAiNode" ? "fal.ai Node" :
             nodeType === "replicateNode" ? "Replicate Node" :
             nodeType === "customApiNode" ? "Custom API" :
+            nodeType === "logicNode" ? "Logic Gate" :
             "Step"
           }
         </h3>
@@ -245,6 +249,15 @@ export default function StepConfigPanel() {
         {/* ── CUSTOM API NODE CONFIG ──────────────────────── */}
         {nodeType === "customApiNode" && (
           <CustomApiNodeConfig
+            nodeId={selectedNodeId}
+            data={data}
+            inputBindOptions={inputBindOptions}
+          />
+        )}
+
+        {/* ── LOGIC NODE CONFIG ──────────────────────────── */}
+        {nodeType === "logicNode" && (
+          <LogicNodeConfig
             nodeId={selectedNodeId}
             data={data}
             inputBindOptions={inputBindOptions}
@@ -1937,6 +1950,412 @@ function CustomReplicateModelEditor({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Logic Node Config ──────────────────────────────────────────
+
+const LOGIC_MODES: { value: LogicMode; label: string; description: string }[] = [
+  { value: "condition", label: "If / Else", description: "Route data based on a condition" },
+  { value: "loop", label: "Loop (For Each)", description: "Process each item in a list" },
+  { value: "transform", label: "Transform", description: "Modify text with built-in operations" },
+];
+
+const CONDITION_OPERATORS: { value: ConditionOperator; label: string }[] = [
+  { value: "equals", label: "Equals" },
+  { value: "not_equals", label: "Not equals" },
+  { value: "contains", label: "Contains" },
+  { value: "not_contains", label: "Does not contain" },
+  { value: "starts_with", label: "Starts with" },
+  { value: "ends_with", label: "Ends with" },
+  { value: "greater_than", label: "Greater than (number)" },
+  { value: "less_than", label: "Less than (number)" },
+  { value: "is_empty", label: "Is empty" },
+  { value: "is_not_empty", label: "Is not empty" },
+  { value: "matches_regex", label: "Matches regex" },
+];
+
+const TRANSFORM_OPERATIONS: { value: TransformOperation; label: string; description: string }[] = [
+  { value: "uppercase", label: "UPPERCASE", description: "Convert to uppercase" },
+  { value: "lowercase", label: "lowercase", description: "Convert to lowercase" },
+  { value: "trim", label: "Trim", description: "Remove leading/trailing whitespace" },
+  { value: "reverse", label: "Reverse", description: "Reverse the text" },
+  { value: "length", label: "Length", description: "Output the character count" },
+  { value: "replace", label: "Replace", description: "Find and replace text" },
+  { value: "extract_json", label: "JSON Extract", description: "Extract a field from JSON" },
+  { value: "split", label: "Split", description: "Split text by delimiter" },
+  { value: "join", label: "Join", description: "Join lines into one string" },
+  { value: "template", label: "Template", description: "Wrap input in a template" },
+];
+
+function LogicNodeConfig({
+  nodeId,
+  data,
+  inputBindOptions,
+}: {
+  nodeId: string;
+  data: any;
+  inputBindOptions: { value: string; label: string }[];
+}) {
+  const { updateNodeData } = useWorkflowStore();
+  const mode: LogicMode = data.logicMode || "condition";
+  const condition: LogicCondition = data.logicCondition || {
+    leftOperand: "{{input}}",
+    operator: "is_not_empty",
+    rightOperand: "",
+    thenOutput: "{{input}}",
+    elseOutput: "",
+  };
+  const loop: LogicLoop = data.logicLoop || {
+    delimiter: "\\n",
+    itemTemplate: "{{item}}",
+    joinWith: "\\n",
+  };
+  const transform: LogicTransform = data.logicTransform || {
+    operation: "uppercase",
+  };
+
+  const setMode = (m: LogicMode) => {
+    const updates: Partial<any> = { logicMode: m };
+    if (m === "condition" && !data.logicCondition) {
+      updates.logicCondition = condition;
+    }
+    if (m === "loop" && !data.logicLoop) {
+      updates.logicLoop = loop;
+    }
+    if (m === "transform" && !data.logicTransform) {
+      updates.logicTransform = transform;
+    }
+    updateNodeData(nodeId, updates);
+  };
+
+  const updateCondition = (updates: Partial<LogicCondition>) => {
+    updateNodeData(nodeId, {
+      logicCondition: { ...condition, ...updates },
+    });
+  };
+
+  const updateLoop = (updates: Partial<LogicLoop>) => {
+    updateNodeData(nodeId, {
+      logicLoop: { ...loop, ...updates },
+    });
+  };
+
+  const updateTransform = (updates: Partial<LogicTransform>) => {
+    updateNodeData(nodeId, {
+      logicTransform: { ...transform, ...updates },
+    });
+  };
+
+  const needsRightOperand = !["is_empty", "is_not_empty"].includes(condition.operator);
+
+  return (
+    <div className="space-y-4">
+      {/* Mode selector */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+          Logic Mode
+        </label>
+        <div className="space-y-1.5">
+          {LOGIC_MODES.map((m) => (
+            <button
+              key={m.value}
+              onClick={() => setMode(m.value)}
+              className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                mode === m.value
+                  ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700"
+                  : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+              }`}
+            >
+              <p className={`text-sm font-medium ${mode === m.value ? "text-amber-700 dark:text-amber-300" : ""}`}>
+                {m.label}
+              </p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{m.description}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Condition config */}
+      {mode === "condition" && (
+        <div className="space-y-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 p-3">
+          <h4 className="text-xs font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+            <GitBranch className="w-3.5 h-3.5" />
+            Condition
+          </h4>
+
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Left operand</label>
+            <input
+              type="text"
+              value={condition.leftOperand}
+              onChange={(e) => updateCondition({ leftOperand: e.target.value })}
+              className="input-field text-xs font-mono"
+              placeholder="{{input}}"
+            />
+            <p className="text-[9px] text-gray-400 mt-0.5">
+              Use {"{{input}}"} for previous step output
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Operator</label>
+            <select
+              value={condition.operator}
+              onChange={(e) => updateCondition({ operator: e.target.value as ConditionOperator })}
+              className="input-field text-xs"
+            >
+              {CONDITION_OPERATORS.map((op) => (
+                <option key={op.value} value={op.value}>{op.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {needsRightOperand && (
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Compare to</label>
+              <input
+                type="text"
+                value={condition.rightOperand}
+                onChange={(e) => updateCondition({ rightOperand: e.target.value })}
+                className="input-field text-xs font-mono"
+                placeholder="value to compare..."
+              />
+            </div>
+          )}
+
+          <div className="border-t border-amber-200 dark:border-amber-800 pt-3 space-y-2">
+            <div>
+              <label className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mb-0.5">
+                Then (output if true)
+              </label>
+              <textarea
+                value={condition.thenOutput}
+                onChange={(e) => updateCondition({ thenOutput: e.target.value })}
+                className="input-field text-xs font-mono"
+                rows={2}
+                placeholder="{{input}}"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-red-500 dark:text-red-400 font-medium mb-0.5">
+                Else (output if false)
+              </label>
+              <textarea
+                value={condition.elseOutput}
+                onChange={(e) => updateCondition({ elseOutput: e.target.value })}
+                className="input-field text-xs font-mono"
+                rows={2}
+                placeholder="Empty or fallback value..."
+              />
+            </div>
+          </div>
+
+          {inputBindOptions.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[9px] font-medium text-gray-400 uppercase tracking-wider">Available inputs</p>
+              <div className="flex flex-wrap gap-1">
+                {inputBindOptions.map((opt) => (
+                  <span
+                    key={opt.value}
+                    className="inline-block px-1.5 py-0.5 rounded text-[9px] font-mono bg-gray-100 dark:bg-gray-800 text-gray-500"
+                  >
+                    {`{{${opt.value}}}`}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Loop config */}
+      {mode === "loop" && (
+        <div className="space-y-3 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-cyan-50/50 dark:bg-cyan-900/10 p-3">
+          <h4 className="text-xs font-semibold text-cyan-700 dark:text-cyan-300">
+            Loop (For Each)
+          </h4>
+
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Split delimiter</label>
+            <select
+              value={loop.delimiter}
+              onChange={(e) => updateLoop({ delimiter: e.target.value })}
+              className="input-field text-xs"
+            >
+              <option value="\\n">Newline</option>
+              <option value=",">Comma</option>
+              <option value=";">Semicolon</option>
+              <option value="|">Pipe</option>
+              <option value="\t">Tab</option>
+            </select>
+            <p className="text-[9px] text-gray-400 mt-0.5">
+              How to split the input into items
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Item template</label>
+            <textarea
+              value={loop.itemTemplate}
+              onChange={(e) => updateLoop({ itemTemplate: e.target.value })}
+              className="input-field text-xs font-mono"
+              rows={3}
+              placeholder="Process: {{item}} (index: {{index}})"
+            />
+            <p className="text-[9px] text-gray-400 mt-0.5">
+              {"{{item}}"} = current item, {"{{index}}"} = 0-based index, {"{{index1}}"} = 1-based
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Join results with</label>
+            <select
+              value={loop.joinWith}
+              onChange={(e) => updateLoop({ joinWith: e.target.value })}
+              className="input-field text-xs"
+            >
+              <option value="\\n">Newline</option>
+              <option value=", ">Comma + space</option>
+              <option value=" ">Space</option>
+              <option value=" | ">Pipe</option>
+              <option value="">Nothing (concatenate)</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* Transform config */}
+      {mode === "transform" && (
+        <div className="space-y-3 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 p-3">
+          <h4 className="text-xs font-semibold text-purple-700 dark:text-purple-300">
+            Transform
+          </h4>
+
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Operation</label>
+            <select
+              value={transform.operation}
+              onChange={(e) => updateTransform({ operation: e.target.value as TransformOperation, operand: "", replacement: "" })}
+              className="input-field text-xs"
+            >
+              {TRANSFORM_OPERATIONS.map((op) => (
+                <option key={op.value} value={op.value}>
+                  {op.label} — {op.description}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {transform.operation === "replace" && (
+            <>
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-0.5">Find</label>
+                <input
+                  type="text"
+                  value={transform.operand || ""}
+                  onChange={(e) => updateTransform({ operand: e.target.value })}
+                  className="input-field text-xs font-mono"
+                  placeholder="text to find..."
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-0.5">Replace with</label>
+                <input
+                  type="text"
+                  value={transform.replacement || ""}
+                  onChange={(e) => updateTransform({ replacement: e.target.value })}
+                  className="input-field text-xs font-mono"
+                  placeholder="replacement text..."
+                />
+              </div>
+            </>
+          )}
+
+          {transform.operation === "extract_json" && (
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">JSON path</label>
+              <input
+                type="text"
+                value={transform.operand || ""}
+                onChange={(e) => updateTransform({ operand: e.target.value })}
+                className="input-field text-xs font-mono"
+                placeholder="data.result.text"
+              />
+              <p className="text-[9px] text-gray-400 mt-0.5">
+                Dot-separated path to extract from JSON
+              </p>
+            </div>
+          )}
+
+          {transform.operation === "split" && (
+            <>
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-0.5">Split by</label>
+                <input
+                  type="text"
+                  value={transform.operand || ""}
+                  onChange={(e) => updateTransform({ operand: e.target.value })}
+                  className="input-field text-xs font-mono"
+                  placeholder=", (comma)"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-0.5">Join with</label>
+                <input
+                  type="text"
+                  value={transform.replacement || ""}
+                  onChange={(e) => updateTransform({ replacement: e.target.value })}
+                  className="input-field text-xs font-mono"
+                  placeholder="\n (newline)"
+                />
+              </div>
+            </>
+          )}
+
+          {transform.operation === "join" && (
+            <>
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-0.5">Split lines by</label>
+                <input
+                  type="text"
+                  value={transform.operand || ""}
+                  onChange={(e) => updateTransform({ operand: e.target.value })}
+                  className="input-field text-xs font-mono"
+                  placeholder="\n (newline)"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500 mb-0.5">Join with</label>
+                <input
+                  type="text"
+                  value={transform.replacement || ""}
+                  onChange={(e) => updateTransform({ replacement: e.target.value })}
+                  className="input-field text-xs font-mono"
+                  placeholder=", "
+                />
+              </div>
+            </>
+          )}
+
+          {transform.operation === "template" && (
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Template</label>
+              <textarea
+                value={transform.operand || ""}
+                onChange={(e) => updateTransform({ operand: e.target.value })}
+                className="input-field text-xs font-mono"
+                rows={3}
+                placeholder="The result is: {{input}}"
+              />
+              <p className="text-[9px] text-gray-400 mt-0.5">
+                {"{{input}}"} will be replaced with the incoming text
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
