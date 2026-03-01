@@ -38,9 +38,7 @@ export default function CreateWorkflow() {
   const mountedRef = useRef(false);
 
   useEffect(() => {
-    if (store.editingWorkflowId) {
-      store.reset();
-    }
+    store.reset();
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
