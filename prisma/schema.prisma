@@ -122,6 +122,7 @@ enum StepType {
   OUTPUT
   BASIC
   FAL_AI
+  REPLICATE
   CUSTOM_API
 }
 

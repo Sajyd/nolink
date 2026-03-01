@@ -8,7 +8,7 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import BuilderToolbar from "@/components/builder/BuilderToolbar";
 import StepConfigPanel from "@/components/builder/StepConfigPanel";
-import { useWorkflowStore, topologicalOrder, type StepNodeData, type CustomFalParam } from "@/lib/workflow-store";
+import { useWorkflowStore, topologicalOrder, type StepNodeData, type CustomFalParam, type CustomReplicateParam } from "@/lib/workflow-store";
 import ThemeToggle from "@/components/ThemeToggle";
 import type { Node, Edge } from "@xyflow/react";
 
@@ -22,6 +22,7 @@ const STEP_TYPE_TO_NODE: Record<string, string> = {
   OUTPUT: "outputNode",
   BASIC: "basicNode",
   FAL_AI: "falAiNode",
+  REPLICATE: "replicateNode",
   CUSTOM_API: "customApiNode",
 };
 
@@ -143,6 +144,9 @@ export default function EditWorkflow() {
           customFalEndpoint: (config.customFalEndpoint as string) || undefined,
           customFalParams: (config.customFalParams as CustomFalParam[]) || undefined,
           customFalPrice: (config.customFalPrice as number) ?? undefined,
+          customReplicateModel: (config.customReplicateModel as string) || undefined,
+          customReplicateParams: (config.customReplicateParams as CustomReplicateParam[]) || undefined,
+          customReplicatePrice: (config.customReplicatePrice as number) ?? undefined,
           customApiUrl: (config.customApiUrl as string) || undefined,
           customApiMethod: (config.customApiMethod as any) || undefined,
           customApiHeaders: (config.customApiHeaders as any[]) || undefined,
@@ -207,6 +211,7 @@ export default function EditWorkflow() {
           inputNode: "INPUT",
           outputNode: "OUTPUT",
           falAiNode: "FAL_AI",
+          replicateNode: "REPLICATE",
           basicNode: "BASIC",
           stepNode: "BASIC",
           customApiNode: "CUSTOM_API",
@@ -231,6 +236,10 @@ export default function EditWorkflow() {
         const validFalParams = (n.data.customFalParams || []).filter(
           (p: { key: string; value: string }) => p.key.trim() !== ""
         );
+        const isCustomReplicate = n.data.aiModel === "rep-custom";
+        const validReplicateParams = (n.data.customReplicateParams || []).filter(
+          (p: { key: string; value: string }) => p.key.trim() !== ""
+        );
         const isCustomApi = n.type === "customApiNode";
         return {
           nodeId: n.id,
@@ -247,6 +256,9 @@ export default function EditWorkflow() {
           customFalEndpoint: isCustomFal ? (n.data.customFalEndpoint || null) : null,
           customFalParams: isCustomFal && validFalParams.length > 0 ? validFalParams : null,
           customFalPrice: isCustomFal ? (n.data.customFalPrice ?? 0) : null,
+          customReplicateModel: isCustomReplicate ? (n.data.customReplicateModel || null) : null,
+          customReplicateParams: isCustomReplicate && validReplicateParams.length > 0 ? validReplicateParams : null,
+          customReplicatePrice: isCustomReplicate ? (n.data.customReplicatePrice ?? 0) : null,
           customApiUrl: isCustomApi ? (n.data.customApiUrl || null) : null,
           customApiMethod: isCustomApi ? (n.data.customApiMethod || "POST") : null,
           customApiHeaders: isCustomApi ? (n.data.customApiHeaders || []) : null,

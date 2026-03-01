@@ -1,5 +1,5 @@
 export type ModelCategory = "text" | "image" | "video" | "audio";
-export type ModelProvider = "openai" | "anthropic" | "google" | "xai" | "meta" | "fal" | "elevenlabs" | "stability";
+export type ModelProvider = "openai" | "anthropic" | "google" | "xai" | "meta" | "fal" | "replicate" | "elevenlabs" | "stability";
 
 export interface ModelParam {
   key: string;
@@ -25,6 +25,8 @@ export interface AIModel {
   isFal?: boolean;
   falEndpoint?: string;
   falEditEndpoint?: string;
+  isReplicate?: boolean;
+  replicateModel?: string;
   comingSoon?: boolean;
   proOnly?: boolean;
   isCustom?: boolean;
@@ -439,6 +441,208 @@ export const FAL_IMAGE_MODELS: AIModel[] = [
     ],
   },
 ];
+
+// ─── Replicate Models ──────────────────────────────────────────
+
+export const REPLICATE_IMAGE_MODELS: AIModel[] = [
+  {
+    id: "rep-flux-1.1-pro",
+    name: "FLUX 1.1 Pro",
+    provider: "replicate",
+    category: "image",
+    costPerUse: 4,
+    isReplicate: true,
+    replicateModel: "black-forest-labs/flux-1.1-pro",
+    description: "High-quality text-to-image by Black Forest Labs via Replicate",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "1:1", options: [
+        { label: "1:1", value: "1:1" },
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+        { label: "4:3", value: "4:3" },
+        { label: "3:4", value: "3:4" },
+        { label: "3:2", value: "3:2" },
+        { label: "2:3", value: "2:3" },
+      ]},
+      { key: "output_format", label: "Output Format", type: "select", default: "webp", options: [
+        { label: "WebP", value: "webp" },
+        { label: "PNG", value: "png" },
+        { label: "JPEG", value: "jpg" },
+      ]},
+      { key: "safety_tolerance", label: "Safety Tolerance", type: "number", default: 2, min: 1, max: 6, description: "1 = strictest, 6 = most permissive" },
+      { key: "seed", label: "Seed", type: "number", description: "Random seed for reproducibility" },
+    ],
+  },
+  {
+    id: "rep-flux-schnell",
+    name: "FLUX Schnell",
+    provider: "replicate",
+    category: "image",
+    costPerUse: 1,
+    isReplicate: true,
+    replicateModel: "black-forest-labs/flux-schnell",
+    description: "Fast and affordable text-to-image by Black Forest Labs",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "1:1", options: [
+        { label: "1:1", value: "1:1" },
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+        { label: "4:3", value: "4:3" },
+        { label: "3:4", value: "3:4" },
+        { label: "3:2", value: "3:2" },
+        { label: "2:3", value: "2:3" },
+      ]},
+      { key: "num_outputs", label: "Number of Images", type: "number", default: 1, min: 1, max: 4 },
+      { key: "output_format", label: "Output Format", type: "select", default: "webp", options: [
+        { label: "WebP", value: "webp" },
+        { label: "PNG", value: "png" },
+        { label: "JPEG", value: "jpg" },
+      ]},
+      { key: "seed", label: "Seed", type: "number", description: "Random seed for reproducibility" },
+    ],
+  },
+  {
+    id: "rep-flux-dev",
+    name: "FLUX.1 Dev",
+    provider: "replicate",
+    category: "image",
+    costPerUse: 3,
+    isReplicate: true,
+    replicateModel: "black-forest-labs/flux-dev",
+    description: "Development-grade FLUX model with fine-tuning support",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image", label: "Reference Image URL", type: "text", bindable: true, description: "Optional — img2img reference (auto-filled from connected nodes)" },
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "1:1", options: [
+        { label: "1:1", value: "1:1" },
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+        { label: "4:3", value: "4:3" },
+        { label: "3:4", value: "3:4" },
+        { label: "3:2", value: "3:2" },
+        { label: "2:3", value: "2:3" },
+      ]},
+      { key: "num_outputs", label: "Number of Images", type: "number", default: 1, min: 1, max: 4 },
+      { key: "guidance", label: "Guidance Scale", type: "number", default: 3, min: 0, max: 10 },
+      { key: "num_inference_steps", label: "Inference Steps", type: "number", default: 28, min: 1, max: 50 },
+      { key: "output_format", label: "Output Format", type: "select", default: "webp", options: [
+        { label: "WebP", value: "webp" },
+        { label: "PNG", value: "png" },
+        { label: "JPEG", value: "jpg" },
+      ]},
+      { key: "seed", label: "Seed", type: "number", description: "Random seed for reproducibility" },
+    ],
+  },
+  {
+    id: "rep-recraft-v3",
+    name: "Recraft V3",
+    provider: "replicate",
+    category: "image",
+    costPerUse: 4,
+    isReplicate: true,
+    replicateModel: "recraft-ai/recraft-v3",
+    description: "High-quality vector and raster image generation with precise style control",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "size", label: "Size", type: "select", default: "1024x1024", options: [
+        { label: "1024x1024", value: "1024x1024" },
+        { label: "1365x1024", value: "1365x1024" },
+        { label: "1024x1365", value: "1024x1365" },
+        { label: "1536x1024", value: "1536x1024" },
+        { label: "1024x1536", value: "1024x1536" },
+        { label: "1820x1024", value: "1820x1024" },
+        { label: "1024x1820", value: "1024x1820" },
+      ]},
+      { key: "style", label: "Style", type: "select", default: "any", options: [
+        { label: "Any", value: "any" },
+        { label: "Realistic Image", value: "realistic_image" },
+        { label: "Digital Illustration", value: "digital_illustration" },
+        { label: "Vector Illustration", value: "vector_illustration" },
+        { label: "Icon", value: "icon" },
+      ]},
+    ],
+  },
+  {
+    id: "rep-sdxl",
+    name: "SDXL",
+    provider: "replicate",
+    category: "image",
+    costPerUse: 2,
+    isReplicate: true,
+    replicateModel: "stability-ai/sdxl",
+    description: "Stable Diffusion XL — fast open-source image generation via Replicate",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image", label: "Reference Image URL", type: "text", bindable: true, description: "Optional — img2img reference" },
+      { key: "negative_prompt", label: "Negative Prompt", type: "textarea", bindable: true, description: "Details to exclude from the image" },
+      { key: "width", label: "Width", type: "number", default: 1024, min: 512, max: 2048 },
+      { key: "height", label: "Height", type: "number", default: 1024, min: 512, max: 2048 },
+      { key: "num_outputs", label: "Number of Images", type: "number", default: 1, min: 1, max: 4 },
+      { key: "num_inference_steps", label: "Inference Steps", type: "number", default: 25, min: 1, max: 50 },
+      { key: "guidance_scale", label: "Guidance Scale", type: "number", default: 7.5, min: 0, max: 20 },
+      { key: "prompt_strength", label: "Prompt Strength", type: "number", default: 0.8, min: 0, max: 1, description: "How much to transform the reference image (only for img2img)" },
+      { key: "seed", label: "Seed", type: "number", description: "Random seed for reproducibility" },
+    ],
+  },
+];
+
+export const REPLICATE_VIDEO_MODELS: AIModel[] = [
+  {
+    id: "rep-minimax-video-01",
+    name: "Minimax Video-01",
+    provider: "replicate",
+    category: "video",
+    costPerUse: 15,
+    isReplicate: true,
+    replicateModel: "minimax/video-01",
+    description: "High-quality text-to-video and image-to-video generation",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "first_frame_image", label: "First Frame Image URL", type: "text", bindable: true, description: "Optional — provide an image to use as the first frame" },
+    ],
+  },
+  {
+    id: "rep-luma-ray2",
+    name: "Luma Ray2",
+    provider: "replicate",
+    category: "video",
+    costPerUse: 18,
+    isReplicate: true,
+    replicateModel: "luma/ray2",
+    description: "Cinematic AI video generation with 720p output",
+    params: [
+      { key: "prompt", label: "Prompt", type: "textarea", required: true, bindable: true },
+      { key: "image", label: "Input Image URL", type: "text", bindable: true, description: "Optional — image-to-video starting frame" },
+      { key: "duration", label: "Duration", type: "select", default: "5", options: [
+        { label: "5s", value: "5" },
+        { label: "9s", value: "9" },
+      ]},
+      { key: "aspect_ratio", label: "Aspect Ratio", type: "select", default: "16:9", options: [
+        { label: "16:9", value: "16:9" },
+        { label: "9:16", value: "9:16" },
+        { label: "1:1", value: "1:1" },
+        { label: "4:3", value: "4:3" },
+        { label: "3:4", value: "3:4" },
+        { label: "21:9", value: "21:9" },
+      ]},
+    ],
+  },
+];
+
+export const CUSTOM_REPLICATE_MODEL: AIModel = {
+  id: "rep-custom",
+  name: "Custom Replicate Model",
+  provider: "replicate",
+  category: "image",
+  costPerUse: 0,
+  isReplicate: true,
+  isCustom: true,
+  proOnly: true,
+  description: "Enter any Replicate model identifier and configure parameters manually",
+  params: [],
+};
 
 // ─── Video Models ──────────────────────────────────────────────
 
@@ -1105,9 +1309,12 @@ export const ALL_MODELS: AIModel[] = [
   ...TEXT_MODELS,
   ...IMAGE_MODELS,
   ...FAL_IMAGE_MODELS,
+  ...REPLICATE_IMAGE_MODELS,
   ...FAL_VIDEO_MODELS,
+  ...REPLICATE_VIDEO_MODELS,
   ...AUDIO_MODELS,
   CUSTOM_FAL_MODEL,
+  CUSTOM_REPLICATE_MODEL,
 ];
 
 export function getModelById(id: string): AIModel | undefined {
@@ -1126,8 +1333,16 @@ export function getCustomFalModel(): AIModel {
   return CUSTOM_FAL_MODEL;
 }
 
+export function getReplicateModels(): AIModel[] {
+  return ALL_MODELS.filter((m) => m.isReplicate && !m.isCustom);
+}
+
+export function getCustomReplicateModel(): AIModel {
+  return CUSTOM_REPLICATE_MODEL;
+}
+
 export function getBasicModels(): AIModel[] {
-  return ALL_MODELS.filter((m) => !m.isFal);
+  return ALL_MODELS.filter((m) => !m.isFal && !m.isReplicate);
 }
 
 export function estimateCostFromModels(modelIds: string[]): number {
@@ -1142,6 +1357,7 @@ export const NODE_TYPES = {
   OUTPUT: "outputNode",
   BASIC: "basicNode",
   FAL_AI: "falAiNode",
+  REPLICATE: "replicateNode",
 } as const;
 
 export type NodeType = (typeof NODE_TYPES)[keyof typeof NODE_TYPES];

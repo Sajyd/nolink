@@ -8,6 +8,7 @@ import {
   Download,
   Cpu,
   Sparkles,
+  Box,
   Globe,
   Save,
   Eye,
@@ -80,6 +81,24 @@ const NODE_TEMPLATES: {
     defaults: {
       label: "",
       stepType: "falAiNode",
+      aiModel: "",
+      inputType: "TEXT",
+      outputType: "IMAGE",
+      prompt: "",
+      modelParams: {},
+      paramBindings: {},
+    },
+  },
+  {
+    type: "replicateNode",
+    rfType: "replicateNode",
+    label: "Replicate Node",
+    icon: Box,
+    color: "text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800",
+    description: "FLUX, SDXL, Recraft, Minimax Video, Luma and more",
+    defaults: {
+      label: "",
+      stepType: "replicateNode",
       aiModel: "",
       inputType: "TEXT",
       outputType: "IMAGE",
@@ -170,7 +189,10 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
   const customFalCost = store.nodes
     .filter((n) => n.data.aiModel === "fal-custom")
     .reduce((sum, n) => sum + (n.data.customFalPrice ?? 0), 0);
-  const estimatedCost = estimateCostFromModels(modelIds) + customApiCost + customFalCost;
+  const customReplicateCost = store.nodes
+    .filter((n) => n.data.aiModel === "rep-custom")
+    .reduce((sum, n) => sum + (n.data.customReplicatePrice ?? 0), 0);
+  const estimatedCost = estimateCostFromModels(modelIds) + customApiCost + customFalCost + customReplicateCost;
 
   return (
     <div className="w-72 h-full border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col overflow-y-auto">
@@ -350,11 +372,13 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
                 node.type === "inputNode" ? "IN" :
                 node.type === "outputNode" ? "OUT" :
                 node.type === "falAiNode" ? "FAL" :
+                node.type === "replicateNode" ? "REP" :
                 node.type === "customApiNode" ? "API" : "AI";
               const typeColor =
                 node.type === "inputNode" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" :
                 node.type === "outputNode" ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" :
                 node.type === "falAiNode" ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" :
+                node.type === "replicateNode" ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400" :
                 node.type === "customApiNode" ? "bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400" :
                 "bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400";
 

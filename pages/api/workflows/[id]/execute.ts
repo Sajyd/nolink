@@ -118,6 +118,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       customFalEndpoint: (config.customFalEndpoint as string | undefined) || undefined,
       customFalParams: (config.customFalParams as { key: string; value: string }[] | undefined) || undefined,
       customFalPrice: (config.customFalPrice as number | undefined) ?? undefined,
+      customReplicateModel: (config.customReplicateModel as string | undefined) || undefined,
+      customReplicateParams: (config.customReplicateParams as { key: string; value: string }[] | undefined) || undefined,
+      customReplicatePrice: (config.customReplicatePrice as number | undefined) ?? undefined,
       customApiUrl: (config.customApiUrl as string | undefined) || undefined,
       customApiMethod: (config.customApiMethod as string | undefined) || undefined,
       customApiHeaders: (config.customApiHeaders as { key: string; value: string }[] | undefined) || undefined,
@@ -270,6 +273,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     if (resolvedStep.customFalParams) {
       resolvedStep.customFalParams = resolvedStep.customFalParams.map((p) => ({
+        key: p.key,
+        value: resolveCP(p.value),
+      }));
+    }
+    if (resolvedStep.customReplicateParams) {
+      resolvedStep.customReplicateParams = resolvedStep.customReplicateParams.map((p) => ({
         key: p.key,
         value: resolveCP(p.value),
       }));

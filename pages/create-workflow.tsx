@@ -81,6 +81,7 @@ export default function CreateWorkflow() {
           inputNode: "INPUT",
           outputNode: "OUTPUT",
           falAiNode: "FAL_AI",
+          replicateNode: "REPLICATE",
           basicNode: "BASIC",
           stepNode: "BASIC",
           customApiNode: "CUSTOM_API",
@@ -105,6 +106,10 @@ export default function CreateWorkflow() {
         const validFalParams = (n.data.customFalParams || []).filter(
           (p: { key: string; value: string }) => p.key.trim() !== ""
         );
+        const isCustomReplicate = n.data.aiModel === "rep-custom";
+        const validReplicateParams = (n.data.customReplicateParams || []).filter(
+          (p: { key: string; value: string }) => p.key.trim() !== ""
+        );
         const isCustomApi = n.type === "customApiNode";
         return {
           nodeId: n.id,
@@ -121,6 +126,9 @@ export default function CreateWorkflow() {
           customFalEndpoint: isCustomFal ? (n.data.customFalEndpoint || null) : null,
           customFalParams: isCustomFal && validFalParams.length > 0 ? validFalParams : null,
           customFalPrice: isCustomFal ? (n.data.customFalPrice ?? 0) : null,
+          customReplicateModel: isCustomReplicate ? (n.data.customReplicateModel || null) : null,
+          customReplicateParams: isCustomReplicate && validReplicateParams.length > 0 ? validReplicateParams : null,
+          customReplicatePrice: isCustomReplicate ? (n.data.customReplicatePrice ?? 0) : null,
           customApiUrl: isCustomApi ? (n.data.customApiUrl || null) : null,
           customApiMethod: isCustomApi ? (n.data.customApiMethod || "POST") : null,
           customApiHeaders: isCustomApi ? (n.data.customApiHeaders || []) : null,

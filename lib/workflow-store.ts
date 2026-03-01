@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Node, Edge } from "@xyflow/react";
 
-export type StepNodeType = "inputNode" | "outputNode" | "basicNode" | "falAiNode" | "customApiNode";
+export type StepNodeType = "inputNode" | "outputNode" | "basicNode" | "falAiNode" | "replicateNode" | "customApiNode";
 
 export interface CustomParam {
   name: string;
@@ -10,6 +10,11 @@ export interface CustomParam {
 }
 
 export interface CustomFalParam {
+  key: string;
+  value: string;
+}
+
+export interface CustomReplicateParam {
   key: string;
   value: string;
 }
@@ -55,6 +60,9 @@ export interface StepNodeData {
   customFalEndpoint?: string;
   customFalParams?: CustomFalParam[];
   customFalPrice?: number;
+  customReplicateModel?: string;
+  customReplicateParams?: CustomReplicateParam[];
+  customReplicatePrice?: number;
   customApiUrl?: string;
   customApiMethod?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   customApiHeaders?: CustomApiParam[];

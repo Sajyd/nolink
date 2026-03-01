@@ -46,6 +46,9 @@ export interface StepDefinition {
   customFalEndpoint?: string;
   customFalParams?: { key: string; value: string }[];
   customFalPrice?: number;
+  customReplicateModel?: string;
+  customReplicateParams?: { key: string; value: string }[];
+  customReplicatePrice?: number;
   customApiUrl?: string;
   customApiMethod?: string;
   customApiHeaders?: { key: string; value: string }[];
@@ -77,7 +80,10 @@ export function estimateWorkflowCost(steps: StepDefinition[]): number {
   const customFalCost = steps
     .filter((s) => s.aiModel === "fal-custom")
     .reduce((sum, s) => sum + (s.customFalPrice || 0), 0);
-  return estimateCostFromModels(modelIds) + apiCost + customFalCost;
+  const customReplicateCost = steps
+    .filter((s) => s.aiModel === "rep-custom")
+    .reduce((sum, s) => sum + (s.customReplicatePrice || 0), 0);
+  return estimateCostFromModels(modelIds) + apiCost + customFalCost + customReplicateCost;
 }
 
 function resolveFileUrl(fileUrl: string): string {
@@ -1184,6 +1190,153 @@ async function executeFalStep(
   return { text: `[${displayName}] ${(resolvedParams.prompt as string || input.text).slice(0, 200)}`, files: [] };
 }
 
+// ── Replicate execution ─────────────────────────────────────────
+
+async function executeReplicateStep(
+  step: StepDefinition,
+  input: StepInput
+): Promise<StepInput> {
+  if (!step.aiModel) return input;
+
+  const isCustom = step.aiModel === "rep-custom";
+  const model = getModelById(step.aiModel);
+  if (!isCustom && (!model || !model.isReplicate)) return { text: `[Unknown Replicate model: ${step.aiModel}]`, files: [] };
+
+  let replicateModel = isCustom ? step.customReplicateModel : model?.replicateModel;
+  if (!replicateModel) return { text: `[No Replicate model configured]`, files: [] };
+
+  const resolvedParams: Record<string, unknown> = {};
+
+  if (isCustom && step.customReplicateParams) {
+    for (const { key, value } of step.customReplicateParams) {
+      if (!key) continue;
+      if (typeof value === "string" && value.includes("{{input}}")) {
+        resolvedParams[key] = value.replace(/\{\{input\}\}/g, input.text);
+      } else {
+        resolvedParams[key] = value;
+      }
+    }
+  } else if (step.params) {
+    for (const [key, val] of Object.entries(step.params)) {
+      if (Array.isArray(val)) {
+        resolvedParams[key] = val.map((v) =>
+          typeof v === "string" && v.includes("{{input}}")
+            ? v.replace(/\{\{input\}\}/g, input.text)
+            : v
+        );
+      } else if (typeof val === "string" && val.includes("{{input}}")) {
+        resolvedParams[key] = val.replace(/\{\{input\}\}/g, input.text);
+      } else {
+        resolvedParams[key] = val;
+      }
+    }
+  }
+
+  if (!resolvedParams.prompt && step.prompt) {
+    resolvedParams.prompt = step.prompt.replace(/\{\{input\}\}/g, input.text);
+  }
+
+  const imageFiles = getFilesByType(input.files, "image");
+  const audioFiles = getFilesByType(input.files, "audio");
+  const videoFiles = getFilesByType(input.files, "video");
+
+  const modelParamKeys = new Set(model?.params?.map((p) => p.key) ?? []);
+  const acceptsParam = (k: string) => isCustom || modelParamKeys.has(k);
+
+  if (imageFiles.length > 0 && !resolvedParams.image && acceptsParam("image")) {
+    resolvedParams.image = imageFiles[0].url;
+  }
+  if (imageFiles.length > 0 && !resolvedParams.first_frame_image && acceptsParam("first_frame_image")) {
+    resolvedParams.first_frame_image = imageFiles[0].url;
+  }
+  if (audioFiles.length > 0 && !resolvedParams.audio && acceptsParam("audio")) {
+    resolvedParams.audio = audioFiles[0].url;
+  }
+  if (videoFiles.length > 0 && !resolvedParams.video && acceptsParam("video")) {
+    resolvedParams.video = videoFiles[0].url;
+  }
+
+  if (process.env.REPLICATE_API_TOKEN) {
+    try {
+      const logParams = { ...resolvedParams };
+      for (const [k, v] of Object.entries(logParams)) {
+        if (typeof v === "string" && v.length > 150) logParams[k] = v.slice(0, 150) + "...";
+        if (Array.isArray(v)) logParams[k] = v.map((i) => typeof i === "string" && i.length > 150 ? i.slice(0, 150) + "..." : i);
+      }
+      console.log(`[replicate] Calling ${replicateModel} with params:`, JSON.stringify(logParams, null, 2));
+
+      const response = await fetch(`https://api.replicate.com/v1/models/${replicateModel}/predictions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.REPLICATE_API_TOKEN}`,
+          "Content-Type": "application/json",
+          Prefer: "wait",
+        },
+        body: JSON.stringify({ input: resolvedParams }),
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        return { text: `[Replicate error: ${err.slice(0, 200)}]`, files: [] };
+      }
+
+      const result = await response.json();
+      const output = result.output;
+
+      if (typeof output === "string") {
+        const lc = output.toLowerCase();
+        if (lc.match(/\.(png|jpg|jpeg|webp|gif)($|\?)/)) {
+          return { text: output, files: [{ url: output, type: "image", name: "generated.png" }] };
+        }
+        if (lc.match(/\.(mp4|webm|mov)($|\?)/)) {
+          return { text: output, files: [{ url: output, type: "video", name: "generated.mp4" }] };
+        }
+        if (lc.match(/\.(mp3|wav|m4a|ogg|flac)($|\?)/)) {
+          return { text: output, files: [{ url: output, type: "audio", name: "generated.mp3" }] };
+        }
+        return { text: output, files: [] };
+      }
+      if (Array.isArray(output) && output.length > 0) {
+        const first = output[0];
+        if (typeof first === "string") {
+          const lc = first.toLowerCase();
+          if (lc.match(/\.(png|jpg|jpeg|webp|gif)($|\?)/)) {
+            return { text: first, files: output.map((u: string) => ({ url: u, type: "image", name: "generated.png" })) };
+          }
+          if (lc.match(/\.(mp4|webm|mov)($|\?)/)) {
+            return { text: first, files: [{ url: first, type: "video", name: "generated.mp4" }] };
+          }
+          if (lc.match(/\.(mp3|wav|m4a|ogg|flac)($|\?)/)) {
+            return { text: first, files: [{ url: first, type: "audio", name: "generated.mp3" }] };
+          }
+          return { text: first, files: [] };
+        }
+      }
+      if (output && typeof output === "object") {
+        return { text: JSON.stringify(output), files: [] };
+      }
+
+      return { text: JSON.stringify(result), files: [] };
+    } catch (err) {
+      return { text: `[Replicate error: ${err instanceof Error ? err.message : "Unknown"}]`, files: [] };
+    }
+  }
+
+  const displayName = isCustom ? `Custom (${replicateModel})` : model?.name || "Unknown";
+  const category = model?.category;
+  if (category === "image") {
+    const url = `https://placehold.co/1024x1024/6366f1/white?text=${encodeURIComponent(displayName)}`;
+    return { text: url, files: [{ url, type: "image", name: "generated.png" }] };
+  }
+  if (category === "video" || isCustom) {
+    return { text: `[${displayName} – no REPLICATE_API_TOKEN configured]`, files: [] };
+  }
+  if (category === "audio") {
+    return { text: `[${displayName} audio – no REPLICATE_API_TOKEN configured]`, files: [] };
+  }
+  return { text: `[${displayName}] ${(resolvedParams.prompt as string || input.text).slice(0, 200)}`, files: [] };
+}
+
 // ── Custom API execution ────────────────────────────────────────
 
 const BLOCKED_HOSTS = [
@@ -1422,6 +1575,14 @@ function applyCustomParamsToStep(
     }));
   }
 
+  let resolvedReplicateParams = step.customReplicateParams;
+  if (step.customReplicateParams) {
+    resolvedReplicateParams = step.customReplicateParams.map((p) => ({
+      key: p.key,
+      value: resolveCustomParams(p.value, paramMap),
+    }));
+  }
+
   let resolvedApiParams = step.customApiParams;
   if (step.customApiParams) {
     resolvedApiParams = step.customApiParams.map((p) => ({
@@ -1449,6 +1610,7 @@ function applyCustomParamsToStep(
     systemPrompt: resolvedSystemPrompt,
     params: resolvedParams,
     customFalParams: resolvedFalParams,
+    customReplicateParams: resolvedReplicateParams,
     customApiParams: resolvedApiParams,
     customApiHeaders: resolvedApiHeaders,
     customApiUrl: resolvedApiUrl,
@@ -1474,6 +1636,9 @@ export async function executeStep(
         break;
       case "FAL_AI":
         stepOutput = await executeFalStep(step, input);
+        break;
+      case "REPLICATE":
+        stepOutput = await executeReplicateStep(step, input);
         break;
       case "CUSTOM_API":
         stepOutput = await executeCustomApiStep(step, input);

@@ -23,6 +23,7 @@ import BasicNode from "./StepNode";
 import InputNode from "./InputNode";
 import OutputNode from "./OutputNode";
 import FalAiNode from "./FalAiNode";
+import ReplicateNode from "./ReplicateNode";
 import CustomApiNode from "./CustomApiNode";
 import DeletableEdge from "./DeletableEdge";
 import CanvasContextMenu, { type ContextMenuState } from "./CanvasContextMenu";
@@ -53,6 +54,7 @@ function WorkflowCanvasInner() {
       inputNode: InputNode,
       outputNode: OutputNode,
       falAiNode: FalAiNode,
+      replicateNode: ReplicateNode,
       customApiNode: CustomApiNode,
     }),
     []
@@ -179,6 +181,7 @@ function WorkflowCanvasInner() {
       case "inputNode": return "#10b981";
       case "outputNode": return "#8b5cf6";
       case "falAiNode": return "#f59e0b";
+      case "replicateNode": return "#6366f1";
       case "customApiNode": return "#f43f5e";
       default: return "#4c6ef5";
     }

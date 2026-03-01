@@ -2,6 +2,7 @@ import {
   useWorkflowStore,
   type CustomParam,
   type CustomFalParam,
+  type CustomReplicateParam,
   type CustomApiParam,
   type CustomApiResultField,
   type CustomApiResultType,
@@ -14,6 +15,8 @@ import {
   getBasicModels,
   getFalModels,
   getCustomFalModel,
+  getReplicateModels,
+  getCustomReplicateModel,
   getModelsByCategory,
   INPUT_ACCEPT_TYPES,
   type ModelParam,
@@ -22,7 +25,7 @@ import { useSession } from "next-auth/react";
 import { useRef, useCallback, useEffect } from "react";
 import { useState } from "react";
 import {
-  X, Sparkles, Settings2, Upload, Download, Plus, Trash2, Variable,
+  X, Sparkles, Box, Settings2, Upload, Download, Plus, Trash2, Variable,
   Lock, Clock, Zap, Link2, Globe, Shield, AlertTriangle, SlidersHorizontal,
   Paperclip, Image, FileText, Music, Film, Search, Loader2, CheckCircle2, Info,
 } from "lucide-react";
@@ -78,7 +81,7 @@ export default function StepConfigPanel() {
         { value: `step_${pn.id}_output`, label: `${nodeLabel}: text output` },
       ];
       const outType = (pn.data.outputType || "TEXT").toLowerCase();
-      if (outType === "image" || pn.type === "falAiNode") {
+      if (outType === "image" || pn.type === "falAiNode" || pn.type === "replicateNode") {
         opts.push({ value: `step_${pn.id}_image`, label: `${nodeLabel}: image` });
       }
       if (outType === "video") {
@@ -109,12 +112,14 @@ export default function StepConfigPanel() {
           {nodeType === "inputNode" && <Upload className="w-4 h-4 text-emerald-500" />}
           {nodeType === "outputNode" && <Download className="w-4 h-4 text-violet-500" />}
           {nodeType === "falAiNode" && <Sparkles className="w-4 h-4 text-amber-500" />}
+          {nodeType === "replicateNode" && <Box className="w-4 h-4 text-indigo-500" />}
           {nodeType === "customApiNode" && <Globe className="w-4 h-4 text-rose-500" />}
           {(nodeType === "basicNode" || nodeType === "stepNode") && <Settings2 className="w-4 h-4 text-brand-500" />}
           Configure {
             nodeType === "inputNode" ? "Input" :
             nodeType === "outputNode" ? "Output" :
             nodeType === "falAiNode" ? "fal.ai Node" :
+            nodeType === "replicateNode" ? "Replicate Node" :
             nodeType === "customApiNode" ? "Custom API" :
             "Step"
           }
@@ -222,6 +227,15 @@ export default function StepConfigPanel() {
         {/* ── FAL.AI NODE CONFIG ─────────────────────────── */}
         {nodeType === "falAiNode" && (
           <FalAiNodeConfig
+            nodeId={selectedNodeId}
+            data={data}
+            inputBindOptions={inputBindOptions}
+          />
+        )}
+
+        {/* ── REPLICATE NODE CONFIG ──────────────────────── */}
+        {nodeType === "replicateNode" && (
+          <ReplicateNodeConfig
             nodeId={selectedNodeId}
             data={data}
             inputBindOptions={inputBindOptions}
@@ -1401,6 +1415,289 @@ function FalAiNodeConfig({
         <CustomFalModelEditor nodeId={nodeId} data={data} inputBindOptions={inputBindOptions} />
       )}
     </>
+  );
+}
+
+// ─── Replicate Node Config ──────────────────────────────────────
+
+function ReplicateNodeConfig({
+  nodeId,
+  data,
+  inputBindOptions,
+}: {
+  nodeId: string;
+  data: any;
+  inputBindOptions: { value: string; label: string }[];
+}) {
+  const { data: session } = useSession();
+  const { updateNodeData } = useWorkflowStore();
+  const isPro = session?.user?.subscription === "PRO" || session?.user?.subscription === "ENTERPRISE";
+  const customReplicateModel = getCustomReplicateModel();
+  const isCustomModel = data.aiModel === "rep-custom";
+  const selectedModel = data.aiModel ? getModelById(data.aiModel) : null;
+
+  const replicateImageModels = getReplicateModels().filter((m) => m.category === "image");
+  const replicateVideoModels = getReplicateModels().filter((m) => m.category === "video");
+  const replicateAudioModels = getReplicateModels().filter((m) => m.category === "audio");
+
+  const handleModelChange = (value: string) => {
+    const reset: Partial<any> = {
+      aiModel: value,
+      modelParams: {},
+      paramBindings: {},
+    };
+    if (value !== "rep-custom") {
+      reset.customReplicateModel = "";
+      reset.customReplicateParams = [];
+    }
+    updateNodeData(nodeId, reset);
+  };
+
+  return (
+    <>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+          Replicate Model
+        </label>
+        <select
+          value={data.aiModel}
+          onChange={(e) => handleModelChange(e.target.value)}
+          className="input-field text-sm"
+        >
+          <option value="">Select Replicate model...</option>
+
+          {replicateImageModels.length > 0 && (
+            <optgroup label="Image Generation">
+              {replicateImageModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.costPerUse} NL)
+                </option>
+              ))}
+            </optgroup>
+          )}
+
+          {replicateVideoModels.length > 0 && (
+            <optgroup label="Video Generation">
+              {replicateVideoModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.costPerUse} NL)
+                </option>
+              ))}
+            </optgroup>
+          )}
+
+          {replicateAudioModels.length > 0 && (
+            <optgroup label="Audio Generation">
+              {replicateAudioModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.costPerUse} NL)
+                </option>
+              ))}
+            </optgroup>
+          )}
+
+          <optgroup label="Custom Model (Pro)">
+            <option value="rep-custom" disabled={!isPro}>
+              {customReplicateModel.name} {!isPro ? "— Upgrade to Pro" : ""}
+            </option>
+          </optgroup>
+        </select>
+      </div>
+
+      {selectedModel && !isCustomModel && (
+        <div className="space-y-1">
+          {selectedModel.comingSoon && (
+            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800">
+              <Clock className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
+                Coming Soon
+              </span>
+            </div>
+          )}
+          <p className="text-[10px] text-gray-400">{selectedModel.description}</p>
+          {selectedModel.replicateModel && (
+            <p className="text-[10px] font-mono text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-1 rounded">
+              {selectedModel.replicateModel}
+            </p>
+          )}
+        </div>
+      )}
+
+      {data.aiModel && !isCustomModel && !selectedModel?.comingSoon && (
+        <ModelParamsEditor nodeId={nodeId} data={data} inputBindOptions={inputBindOptions} isFal />
+      )}
+
+      {isCustomModel && (
+        <CustomReplicateModelEditor nodeId={nodeId} data={data} inputBindOptions={inputBindOptions} />
+      )}
+    </>
+  );
+}
+
+// ─── Custom Replicate Model Editor ──────────────────────────────
+
+function CustomReplicateModelEditor({
+  nodeId,
+  data,
+  inputBindOptions,
+}: {
+  nodeId: string;
+  data: any;
+  inputBindOptions: { value: string; label: string }[];
+}) {
+  const { updateNodeData } = useWorkflowStore();
+  const customReplicateParams: CustomReplicateParam[] = data.customReplicateParams || [];
+  const replicateModel = data.customReplicateModel || "";
+  const customReplicatePrice: number = data.customReplicatePrice ?? 0;
+
+  const setReplicateModel = (value: string) => {
+    updateNodeData(nodeId, { customReplicateModel: value });
+  };
+
+  const addParam = () => {
+    updateNodeData(nodeId, {
+      customReplicateParams: [...customReplicateParams, { key: "", value: "" }],
+    });
+  };
+
+  const updateParam = (index: number, field: "key" | "value", val: string) => {
+    const next = customReplicateParams.map((p, i) =>
+      i === index ? { ...p, [field]: val } : p
+    );
+    updateNodeData(nodeId, { customReplicateParams: next });
+  };
+
+  const removeParam = (index: number) => {
+    updateNodeData(nodeId, {
+      customReplicateParams: customReplicateParams.filter((_, i) => i !== index),
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+        <Zap className="w-3.5 h-3.5 text-purple-500" />
+        <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400">
+          Pro Feature — Custom Replicate Model
+        </span>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+          Replicate Model
+        </label>
+        <input
+          type="text"
+          value={replicateModel}
+          onChange={(e) => setReplicateModel(e.target.value)}
+          className="input-field text-xs font-mono"
+          placeholder="owner/model-name (e.g. stability-ai/sdxl)"
+        />
+        <p className="mt-1 text-[10px] text-gray-400">
+          Enter the Replicate model identifier in owner/name format.
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+          Step Price (Nolinks)
+        </label>
+        <div className="relative">
+          <input
+            type="number"
+            min={0}
+            value={customReplicatePrice}
+            onChange={(e) => updateNodeData(nodeId, { customReplicatePrice: parseInt(e.target.value) || 0 })}
+            className="input-field text-sm pl-8"
+          />
+          <Zap className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-brand-500" />
+        </div>
+        <p className="mt-1 text-[10px] text-gray-400">
+          Nolinks charged to the user per call to this Replicate model.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            Input Parameters
+          </h4>
+          <button
+            onClick={addParam}
+            className="flex items-center gap-1 text-[10px] font-medium text-brand-500 hover:text-brand-600 transition-colors"
+          >
+            <Plus className="w-3 h-3" />
+            Add Param
+          </button>
+        </div>
+
+        {customReplicateParams.length === 0 ? (
+          <p className="text-[10px] text-gray-400">
+            No parameters yet. Add key-value pairs for the model input.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {customReplicateParams.map((param, idx) => (
+              <div key={idx} className="rounded-lg border border-gray-200 dark:border-gray-700 p-2 space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={param.key}
+                    onChange={(e) =>
+                      updateParam(idx, "key", e.target.value.replace(/[^a-zA-Z0-9_]/g, ""))
+                    }
+                    className="input-field text-xs font-mono flex-1"
+                    placeholder="param_name"
+                  />
+                  <button
+                    onClick={() => removeParam(idx)}
+                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={param.value}
+                    onChange={(e) => updateParam(idx, "value", e.target.value)}
+                    className="input-field text-xs flex-1"
+                    placeholder="value or {{input}} / {{variable}}"
+                  />
+                  <select
+                    value={
+                      param.value.startsWith("{{") && param.value.endsWith("}}")
+                        ? param.value
+                        : "_manual_"
+                    }
+                    onChange={(e) => {
+                      if (e.target.value === "_manual_") return;
+                      updateParam(idx, "value", e.target.value);
+                    }}
+                    className="text-[10px] px-1.5 py-1 rounded border border-gray-200 dark:border-gray-700 bg-transparent w-24 shrink-0"
+                  >
+                    <option value="_manual_">Manual</option>
+                    {inputBindOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value.startsWith("{{") ? opt.value : `{{${opt.value}}}`}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {param.value.startsWith("{{") && param.value.endsWith("}}") && (
+                  <div className="flex items-center gap-1 text-[10px] text-blue-500">
+                    <Link2 className="w-2.5 h-2.5" />
+                    <span className="font-mono">Bound to {param.value}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
