@@ -181,7 +181,7 @@ function WorkflowCanvasInner() {
       case "inputNode": return "#10b981";
       case "outputNode": return "#8b5cf6";
       case "falAiNode": return "#f59e0b";
-      case "replicateNode": return "#14b8a6";
+      case "replicateNode": return "#FF5C00";
       case "customApiNode": return "#f43f5e";
       default: return "#4c6ef5";
     }

@@ -94,7 +94,7 @@ const NODE_TEMPLATES: {
     rfType: "replicateNode",
     label: "Replicate Node",
     icon: Box,
-    color: "text-teal-500 bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800",
+    color: "text-orange-500 bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800",
     description: "FLUX, SDXL, Recraft, Minimax Video, Luma and more",
     defaults: {
       label: "",
@@ -387,7 +387,7 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
                 node.type === "inputNode" ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" :
                 node.type === "outputNode" ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" :
                 node.type === "falAiNode" ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" :
-                node.type === "replicateNode" ? "bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400" :
+                node.type === "replicateNode" ? "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" :
                 node.type === "customApiNode" ? "bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400" :
                 "bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400";
 

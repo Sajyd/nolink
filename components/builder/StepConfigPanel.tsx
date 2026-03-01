@@ -112,7 +112,7 @@ export default function StepConfigPanel() {
           {nodeType === "inputNode" && <Upload className="w-4 h-4 text-emerald-500" />}
           {nodeType === "outputNode" && <Download className="w-4 h-4 text-violet-500" />}
           {nodeType === "falAiNode" && <Sparkles className="w-4 h-4 text-amber-500" />}
-          {nodeType === "replicateNode" && <Box className="w-4 h-4 text-teal-500" />}
+          {nodeType === "replicateNode" && <Box className="w-4 h-4 text-orange-500" />}
           {nodeType === "customApiNode" && <Globe className="w-4 h-4 text-rose-500" />}
           {(nodeType === "basicNode" || nodeType === "stepNode") && <Settings2 className="w-4 h-4 text-brand-500" />}
           Configure {
@@ -1507,16 +1507,16 @@ function ReplicateNodeConfig({
       {selectedModel && !isCustomModel && (
         <div className="space-y-1">
           {selectedModel.comingSoon && (
-            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800">
-              <Clock className="w-3.5 h-3.5 text-teal-500" />
-              <span className="text-[11px] font-medium text-teal-600 dark:text-teal-400">
+            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+              <Clock className="w-3.5 h-3.5 text-orange-500" />
+              <span className="text-[11px] font-medium text-orange-600 dark:text-orange-400">
                 Coming Soon
               </span>
             </div>
           )}
           <p className="text-[10px] text-gray-400">{selectedModel.description}</p>
           {selectedModel.replicateModel && (
-            <p className="text-[10px] font-mono text-teal-500 bg-teal-50 dark:bg-teal-900/20 px-2 py-1 rounded">
+            <p className="text-[10px] font-mono text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded">
               {selectedModel.replicateModel}
             </p>
           )}

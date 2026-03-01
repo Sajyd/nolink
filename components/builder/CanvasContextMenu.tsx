@@ -117,7 +117,7 @@ const NODE_TEMPLATES: {
     rfType: "replicateNode",
     label: "Replicate Node",
     icon: Box,
-    iconColor: "text-teal-500",
+    iconColor: "text-orange-500",
     defaults: {
       label: "",
       stepType: "replicateNode",
