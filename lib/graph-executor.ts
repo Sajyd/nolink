@@ -120,6 +120,21 @@ function resolveStep(step: StepDefinition, customParamMap: Record<string, string
   if (resolvedStep.customReplicateParams) {
     resolvedStep.customReplicateParams = resolvedStep.customReplicateParams.map((p) => ({ key: p.key, value: cp(p.value) }));
   }
+  if (resolvedStep.logicCondition) {
+    resolvedStep.logicCondition = {
+      ...resolvedStep.logicCondition,
+      leftOperand: cp(resolvedStep.logicCondition.leftOperand || ""),
+      rightOperand: cp(resolvedStep.logicCondition.rightOperand || ""),
+    };
+  }
+  if (resolvedStep.utilityConfig) {
+    resolvedStep.utilityConfig = {
+      ...resolvedStep.utilityConfig,
+      operand: resolvedStep.utilityConfig.operand ? cp(resolvedStep.utilityConfig.operand) : undefined,
+      replacement: resolvedStep.utilityConfig.replacement ? cp(resolvedStep.utilityConfig.replacement) : undefined,
+      itemTemplate: resolvedStep.utilityConfig.itemTemplate ? cp(resolvedStep.utilityConfig.itemTemplate) : undefined,
+    };
+  }
   return resolvedStep;
 }
 
@@ -300,7 +315,8 @@ export async function executeWorkflowGraph(
 
     // ─── LOGIC gate: route without executing ─────────────
     if (step.stepType === "LOGIC") {
-      const condResult = evaluateLogicCondition(step, currentInput);
+      const resolvedLogicStep = resolveStep(step, customParamMap);
+      const condResult = evaluateLogicCondition(resolvedLogicStep, currentInput);
       stepOutputMap.set(step.id, currentInput); // pass-through
 
       const logicMode = step.logicMode || "condition";
@@ -343,9 +359,8 @@ export async function executeWorkflowGraph(
             );
             loopInput = bodyOutput;
 
-            // Re-evaluate condition with new input
-            const fakeStep = { ...step };
-            const stillTrue = evaluateLogicCondition(fakeStep, loopInput);
+            const resolvedLoopStep = resolveStep(step, customParamMap);
+            const stillTrue = evaluateLogicCondition(resolvedLoopStep, loopInput);
             if (!stillTrue) break;
           }
 

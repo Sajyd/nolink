@@ -1688,12 +1688,14 @@ function parseMp4Duration(buf: Buffer): number {
     let timescale: number;
     let duration: number;
     if (version === 0) {
-      timescale = buf.readUInt32BE(offset + 13);
-      duration = buf.readUInt32BE(offset + 17);
+      // v0: version(1) + flags(3) + creation(4) + modification(4) = +12 for timescale, +16 for duration
+      timescale = buf.readUInt32BE(offset + 12);
+      duration = buf.readUInt32BE(offset + 16);
     } else {
-      timescale = buf.readUInt32BE(offset + 21);
-      const hi = buf.readUInt32BE(offset + 25);
-      const lo = buf.readUInt32BE(offset + 29);
+      // v1: version(1) + flags(3) + creation(8) + modification(8) = +20 for timescale, +24 for duration
+      timescale = buf.readUInt32BE(offset + 20);
+      const hi = buf.readUInt32BE(offset + 24);
+      const lo = buf.readUInt32BE(offset + 28);
       duration = hi * 0x100000000 + lo;
     }
     if (timescale > 0) return Math.round(duration / timescale);
