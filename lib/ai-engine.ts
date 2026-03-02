@@ -1142,50 +1142,66 @@ async function executeFalStep(
       }
       console.log(`[fal] Calling ${falEndpoint} with params:`, JSON.stringify(logParams, null, 2));
 
-      const response = await fetch(`https://queue.fal.run/${falEndpoint}`, {
+      const bodyJson = JSON.stringify(resolvedParams);
+      const headers = {
+        Authorization: `Key ${process.env.FAL_KEY}`,
+        "Content-Type": "application/json",
+      };
+
+      let result: any;
+
+      const queueRes = await fetch(`https://queue.fal.run/${falEndpoint}`, {
         method: "POST",
-        headers: {
-          Authorization: `Key ${process.env.FAL_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(resolvedParams),
+        headers,
+        body: bodyJson,
       });
 
-      if (!response.ok) {
-        const err = await response.text();
-        return { text: `[fal.ai error: ${err.slice(0, 200)}]`, files: [] };
-      }
+      if (queueRes.ok) {
+        result = await queueRes.json();
 
-      let result = await response.json();
-
-      if (result.request_id && result.status !== "COMPLETED") {
-        const requestId = result.request_id;
-        const maxAttempts = 120;
-        const pollInterval = 3000;
-        for (let i = 0; i < maxAttempts; i++) {
-          await new Promise((r) => setTimeout(r, pollInterval));
-          const statusRes = await fetch(
-            `https://queue.fal.run/${falEndpoint}/requests/${requestId}/status`,
-            { headers: { Authorization: `Key ${process.env.FAL_KEY}` } }
-          );
-          if (!statusRes.ok) continue;
-          const statusData = await statusRes.json();
-          console.log(`[fal] Poll ${i + 1}: status=${statusData.status}`);
-          if (statusData.status === "COMPLETED") {
-            const resultRes = await fetch(
-              `https://queue.fal.run/${falEndpoint}/requests/${requestId}`,
+        if (result.request_id && result.status !== "COMPLETED") {
+          const requestId = result.request_id;
+          const maxAttempts = 120;
+          const pollInterval = 3000;
+          for (let i = 0; i < maxAttempts; i++) {
+            await new Promise((r) => setTimeout(r, pollInterval));
+            const statusRes = await fetch(
+              `https://queue.fal.run/${falEndpoint}/requests/${requestId}/status`,
               { headers: { Authorization: `Key ${process.env.FAL_KEY}` } }
             );
-            if (resultRes.ok) {
-              result = await resultRes.json();
+            if (!statusRes.ok) continue;
+            const statusData = await statusRes.json();
+            console.log(`[fal] Poll ${i + 1}: status=${statusData.status}`);
+            if (statusData.status === "COMPLETED") {
+              const resultRes = await fetch(
+                `https://queue.fal.run/${falEndpoint}/requests/${requestId}`,
+                { headers: { Authorization: `Key ${process.env.FAL_KEY}` } }
+              );
+              if (resultRes.ok) {
+                result = await resultRes.json();
+              }
+              break;
             }
-            break;
-          }
-          if (statusData.status === "FAILED") {
-            const errMsg = statusData.error || "fal.ai request failed";
-            return { text: `[fal.ai error: ${typeof errMsg === "string" ? errMsg.slice(0, 300) : JSON.stringify(errMsg).slice(0, 300)}]`, files: [] };
+            if (statusData.status === "FAILED") {
+              const errMsg = statusData.error || "fal.ai request failed";
+              return { text: `[fal.ai error: ${typeof errMsg === "string" ? errMsg.slice(0, 300) : JSON.stringify(errMsg).slice(0, 300)}]`, files: [] };
+            }
           }
         }
+      } else {
+        console.log(`[fal] Queue endpoint failed (${queueRes.status}), falling back to fal.run`);
+        const syncRes = await fetch(`https://fal.run/${falEndpoint}`, {
+          method: "POST",
+          headers,
+          body: bodyJson,
+        });
+
+        if (!syncRes.ok) {
+          const err = await syncRes.text();
+          return { text: `[fal.ai error: ${err.slice(0, 200)}]`, files: [] };
+        }
+
+        result = await syncRes.json();
       }
 
       if (result.images?.[0]?.url) {
