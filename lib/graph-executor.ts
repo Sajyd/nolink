@@ -274,35 +274,75 @@ export async function executeWorkflowGraph(
 
   const adjacency = buildAdjacency(edges);
   const parentMap = buildParentMap(edges);
-  const inDegree = buildInDegree(stepDefs.map((s) => s.id), edges);
   const stepOutputMap = new Map<string, StepOutput>();
 
   const visibleSteps = stepDefs.filter((s) => s.stepType !== "INPUT" && s.stepType !== "OUTPUT");
   const totalVisible = visibleSteps.length;
   const visibleCounter = { value: 0 };
 
-  // Start from nodes with in-degree 0, sorted by order
-  const startNodes = stepDefs
-    .filter((s) => (inDegree.get(s.id) || 0) === 0)
-    .sort((a, b) => a.order - b.order);
+  // Kahn's algorithm: track remaining in-degree per node.
+  // A node only becomes ready when ALL its incoming edges have been satisfied.
+  const remainingInDegree = new Map<string, number>();
+  for (const s of stepDefs) remainingInDegree.set(s.id, 0);
+  for (const e of edges) {
+    if (remainingInDegree.has(e.target)) {
+      remainingInDegree.set(e.target, (remainingInDegree.get(e.target) || 0) + 1);
+    }
+  }
 
-  const queue: string[] = startNodes.map((s) => s.id);
+  // Nodes whose branch was killed by a logic gate — they will never execute
+  const skipped = new Set<string>();
+
   const executed = new Set<string>();
+  const ready: string[] = [];
 
-  while (queue.length > 0) {
+  // Seed with in-degree-0 nodes (sorted by order for determinism)
+  for (const s of [...stepDefs].sort((a, b) => a.order - b.order)) {
+    if ((remainingInDegree.get(s.id) || 0) === 0) ready.push(s.id);
+  }
+
+  // Helper: decrement in-degree and enqueue if ready
+  function release(targetId: string) {
+    if (skipped.has(targetId) || executed.has(targetId)) return;
+    const cur = remainingInDegree.get(targetId) ?? 0;
+    const next = cur - 1;
+    remainingInDegree.set(targetId, next);
+    if (next <= 0 && !ready.includes(targetId)) {
+      ready.push(targetId);
+    }
+  }
+
+  // Helper: recursively mark a node and all its descendants as skipped
+  function skipBranch(nodeId: string) {
+    if (skipped.has(nodeId) || executed.has(nodeId)) return;
+    skipped.add(nodeId);
+    const children = adjacency.get(nodeId) || [];
+    for (const child of children) {
+      // Only skip if ALL parents of this child are either skipped or are the
+      // logic gate that chose not to go here. We approximate by decrementing
+      // and only skipping if the node can never become ready.
+      const cur = remainingInDegree.get(child.target) ?? 0;
+      remainingInDegree.set(child.target, cur - 1);
+      // If remaining is still > 0, another parent may still release it — don't skip.
+      // If remaining <= 0 and it hasn't been released to ready, skip it.
+      if ((remainingInDegree.get(child.target) ?? 0) <= 0 && !ready.includes(child.target) && !executed.has(child.target)) {
+        skipBranch(child.target);
+      }
+    }
+  }
+
+  while (ready.length > 0) {
     if (callbacks?.isAborted?.()) break;
 
-    const nodeId = queue.shift()!;
-    if (executed.has(nodeId)) continue;
+    const nodeId = ready.shift()!;
+    if (executed.has(nodeId) || skipped.has(nodeId)) continue;
     executed.add(nodeId);
 
     const step = stepMap.get(nodeId);
     if (!step) continue;
 
-    // Get input for this node
     let currentInput = mergeParentOutputs(nodeId, parentMap, stepOutputMap, initialInput);
 
-    // For INPUT steps with per-step data, inject the specific user input
     if (step.stepType === "INPUT" && perStepInputMap[step.id]) {
       currentInput = perStepInputMap[step.id];
     }
@@ -313,23 +353,30 @@ export async function executeWorkflowGraph(
       }
     }
 
-    // ─── LOGIC gate: route without executing ─────────────
+    // ─── LOGIC gate: evaluate condition and route ────────
     if (step.stepType === "LOGIC") {
-      console.log(`[GraphExec] LOGIC node ${step.id} | inputText=${JSON.stringify((currentInput.text || "").slice(0, 200))} | rawCondition=${JSON.stringify(step.logicCondition)} | customParamKeys=${Object.keys(customParamMap).join(",")}`);
       const resolvedLogicStep = resolveStep(step, customParamMap);
-      console.log(`[GraphExec] LOGIC node ${step.id} | resolvedCondition=${JSON.stringify(resolvedLogicStep.logicCondition)}`);
       const condResult = evaluateLogicCondition(resolvedLogicStep, currentInput);
-      stepOutputMap.set(step.id, currentInput); // pass-through
+      stepOutputMap.set(step.id, currentInput);
+      customParamMap[`step_${step.id}_output`] = currentInput.text;
 
       const logicMode = step.logicMode || "condition";
       const children = adjacency.get(step.id) || [];
 
       if (logicMode === "condition") {
-        const handleToFollow = condResult ? "true" : "false";
+        const activeHandle = condResult ? "true" : "false";
+        const killedHandle = condResult ? "false" : "true";
+
+        // Release children on the chosen handle
         for (const child of children) {
-          if (child.sourceHandle === handleToFollow && !executed.has(child.target)) {
-            stepOutputMap.set(child.target, currentInput);
-            queue.push(child.target);
+          if (child.sourceHandle === activeHandle) {
+            release(child.target);
+          }
+        }
+        // Skip children on the unchosen handle
+        for (const child of children) {
+          if (child.sourceHandle === killedHandle) {
+            skipBranch(child.target);
           }
         }
       } else if (logicMode === "while_loop") {
@@ -342,7 +389,6 @@ export async function executeWorkflowGraph(
           for (let iter = 0; iter < MAX_WHILE_ITERATIONS; iter++) {
             if (callbacks?.isAborted?.()) break;
 
-            // Execute the loop body subgraph
             for (const lt of loopTargets) {
               stepOutputMap.set(lt.target, loopInput);
             }
@@ -367,22 +413,15 @@ export async function executeWorkflowGraph(
           }
 
           stepOutputMap.set(step.id, loopInput);
+          customParamMap[`step_${step.id}_output`] = loopInput.text;
 
-          // After loop exits, follow "done" branch
-          for (const dt of doneTargets) {
-            if (!executed.has(dt.target)) {
-              stepOutputMap.set(dt.target, loopInput);
-              queue.push(dt.target);
-            }
+          for (const dt of doneTargets) release(dt.target);
+          for (const lt of loopTargets) {
+            executed.add(lt.target);
           }
         } else {
-          // Condition is false from the start — skip loop, go to "done"
-          for (const dt of doneTargets) {
-            if (!executed.has(dt.target)) {
-              stepOutputMap.set(dt.target, currentInput);
-              queue.push(dt.target);
-            }
-          }
+          for (const dt of doneTargets) release(dt.target);
+          for (const lt of loopTargets) skipBranch(lt.target);
         }
       }
       continue;
@@ -418,6 +457,10 @@ export async function executeWorkflowGraph(
       if (callbacks?.onIntermediateResult) {
         await callbacks.onIntermediateResult(allResults);
       }
+
+      // Release all children
+      const children = adjacency.get(step.id) || [];
+      for (const child of children) release(child.target);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : "Unknown error";
       const stepResult: StepResult = {
@@ -433,15 +476,12 @@ export async function executeWorkflowGraph(
       if (isVisible && callbacks?.onStepError) {
         callbacks.onStepError(stepResult, visibleCounter.value, totalVisible);
       }
-      break;
-    }
 
-    // Enqueue children (all outgoing edges for non-logic nodes)
-    const children = adjacency.get(step.id) || [];
-    for (const child of children) {
-      if (!executed.has(child.target)) {
-        queue.push(child.target);
-      }
+      // On error, still release children so downstream nodes can attempt to run.
+      // The errored step's output won't be in stepOutputMap, so downstream
+      // mergeParentOutputs will use fallback.
+      const children = adjacency.get(step.id) || [];
+      for (const child of children) release(child.target);
     }
   }
 
