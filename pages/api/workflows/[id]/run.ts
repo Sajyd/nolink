@@ -3,15 +3,14 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
 import {
-  executeStep,
   type StepDefinition,
   type StepCustomParam,
   type FileInput,
   type StepResult,
 } from "@/lib/ai-engine";
+import { executeWorkflowGraph } from "@/lib/graph-executor";
 import { deductCredits, checkBalance } from "@/lib/credits";
 import { estimateWorkflowCost } from "@/lib/ai-engine";
-import { getModelById } from "@/lib/models";
 
 export default async function handler(
   req: NextApiRequest,
@@ -81,7 +80,6 @@ export default async function handler(
     creditsReserved: cost,
   });
 
-  // Fire-and-forget: run steps in background after response is sent
   runWorkflowInBackground(
     execution.id,
     workflow,
@@ -144,16 +142,11 @@ async function runWorkflowInBackground(
         (config.logicMode as string | undefined) || undefined,
       logicCondition:
         (config.logicCondition as any) || undefined,
-      logicLoop:
-        (config.logicLoop as any) || undefined,
-      logicTransform:
-        (config.logicTransform as any) || undefined,
     };
   });
 
   const sortedSteps = [...stepDefs].sort((a, b) => a.order - b.order);
 
-  // Build per-step input map
   const hasPerStepInputs = rawInputs && typeof rawInputs === "object" && Object.keys(rawInputs).length > 0;
   const perStepInputMap: Record<string, { text: string; files: FileInput[] }> = {};
   if (hasPerStepInputs) {
@@ -170,13 +163,11 @@ async function runWorkflowInBackground(
     }
   }
 
-  let currentInput: { text: string; files: FileInput[] } = {
-    text: input,
-    files: fileInputs,
-  };
-  const allResults: StepResult[] = [];
+  const initialInput = { text: input, files: fileInputs };
   let failed = false;
   const customParamMap: Record<string, string> = {};
+
+  const baseCost = estimateWorkflowCost(workflow.steps as unknown as StepDefinition[]);
 
   const inputSteps = sortedSteps.filter((s) => s.stepType === "INPUT");
   inputSteps.forEach((step, idx) => {
@@ -194,147 +185,30 @@ async function runWorkflowInBackground(
     }
   });
 
-  // Inject user-provided input parameters
   for (const [key, val] of Object.entries(userParams)) {
     customParamMap[key] = String(val ?? "");
   }
 
-  // Build parent map from edges so we can merge outputs from all parents
-  const edgeList = (workflow.edges as { source: string; target: string }[] | null) || [];
-  const parentMap: Record<string, string[]> = {};
-  for (const e of edgeList) {
-    if (!parentMap[e.target]) parentMap[e.target] = [];
-    parentMap[e.target].push(e.source);
-  }
-  const stepOutputMap: Record<string, { text: string; files: FileInput[] }> = {};
+  const edgeList = (workflow.edges as { source: string; target: string; sourceHandle?: string; targetHandle?: string }[] | null) || [];
 
-  const resolveCP = (text: string) =>
-    text.replace(/\{\{([^}]+)\}\}/g, (m, name) =>
-      name === "input"
-        ? m
-        : customParamMap[name] !== undefined
-          ? customParamMap[name]
-          : m
-    );
-
-  for (const step of sortedSteps) {
-    if (step.stepType === "INPUT" && perStepInputMap[step.id]) {
-      currentInput = perStepInputMap[step.id];
-    }
-
-    // Merge outputs from all parent steps into currentInput
-    const parents = parentMap[step.id];
-    if (parents && parents.length > 0) {
-      const parentOutputs = parents.map((pid) => stepOutputMap[pid]).filter(Boolean);
-      if (parentOutputs.length > 0) {
-        const mergedText = parentOutputs.map((o) => o.text).filter(Boolean).join("\n\n");
-        const mergedFiles = parentOutputs.flatMap((o) => o.files || []);
-        currentInput = { text: mergedText || currentInput.text, files: [...mergedFiles, ...currentInput.files] };
-        // Deduplicate files by url
-        const seen = new Set<string>();
-        currentInput.files = currentInput.files.filter((f) => {
-          if (seen.has(f.url)) return false;
-          seen.add(f.url);
-          return true;
+  const allResults = await executeWorkflowGraph(
+    stepDefs,
+    edgeList,
+    initialInput,
+    perStepInputMap,
+    customParamMap,
+    {
+      onIntermediateResult: async (results) => {
+        await prisma.execution.update({
+          where: { id: executionId },
+          data: { stepResults: results as any },
         });
-      }
-    }
-
-    if (step.customParams) {
-      for (const cp of step.customParams) {
-        if (cp.name) customParamMap[cp.name] = cp.value;
-      }
-    }
-
-    const resolvedStep = { ...step };
-    if (resolvedStep.prompt) resolvedStep.prompt = resolveCP(resolvedStep.prompt);
-    if (resolvedStep.systemPrompt) resolvedStep.systemPrompt = resolveCP(resolvedStep.systemPrompt);
-    if (resolvedStep.params) {
-      resolvedStep.params = { ...resolvedStep.params };
-      for (const [k, v] of Object.entries(resolvedStep.params)) {
-        if (typeof v === "string") {
-          (resolvedStep.params as Record<string, unknown>)[k] = resolveCP(v);
-        }
-        if (Array.isArray(v)) {
-          (resolvedStep.params as Record<string, unknown>)[k] = v.map((item) =>
-            typeof item === "string" ? resolveCP(item) : item
-          );
-        }
-      }
-    }
-    if (resolvedStep.customApiUrl) {
-      resolvedStep.customApiUrl = resolveCP(resolvedStep.customApiUrl);
-    }
-    if (resolvedStep.customApiParams) {
-      resolvedStep.customApiParams = resolvedStep.customApiParams.map((p) => ({
-        key: p.key,
-        value: resolveCP(p.value),
-      }));
-    }
-    if (resolvedStep.customApiHeaders) {
-      resolvedStep.customApiHeaders = resolvedStep.customApiHeaders.map((h) => ({
-        key: h.key,
-        value: resolveCP(h.value),
-      }));
-    }
-    if (resolvedStep.customFalParams) {
-      resolvedStep.customFalParams = resolvedStep.customFalParams.map((p) => ({
-        key: p.key,
-        value: resolveCP(p.value),
-      }));
-    }
-
-    // Resolve fileBindings → inject as files into currentInput
-    if (resolvedStep.fileBindings && resolvedStep.fileBindings.length > 0) {
-      const extraFiles: FileInput[] = [];
-      for (const binding of resolvedStep.fileBindings) {
-        const url = customParamMap[binding];
-        if (!url) continue;
-        const parts = binding.split("_");
-        const fileType = parts[parts.length - 1] || "document";
-        extraFiles.push({ url, type: fileType, name: binding });
-      }
-      if (extraFiles.length > 0) {
-        currentInput = {
-          ...currentInput,
-          files: [...currentInput.files, ...extraFiles],
-        };
-      }
-    }
-
-    try {
-      const result = await executeStep(resolvedStep, currentInput);
-      const { _nextInput, ...stepResult } = result;
-      allResults.push(stepResult);
-      currentInput = _nextInput;
-
-      // Store per-step outputs so downstream steps can reference them
-      stepOutputMap[step.id] = _nextInput;
-      customParamMap[`step_${step.id}_output`] = _nextInput.text;
-      for (const f of _nextInput.files) {
-        const key = `step_${step.id}_${f.type}`;
-        if (!customParamMap[key]) customParamMap[key] = f.url;
-      }
-
-      // Persist intermediate progress
-      await prisma.execution.update({
-        where: { id: executionId },
-        data: { stepResults: allResults as any },
-      });
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : "Unknown error";
-      allResults.push({
-        stepId: step.id,
-        stepName: step.name,
-        stepType: step.stepType,
-        output: `Error: ${errMsg}`,
-        outputType: step.outputType,
-        duration: 0,
-      });
-      failed = true;
-      break;
-    }
-  }
+      },
+      onStepError: () => {
+        failed = true;
+      },
+    },
+  );
 
   try {
     if (cost > 0 && !failed) {

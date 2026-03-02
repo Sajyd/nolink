@@ -114,7 +114,7 @@ const NODE_TEMPLATES: {
     label: "Logic Gate",
     icon: GitBranch,
     color: "text-amber-500 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800",
-    description: "If/else conditions, loops, and text transforms — no code",
+    description: "Route execution with if/else or while loop gates",
     defaults: {
       label: "",
       stepType: "logicNode",
@@ -127,8 +127,6 @@ const NODE_TEMPLATES: {
         leftOperand: "{{input}}",
         operator: "is_not_empty",
         rightOperand: "",
-        thenOutput: "{{input}}",
-        elseOutput: "",
       },
     },
   },

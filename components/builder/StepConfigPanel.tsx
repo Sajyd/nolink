@@ -30,7 +30,7 @@ import {
   Paperclip, Image, FileText, Music, Film, Search, Loader2, CheckCircle2, Info,
   GitBranch,
 } from "lucide-react";
-import type { LogicMode, LogicCondition, LogicLoop, LogicTransform, ConditionOperator, TransformOperation } from "@/lib/workflow-store";
+import type { LogicMode, LogicCondition, ConditionOperator } from "@/lib/workflow-store";
 
 const IO_TYPES = ["TEXT", "IMAGE", "AUDIO", "VIDEO", "DOCUMENT"];
 
@@ -1957,9 +1957,8 @@ function CustomReplicateModelEditor({
 // ─── Logic Node Config ──────────────────────────────────────────
 
 const LOGIC_MODES: { value: LogicMode; label: string; description: string }[] = [
-  { value: "condition", label: "If / Else", description: "Route data based on a condition" },
-  { value: "loop", label: "Loop (For Each)", description: "Process each item in a list" },
-  { value: "transform", label: "Transform", description: "Modify text with built-in operations" },
+  { value: "condition", label: "If / Else", description: "Route to different nodes based on a condition" },
+  { value: "while_loop", label: "While Loop", description: "Repeat a subgraph while a condition is true" },
 ];
 
 const CONDITION_OPERATORS: { value: ConditionOperator; label: string }[] = [
@@ -1976,42 +1975,22 @@ const CONDITION_OPERATORS: { value: ConditionOperator; label: string }[] = [
   { value: "matches_regex", label: "Matches regex" },
 ];
 
-const TRANSFORM_OPERATIONS: { value: TransformOperation; label: string; description: string }[] = [
-  { value: "uppercase", label: "UPPERCASE", description: "Convert to uppercase" },
-  { value: "lowercase", label: "lowercase", description: "Convert to lowercase" },
-  { value: "trim", label: "Trim", description: "Remove leading/trailing whitespace" },
-  { value: "reverse", label: "Reverse", description: "Reverse the text" },
-  { value: "length", label: "Length", description: "Output the character count" },
-  { value: "replace", label: "Replace", description: "Find and replace text" },
-  { value: "extract_json", label: "JSON Extract", description: "Extract a field from JSON" },
-  { value: "split", label: "Split", description: "Split text by delimiter" },
-  { value: "join", label: "Join", description: "Join lines into one string" },
-  { value: "template", label: "Template", description: "Wrap input in a template" },
-];
-
-// Reusable insertable field: text input or textarea with clickable param chips
 function InsertableInput({
   value,
   onChange,
   placeholder,
   chips,
-  multiline,
-  rows,
   label,
   labelColor,
-  description,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   chips: { token: string; label: string; color: string }[];
-  multiline?: boolean;
-  rows?: number;
   label?: string;
   labelColor?: string;
-  description?: string;
 }) {
-  const ref = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
+  const ref = useRef<HTMLInputElement>(null);
 
   const insertAtCursor = (token: string) => {
     const el = ref.current;
@@ -2039,26 +2018,14 @@ function InsertableInput({
           {label}
         </label>
       )}
-      {description && <p className="text-[9px] text-gray-400 mb-1">{description}</p>}
-      {multiline ? (
-        <textarea
-          ref={ref as React.RefObject<HTMLTextAreaElement>}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="input-field text-xs font-mono"
-          rows={rows || 2}
-          placeholder={placeholder}
-        />
-      ) : (
-        <input
-          ref={ref as React.RefObject<HTMLInputElement>}
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="input-field text-xs font-mono"
-          placeholder={placeholder}
-        />
-      )}
+      <input
+        ref={ref}
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="input-field text-xs font-mono"
+        placeholder={placeholder}
+      />
       {chips.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1.5">
           {chips.map((chip) => (
@@ -2094,28 +2061,12 @@ function LogicNodeConfig({
     leftOperand: "{{input}}",
     operator: "is_not_empty",
     rightOperand: "",
-    thenOutput: "{{input}}",
-    elseOutput: "",
-  };
-  const loop: LogicLoop = data.logicLoop || {
-    delimiter: "\\n",
-    itemTemplate: "{{item}}",
-    joinWith: "\\n",
-  };
-  const transform: LogicTransform = data.logicTransform || {
-    operation: "uppercase",
   };
 
   const setMode = (m: LogicMode) => {
     const updates: Partial<any> = { logicMode: m };
-    if (m === "condition" && !data.logicCondition) {
+    if (!data.logicCondition) {
       updates.logicCondition = condition;
-    }
-    if (m === "loop" && !data.logicLoop) {
-      updates.logicLoop = loop;
-    }
-    if (m === "transform" && !data.logicTransform) {
-      updates.logicTransform = transform;
     }
     updateNodeData(nodeId, updates);
   };
@@ -2126,21 +2077,8 @@ function LogicNodeConfig({
     });
   };
 
-  const updateLoop = (updates: Partial<LogicLoop>) => {
-    updateNodeData(nodeId, {
-      logicLoop: { ...loop, ...updates },
-    });
-  };
-
-  const updateTransform = (updates: Partial<LogicTransform>) => {
-    updateNodeData(nodeId, {
-      logicTransform: { ...transform, ...updates },
-    });
-  };
-
   const needsRightOperand = !["is_empty", "is_not_empty"].includes(condition.operator);
 
-  // Build the insertable chips from connected inputs
   const inputChips: { token: string; label: string; color: string }[] = [
     {
       token: "{{input}}",
@@ -2154,31 +2092,12 @@ function LogicNodeConfig({
     })),
   ];
 
-  const loopItemChips: { token: string; label: string; color: string }[] = [
-    {
-      token: "{{item}}",
-      label: "item",
-      color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/40",
-    },
-    {
-      token: "{{index}}",
-      label: "index (0)",
-      color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/40",
-    },
-    {
-      token: "{{index1}}",
-      label: "index (1)",
-      color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/40",
-    },
-    ...inputChips,
-  ];
-
   return (
     <div className="space-y-4">
       {/* Mode selector */}
       <div>
         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
-          Logic Mode
+          Gate Type
         </label>
         <div className="space-y-1.5">
           {LOGIC_MODES.map((m) => (
@@ -2200,243 +2119,60 @@ function LogicNodeConfig({
         </div>
       </div>
 
-      {/* Condition config */}
-      {mode === "condition" && (
-        <div className="space-y-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 p-3">
-          <h4 className="text-xs font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
-            <GitBranch className="w-3.5 h-3.5" />
-            Condition
-          </h4>
+      {/* Condition config — shared by both if/else and while */}
+      <div className="space-y-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 p-3">
+        <h4 className="text-xs font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+          <GitBranch className="w-3.5 h-3.5" />
+          {mode === "while_loop" ? "Loop Condition" : "Branch Condition"}
+        </h4>
 
+        <InsertableInput
+          label="Left operand"
+          value={condition.leftOperand}
+          onChange={(v) => updateCondition({ leftOperand: v })}
+          placeholder="{{input}}"
+          chips={inputChips}
+        />
+
+        <div>
+          <label className="block text-[10px] text-gray-500 mb-0.5">Operator</label>
+          <select
+            value={condition.operator}
+            onChange={(e) => updateCondition({ operator: e.target.value as ConditionOperator })}
+            className="input-field text-xs"
+          >
+            {CONDITION_OPERATORS.map((op) => (
+              <option key={op.value} value={op.value}>{op.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {needsRightOperand && (
           <InsertableInput
-            label="Left operand"
-            value={condition.leftOperand}
-            onChange={(v) => updateCondition({ leftOperand: v })}
-            placeholder="{{input}}"
+            label="Compare to"
+            value={condition.rightOperand}
+            onChange={(v) => updateCondition({ rightOperand: v })}
+            placeholder="value to compare..."
             chips={inputChips}
           />
+        )}
+      </div>
 
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-0.5">Operator</label>
-            <select
-              value={condition.operator}
-              onChange={(e) => updateCondition({ operator: e.target.value as ConditionOperator })}
-              className="input-field text-xs"
-            >
-              {CONDITION_OPERATORS.map((op) => (
-                <option key={op.value} value={op.value}>{op.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {needsRightOperand && (
-            <InsertableInput
-              label="Compare to"
-              value={condition.rightOperand}
-              onChange={(v) => updateCondition({ rightOperand: v })}
-              placeholder="value to compare..."
-              chips={inputChips}
-            />
-          )}
-
-          <div className="border-t border-amber-200 dark:border-amber-800 pt-3 space-y-3">
-            <InsertableInput
-              label="Then (output if true)"
-              labelColor="text-emerald-600 dark:text-emerald-400"
-              value={condition.thenOutput}
-              onChange={(v) => updateCondition({ thenOutput: v })}
-              placeholder="{{input}}"
-              chips={inputChips}
-              multiline
-              rows={2}
-            />
-            <InsertableInput
-              label="Else (output if false)"
-              labelColor="text-red-500 dark:text-red-400"
-              value={condition.elseOutput}
-              onChange={(v) => updateCondition({ elseOutput: v })}
-              placeholder="Empty or fallback value..."
-              chips={inputChips}
-              multiline
-              rows={2}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Loop config */}
-      {mode === "loop" && (
-        <div className="space-y-3 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-cyan-50/50 dark:bg-cyan-900/10 p-3">
-          <h4 className="text-xs font-semibold text-cyan-700 dark:text-cyan-300">
-            Loop (For Each)
-          </h4>
-
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-0.5">Split delimiter</label>
-            <select
-              value={loop.delimiter}
-              onChange={(e) => updateLoop({ delimiter: e.target.value })}
-              className="input-field text-xs"
-            >
-              <option value="\\n">Newline</option>
-              <option value=",">Comma</option>
-              <option value=";">Semicolon</option>
-              <option value="|">Pipe</option>
-              <option value="\t">Tab</option>
-            </select>
-            <p className="text-[9px] text-gray-400 mt-0.5">
-              How to split the input into items
-            </p>
-          </div>
-
-          <InsertableInput
-            label="Item template"
-            description="Applied to each item after splitting"
-            value={loop.itemTemplate}
-            onChange={(v) => updateLoop({ itemTemplate: v })}
-            placeholder="Process: {{item}} (index: {{index}})"
-            chips={loopItemChips}
-            multiline
-            rows={3}
-          />
-
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-0.5">Join results with</label>
-            <select
-              value={loop.joinWith}
-              onChange={(e) => updateLoop({ joinWith: e.target.value })}
-              className="input-field text-xs"
-            >
-              <option value="\\n">Newline</option>
-              <option value=", ">Comma + space</option>
-              <option value=" ">Space</option>
-              <option value=" | ">Pipe</option>
-              <option value="">Nothing (concatenate)</option>
-            </select>
-          </div>
-        </div>
-      )}
-
-      {/* Transform config */}
-      {mode === "transform" && (
-        <div className="space-y-3 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 p-3">
-          <h4 className="text-xs font-semibold text-purple-700 dark:text-purple-300">
-            Transform
-          </h4>
-
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-0.5">Operation</label>
-            <select
-              value={transform.operation}
-              onChange={(e) => updateTransform({ operation: e.target.value as TransformOperation, operand: "", replacement: "" })}
-              className="input-field text-xs"
-            >
-              {TRANSFORM_OPERATIONS.map((op) => (
-                <option key={op.value} value={op.value}>
-                  {op.label} — {op.description}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {transform.operation === "replace" && (
-            <>
-              <InsertableInput
-                label="Find"
-                value={transform.operand || ""}
-                onChange={(v) => updateTransform({ operand: v })}
-                placeholder="text to find..."
-                chips={inputChips}
-              />
-              <InsertableInput
-                label="Replace with"
-                value={transform.replacement || ""}
-                onChange={(v) => updateTransform({ replacement: v })}
-                placeholder="replacement text..."
-                chips={inputChips}
-              />
-            </>
-          )}
-
-          {transform.operation === "extract_json" && (
-            <div>
-              <label className="block text-[10px] text-gray-500 mb-0.5">JSON path</label>
-              <input
-                type="text"
-                value={transform.operand || ""}
-                onChange={(e) => updateTransform({ operand: e.target.value })}
-                className="input-field text-xs font-mono"
-                placeholder="data.result.text"
-              />
-              <p className="text-[9px] text-gray-400 mt-0.5">
-                Dot-separated path to extract from JSON
-              </p>
-            </div>
-          )}
-
-          {transform.operation === "split" && (
-            <>
-              <div>
-                <label className="block text-[10px] text-gray-500 mb-0.5">Split by</label>
-                <input
-                  type="text"
-                  value={transform.operand || ""}
-                  onChange={(e) => updateTransform({ operand: e.target.value })}
-                  className="input-field text-xs font-mono"
-                  placeholder=", (comma)"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] text-gray-500 mb-0.5">Join with</label>
-                <input
-                  type="text"
-                  value={transform.replacement || ""}
-                  onChange={(e) => updateTransform({ replacement: e.target.value })}
-                  className="input-field text-xs font-mono"
-                  placeholder="\n (newline)"
-                />
-              </div>
-            </>
-          )}
-
-          {transform.operation === "join" && (
-            <>
-              <div>
-                <label className="block text-[10px] text-gray-500 mb-0.5">Split lines by</label>
-                <input
-                  type="text"
-                  value={transform.operand || ""}
-                  onChange={(e) => updateTransform({ operand: e.target.value })}
-                  className="input-field text-xs font-mono"
-                  placeholder="\n (newline)"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] text-gray-500 mb-0.5">Join with</label>
-                <input
-                  type="text"
-                  value={transform.replacement || ""}
-                  onChange={(e) => updateTransform({ replacement: e.target.value })}
-                  className="input-field text-xs font-mono"
-                  placeholder=", "
-                />
-              </div>
-            </>
-          )}
-
-          {transform.operation === "template" && (
-            <InsertableInput
-              label="Template"
-              value={transform.operand || ""}
-              onChange={(v) => updateTransform({ operand: v })}
-              placeholder="The result is: {{input}}"
-              chips={inputChips}
-              multiline
-              rows={3}
-            />
-          )}
-        </div>
-      )}
+      {/* Routing description */}
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3 text-[11px] text-gray-500 dark:text-gray-400 space-y-1">
+        {mode === "condition" ? (
+          <>
+            <p><span className="font-medium text-emerald-600 dark:text-emerald-400">true</span> — connects to the node that runs when condition passes</p>
+            <p><span className="font-medium text-red-500 dark:text-red-400">false</span> — connects to the node that runs when condition fails</p>
+          </>
+        ) : (
+          <>
+            <p><span className="font-medium text-cyan-600 dark:text-cyan-400">loop</span> — connects to the node(s) executed each iteration</p>
+            <p><span className="font-medium text-emerald-600 dark:text-emerald-400">done</span> — connects to the node that runs after the loop ends</p>
+            <p className="text-[10px] text-gray-400 mt-1">Max 50 iterations for safety.</p>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -148,8 +148,6 @@ const NODE_TEMPLATES: {
         leftOperand: "{{input}}",
         operator: "is_not_empty",
         rightOperand: "",
-        thenOutput: "{{input}}",
-        elseOutput: "",
       },
     },
   },

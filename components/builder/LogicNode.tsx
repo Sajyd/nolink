@@ -1,14 +1,9 @@
 import { memo, useMemo } from "react";
 import type { NodeProps } from "@xyflow/react";
-import { GitBranch, Repeat, Wand2, Variable } from "lucide-react";
+import { Handle, Position } from "@xyflow/react";
+import { GitBranch, Repeat } from "lucide-react";
 import { useWorkflowStore, topologicalOrder, type StepNodeData } from "@/lib/workflow-store";
 import NodeShell from "./NodeShell";
-
-const MODE_LABELS: Record<string, { label: string; icon: typeof GitBranch; color: string }> = {
-  condition: { label: "If / Else", icon: GitBranch, color: "text-amber-500" },
-  loop: { label: "Loop", icon: Repeat, color: "text-cyan-500" },
-  transform: { label: "Transform", icon: Wand2, color: "text-amber-500" },
-};
 
 const OP_LABELS: Record<string, string> = {
   equals: "==",
@@ -24,24 +19,11 @@ const OP_LABELS: Record<string, string> = {
   matches_regex: "~regex",
 };
 
-const TRANSFORM_LABELS: Record<string, string> = {
-  uppercase: "UPPERCASE",
-  lowercase: "lowercase",
-  trim: "Trim",
-  reverse: "Reverse",
-  length: "Length",
-  extract_json: "JSON Extract",
-  replace: "Replace",
-  split: "Split",
-  join: "Join",
-  template: "Template",
-};
-
 function LogicNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as StepNodeData;
   const mode = d.logicMode || "condition";
-  const modeInfo = MODE_LABELS[mode] || MODE_LABELS.condition;
-  const ModeIcon = modeInfo.icon;
+  const isWhile = mode === "while_loop";
+  const ModeIcon = isWhile ? Repeat : GitBranch;
 
   const nodes = useWorkflowStore((s) => s.nodes);
   const edges = useWorkflowStore((s) => s.edges);
@@ -49,6 +31,8 @@ function LogicNode({ id, data, selected }: NodeProps) {
     const sorted = topologicalOrder(nodes, edges);
     return sorted.findIndex((n) => n.id === id) + 1;
   }, [nodes, edges, id]);
+
+  const cond = d.logicCondition;
 
   return (
     <NodeShell
@@ -62,61 +46,81 @@ function LogicNode({ id, data, selected }: NodeProps) {
           LOGIC
         </span>
       }
+      showSourceHandle={false}
     >
       <p className="font-medium text-sm truncate">
         {d.label || "Logic Gate"}
       </p>
 
       <div className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-        <ModeIcon className={`w-3 h-3 ${modeInfo.color}`} />
-        <span className="font-medium">{modeInfo.label}</span>
+        <ModeIcon className={`w-3 h-3 ${isWhile ? "text-cyan-500" : "text-amber-500"}`} />
+        <span className="font-medium">{isWhile ? "While Loop" : "If / Else"}</span>
       </div>
 
-      {mode === "condition" && d.logicCondition && (
-        <div className="mt-1 px-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-[10px] font-mono text-amber-700 dark:text-amber-300 space-y-0.5">
+      {cond && (
+        <div className="mt-1 px-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-[10px] font-mono text-amber-700 dark:text-amber-300">
           <div className="truncate">
-            if {d.logicCondition.leftOperand || "{{input}}"}{" "}
-            <span className="font-bold">{OP_LABELS[d.logicCondition.operator] || "=="}</span>{" "}
-            {d.logicCondition.rightOperand || '""'}
-          </div>
-          <div className="text-[9px] text-emerald-600 dark:text-emerald-400 truncate">
-            then: {d.logicCondition.thenOutput || "{{input}}"}
-          </div>
-          <div className="text-[9px] text-red-500 dark:text-red-400 truncate">
-            else: {d.logicCondition.elseOutput || '""'}
+            {isWhile ? "while" : "if"} {cond.leftOperand || "{{input}}"}{" "}
+            <span className="font-bold">{OP_LABELS[cond.operator] || "=="}</span>{" "}
+            {cond.rightOperand || '""'}
           </div>
         </div>
       )}
 
-      {mode === "loop" && d.logicLoop && (
-        <div className="mt-1 px-2 py-1.5 rounded-lg bg-cyan-50 dark:bg-cyan-900/20 text-[10px] font-mono text-cyan-700 dark:text-cyan-300 space-y-0.5">
-          <div className="truncate">
-            split by: {d.logicLoop.delimiter === "\\n" ? "newline" : `"${d.logicLoop.delimiter || ","}" `}
-          </div>
-          <div className="truncate">
-            each: {d.logicLoop.itemTemplate || "{{item}}"}
-          </div>
-        </div>
-      )}
-
-      {mode === "transform" && d.logicTransform && (
-        <div className="mt-1 px-2 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-900/20 text-[10px] font-mono text-purple-700 dark:text-purple-300">
-          <span className="font-bold">{TRANSFORM_LABELS[d.logicTransform.operation] || d.logicTransform.operation}</span>
-          {d.logicTransform.operand && (
-            <span className="text-gray-500 ml-1 truncate">({d.logicTransform.operand})</span>
-          )}
-        </div>
-      )}
-
-      {(d.customParams?.length ?? 0) > 0 && (
-        <div className="flex items-center gap-1 text-[10px] text-teal-600 dark:text-teal-400 mt-1">
-          <Variable className="w-3 h-3" />
-          <span>
-            {d.customParams!.filter((p) => p.name).length} return param
-            {d.customParams!.filter((p) => p.name).length !== 1 ? "s" : ""}
-          </span>
-        </div>
-      )}
+      {/* Custom source handles for branching */}
+      <div className="relative mt-2">
+        {isWhile ? (
+          <>
+            {/* loop handle */}
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="loop"
+              className="!w-3 !h-3 !bg-cyan-500 !border-2 !border-white dark:!border-gray-900"
+              style={{ top: -4, right: -14 }}
+            />
+            <div className="text-[9px] text-cyan-600 dark:text-cyan-400 font-medium text-right pr-0" style={{ marginTop: -2 }}>
+              loop ↻
+            </div>
+            {/* done handle */}
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="done"
+              className="!w-3 !h-3 !bg-emerald-500 !border-2 !border-white dark:!border-gray-900"
+              style={{ top: 20, right: -14 }}
+            />
+            <div className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium text-right pr-0" style={{ marginTop: 2 }}>
+              done ✓
+            </div>
+          </>
+        ) : (
+          <>
+            {/* true handle */}
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="true"
+              className="!w-3 !h-3 !bg-emerald-500 !border-2 !border-white dark:!border-gray-900"
+              style={{ top: -4, right: -14 }}
+            />
+            <div className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium text-right pr-0" style={{ marginTop: -2 }}>
+              true ✓
+            </div>
+            {/* false handle */}
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="false"
+              className="!w-3 !h-3 !bg-red-500 !border-2 !border-white dark:!border-gray-900"
+              style={{ top: 20, right: -14 }}
+            />
+            <div className="text-[9px] text-red-500 dark:text-red-400 font-medium text-right pr-0" style={{ marginTop: 2 }}>
+              false ✗
+            </div>
+          </>
+        )}
+      </div>
     </NodeShell>
   );
 }

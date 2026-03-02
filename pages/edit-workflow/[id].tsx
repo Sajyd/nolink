@@ -158,8 +158,6 @@ export default function EditWorkflow() {
           inputParameters: (config.inputParameters as any[]) || undefined,
           logicMode: (config.logicMode as any) || undefined,
           logicCondition: (config.logicCondition as any) || undefined,
-          logicLoop: (config.logicLoop as any) || undefined,
-          logicTransform: (config.logicTransform as any) || undefined,
         };
 
         nodes.push({
@@ -173,10 +171,12 @@ export default function EditWorkflow() {
       // Use stored edges if available, fall back to linear chain for legacy workflows
       let edges: Edge[];
       if (wf.edges && Array.isArray(wf.edges) && wf.edges.length > 0) {
-        edges = (wf.edges as { id: string; source: string; target: string }[]).map((e) => ({
+        edges = (wf.edges as { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string }[]).map((e) => ({
           id: e.id,
           source: e.source,
           target: e.target,
+          sourceHandle: e.sourceHandle ?? null,
+          targetHandle: e.targetHandle ?? null,
           animated: true,
         }));
       } else {
@@ -210,7 +210,7 @@ export default function EditWorkflow() {
       isPublic: s.isPublic,
       exampleInput: s.exampleInput || null,
       exampleOutput: s.exampleOutput || null,
-      edges: s.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+      edges: s.edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle ?? null, targetHandle: e.targetHandle ?? null })),
       steps: topologicalOrder(s.nodes, s.edges).map((n, idx) => {
         const stepTypeMap: Record<string, string> = {
           inputNode: "INPUT",
@@ -279,8 +279,6 @@ export default function EditWorkflow() {
           ),
           logicMode: isLogic ? (n.data.logicMode || null) : null,
           logicCondition: isLogic ? (n.data.logicCondition || null) : null,
-          logicLoop: isLogic ? (n.data.logicLoop || null) : null,
-          logicTransform: isLogic ? (n.data.logicTransform || null) : null,
           positionX: n.position.x,
           positionY: n.position.y,
         };

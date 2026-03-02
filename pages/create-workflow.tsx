@@ -75,7 +75,7 @@ export default function CreateWorkflow() {
       isPublic: s.isPublic,
       exampleInput: s.exampleInput || null,
       exampleOutput: s.exampleOutput || null,
-      edges: s.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+      edges: s.edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle ?? null, targetHandle: e.targetHandle ?? null })),
       steps: topologicalOrder(s.nodes, s.edges).map((n, idx) => {
         const stepTypeMap: Record<string, string> = {
           inputNode: "INPUT",
@@ -144,8 +144,6 @@ export default function CreateWorkflow() {
           ),
           logicMode: isLogic ? (n.data.logicMode || null) : null,
           logicCondition: isLogic ? (n.data.logicCondition || null) : null,
-          logicLoop: isLogic ? (n.data.logicLoop || null) : null,
-          logicTransform: isLogic ? (n.data.logicTransform || null) : null,
           positionX: n.position.x,
           positionY: n.position.y,
         };

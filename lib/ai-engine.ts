@@ -60,18 +60,6 @@ export interface StepDefinition {
     leftOperand: string;
     operator: string;
     rightOperand: string;
-    thenOutput: string;
-    elseOutput: string;
-  };
-  logicLoop?: {
-    delimiter: string;
-    itemTemplate: string;
-    joinWith: string;
-  };
-  logicTransform?: {
-    operation: string;
-    operand?: string;
-    replacement?: string;
   };
 }
 
@@ -1635,15 +1623,21 @@ function applyCustomParamsToStep(
   };
 }
 
-// ── Logic step execution ────────────────────────────────────────
+// ── Logic gate condition evaluation (used by graph executor) ────
 
-function evaluateCondition(
-  left: string,
-  op: string,
-  right: string
+export function evaluateLogicCondition(
+  step: StepDefinition,
+  input: StepInput
 ): boolean {
-  const l = left ?? "";
-  const r = right ?? "";
+  const cond = step.logicCondition;
+  if (!cond) return false;
+
+  const inputText = input.text || "";
+  const resolve = (v: string) => v.replace(/\{\{input\}\}/g, inputText);
+  const l = resolve(cond.leftOperand || "{{input}}");
+  const r = resolve(cond.rightOperand || "");
+  const op = cond.operator || "equals";
+
   switch (op) {
     case "equals":
       return l === r;
@@ -1676,119 +1670,6 @@ function evaluateCondition(
   }
 }
 
-function resolveLogicOperand(value: string, inputText: string): string {
-  return value.replace(/\{\{input\}\}/g, inputText);
-}
-
-function executeLogicStep(
-  step: StepDefinition,
-  input: StepInput
-): StepInput {
-  const inputText = input.text || "";
-  const mode = step.logicMode || "condition";
-
-  if (mode === "condition") {
-    const cond = step.logicCondition;
-    if (!cond) return { text: inputText, files: input.files || [] };
-
-    const left = resolveLogicOperand(cond.leftOperand || "{{input}}", inputText);
-    const right = resolveLogicOperand(cond.rightOperand || "", inputText);
-    const result = evaluateCondition(left, cond.operator || "equals", right);
-
-    const output = result
-      ? resolveLogicOperand(cond.thenOutput || "{{input}}", inputText)
-      : resolveLogicOperand(cond.elseOutput || "", inputText);
-
-    return { text: output, files: input.files || [] };
-  }
-
-  if (mode === "loop") {
-    const loop = step.logicLoop;
-    if (!loop) return { text: inputText, files: input.files || [] };
-
-    const delimiter = loop.delimiter === "\\n" ? "\n" : (loop.delimiter || "\n");
-    const items = inputText.split(delimiter).filter((s) => s.trim());
-    const template = loop.itemTemplate || "{{item}}";
-    const joinWith = loop.joinWith === "\\n" ? "\n" : (loop.joinWith || "\n");
-
-    const results = items.map((item, index) =>
-      template
-        .replace(/\{\{item\}\}/g, item.trim())
-        .replace(/\{\{index\}\}/g, String(index))
-        .replace(/\{\{index1\}\}/g, String(index + 1))
-    );
-
-    return { text: results.join(joinWith), files: input.files || [] };
-  }
-
-  if (mode === "transform") {
-    const tf = step.logicTransform;
-    if (!tf) return { text: inputText, files: input.files || [] };
-
-    let result = inputText;
-    switch (tf.operation) {
-      case "uppercase":
-        result = inputText.toUpperCase();
-        break;
-      case "lowercase":
-        result = inputText.toLowerCase();
-        break;
-      case "trim":
-        result = inputText.trim();
-        break;
-      case "reverse":
-        result = inputText.split("").reverse().join("");
-        break;
-      case "length":
-        result = String(inputText.length);
-        break;
-      case "extract_json": {
-        try {
-          const parsed = JSON.parse(inputText);
-          const path = (tf.operand || "").split(".");
-          let val: unknown = parsed;
-          for (const key of path) {
-            if (val && typeof val === "object" && key in (val as Record<string, unknown>)) {
-              val = (val as Record<string, unknown>)[key];
-            } else {
-              val = undefined;
-              break;
-            }
-          }
-          result = val !== undefined ? (typeof val === "string" ? val : JSON.stringify(val)) : "";
-        } catch {
-          result = "";
-        }
-        break;
-      }
-      case "replace":
-        result = inputText.replaceAll(tf.operand || "", tf.replacement || "");
-        break;
-      case "split": {
-        const delim = tf.operand === "\\n" ? "\n" : (tf.operand || ",");
-        const joinW = tf.replacement === "\\n" ? "\n" : (tf.replacement || "\n");
-        result = inputText.split(delim).map((s) => s.trim()).filter(Boolean).join(joinW);
-        break;
-      }
-      case "join": {
-        const delim2 = tf.operand === "\\n" ? "\n" : (tf.operand || "\n");
-        const joinW2 = tf.replacement || ", ";
-        result = inputText.split(delim2).map((s) => s.trim()).filter(Boolean).join(joinW2);
-        break;
-      }
-      case "template":
-        result = (tf.operand || "{{input}}").replace(/\{\{input\}\}/g, inputText);
-        break;
-      default:
-        break;
-    }
-
-    return { text: result, files: input.files || [] };
-  }
-
-  return { text: inputText, files: input.files || [] };
-}
-
 // ── Main execution ──────────────────────────────────────────────
 
 export async function executeStep(
@@ -1814,9 +1695,6 @@ export async function executeStep(
         break;
       case "CUSTOM_API":
         stepOutput = await executeCustomApiStep(step, input);
-        break;
-      case "LOGIC":
-        stepOutput = executeLogicStep(step, input);
         break;
       case "BASIC":
       default:

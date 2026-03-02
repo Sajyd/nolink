@@ -2,7 +2,8 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
-import { executeStep, type StepDefinition, type StepCustomParam, type FileInput, type StepResult } from "@/lib/ai-engine";
+import { type StepDefinition, type StepCustomParam, type FileInput, type StepResult } from "@/lib/ai-engine";
+import { executeWorkflowGraph } from "@/lib/graph-executor";
 import { deductCredits, checkBalance } from "@/lib/credits";
 import { estimateWorkflowCost } from "@/lib/ai-engine";
 import { getModelById } from "@/lib/models";
@@ -130,8 +131,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       fileBindings: (config.fileBindings as string[] | undefined) || undefined,
       logicMode: (config.logicMode as string | undefined) || undefined,
       logicCondition: (config.logicCondition as any) || undefined,
-      logicLoop: (config.logicLoop as any) || undefined,
-      logicTransform: (config.logicTransform as any) || undefined,
     };
   });
 
@@ -155,7 +154,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })),
   });
 
-  // Build per-step input map: prefer `inputs` object, fall back to legacy `input`/`files`
   const perStepInputMap: Record<string, { text: string; files: FileInput[] }> = {};
   if (hasPerStepInputs) {
     for (const [stepId, data] of Object.entries(inputs as Record<string, { text?: string; files?: any[] }>)) {
@@ -171,9 +169,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  let currentInput: { text: string; files: FileInput[] } = { text: input || "", files: fileInputs };
-  const allResults: StepResult[] = [];
-  let visibleIndex = 0;
+  const initialInput = { text: input || "", files: fileInputs };
   let failed = false;
   const customParamMap: Record<string, string> = {};
 
@@ -193,179 +189,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   });
 
-  // Also inject user-provided input parameters (custom form fields)
   const userParams: Record<string, unknown> = req.body.params || {};
   for (const [key, val] of Object.entries(userParams)) {
     customParamMap[key] = String(val ?? "");
   }
 
-  // Build parent map from edges so we can merge outputs from all parents
-  const edgeList = (workflow.edges as { source: string; target: string }[] | null) || [];
-  const parentMap: Record<string, string[]> = {};
-  for (const e of edgeList) {
-    if (!parentMap[e.target]) parentMap[e.target] = [];
-    parentMap[e.target].push(e.source);
-  }
-  const stepOutputMap: Record<string, { text: string; files: FileInput[] }> = {};
+  const edgeList = (workflow.edges as { source: string; target: string; sourceHandle?: string; targetHandle?: string }[] | null) || [];
 
-  const resolveCP = (text: string) =>
-    text.replace(/\{\{([^}]+)\}\}/g, (m, name) =>
-      name === "input" ? m : customParamMap[name] !== undefined ? customParamMap[name] : m
-    );
-
-  for (const step of sortedSteps) {
-    if (aborted) break;
-
-    // For INPUT steps with per-step data, inject the specific user input
-    if (step.stepType === "INPUT" && perStepInputMap[step.id]) {
-      currentInput = perStepInputMap[step.id];
-    }
-
-    // Merge outputs from all parent steps into currentInput
-    const parents = parentMap[step.id];
-    if (parents && parents.length > 0) {
-      const parentOutputs = parents.map((pid) => stepOutputMap[pid]).filter(Boolean);
-      if (parentOutputs.length > 0) {
-        const mergedText = parentOutputs.map((o) => o.text).filter(Boolean).join("\n\n");
-        const mergedFiles = parentOutputs.flatMap((o) => o.files || []);
-        currentInput = { text: mergedText || currentInput.text, files: [...mergedFiles, ...currentInput.files] };
-        const seen = new Set<string>();
-        currentInput.files = currentInput.files.filter((f) => {
-          if (seen.has(f.url)) return false;
-          seen.add(f.url);
-          return true;
+  const allResults = await executeWorkflowGraph(
+    stepDefs,
+    edgeList,
+    initialInput,
+    perStepInputMap,
+    customParamMap,
+    {
+      isAborted: () => aborted,
+      onStepStart: (step, idx, total) => {
+        send("step_start", {
+          stepId: step.id,
+          stepName: step.name,
+          stepType: step.stepType,
+          outputType: step.outputType,
+          aiModel: step.aiModel,
+          modelName: step.aiModel ? getModelById(step.aiModel)?.name || step.aiModel : null,
+          index: idx,
+          totalSteps: total,
         });
-      }
-    }
-
-    if (step.customParams) {
-      for (const cp of step.customParams) {
-        if (cp.name) customParamMap[cp.name] = cp.value;
-      }
-    }
-
-    const resolvedStep = { ...step };
-    if (resolvedStep.prompt) resolvedStep.prompt = resolveCP(resolvedStep.prompt);
-    if (resolvedStep.systemPrompt) resolvedStep.systemPrompt = resolveCP(resolvedStep.systemPrompt);
-    if (resolvedStep.params) {
-      resolvedStep.params = { ...resolvedStep.params };
-      for (const [k, v] of Object.entries(resolvedStep.params)) {
-        if (typeof v === "string") {
-          (resolvedStep.params as Record<string, unknown>)[k] = resolveCP(v);
-        }
-        if (Array.isArray(v)) {
-          (resolvedStep.params as Record<string, unknown>)[k] = v.map((item) =>
-            typeof item === "string" ? resolveCP(item) : item
-          );
-        }
-      }
-    }
-    if (resolvedStep.customApiUrl) {
-      resolvedStep.customApiUrl = resolveCP(resolvedStep.customApiUrl);
-    }
-    if (resolvedStep.customApiParams) {
-      resolvedStep.customApiParams = resolvedStep.customApiParams.map((p) => ({
-        key: p.key,
-        value: resolveCP(p.value),
-      }));
-    }
-    if (resolvedStep.customApiHeaders) {
-      resolvedStep.customApiHeaders = resolvedStep.customApiHeaders.map((h) => ({
-        key: h.key,
-        value: resolveCP(h.value),
-      }));
-    }
-    if (resolvedStep.customFalParams) {
-      resolvedStep.customFalParams = resolvedStep.customFalParams.map((p) => ({
-        key: p.key,
-        value: resolveCP(p.value),
-      }));
-    }
-    if (resolvedStep.customReplicateParams) {
-      resolvedStep.customReplicateParams = resolvedStep.customReplicateParams.map((p) => ({
-        key: p.key,
-        value: resolveCP(p.value),
-      }));
-    }
-
-    const isVisible = step.stepType !== "INPUT" && step.stepType !== "OUTPUT";
-
-    if (isVisible) {
-      visibleIndex++;
-      send("step_start", {
-        stepId: step.id,
-        stepName: step.name,
-        stepType: step.stepType,
-        outputType: step.outputType,
-        aiModel: step.aiModel,
-        modelName: step.aiModel ? getModelById(step.aiModel)?.name || step.aiModel : null,
-        index: visibleIndex,
-        totalSteps: totalVisible,
-      });
-    }
-
-    // Resolve fileBindings → inject as files into currentInput
-    if (resolvedStep.fileBindings && resolvedStep.fileBindings.length > 0) {
-      const extraFiles: FileInput[] = [];
-      for (const binding of resolvedStep.fileBindings) {
-        const url = customParamMap[binding];
-        if (!url) continue;
-        const parts = binding.split("_");
-        const fileType = parts[parts.length - 1] || "document";
-        extraFiles.push({ url, type: fileType, name: binding });
-      }
-      if (extraFiles.length > 0) {
-        currentInput = {
-          ...currentInput,
-          files: [...currentInput.files, ...extraFiles],
-        };
-      }
-    }
-
-    try {
-      const result = await executeStep(resolvedStep, currentInput);
-      const { _nextInput, ...stepResult } = result;
-      allResults.push(stepResult);
-      currentInput = _nextInput;
-
-      // Store per-step outputs so downstream steps can reference them
-      stepOutputMap[step.id] = _nextInput;
-      customParamMap[`step_${step.id}_output`] = _nextInput.text;
-      for (const f of _nextInput.files) {
-        const key = `step_${step.id}_${f.type}`;
-        if (!customParamMap[key]) customParamMap[key] = f.url;
-      }
-
-      if (isVisible) {
-        send("step_complete", {
-          ...stepResult,
-          index: visibleIndex,
-          totalSteps: totalVisible,
-        });
-      }
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : "Unknown error";
-      const stepResult: StepResult = {
-        stepId: step.id,
-        stepName: step.name,
-        stepType: step.stepType,
-        output: `Error: ${errMsg}`,
-        outputType: step.outputType,
-        duration: 0,
-      };
-      allResults.push(stepResult);
-
-      if (isVisible) {
-        send("step_error", {
-          ...stepResult,
-          index: visibleIndex,
-          totalSteps: totalVisible,
-        });
-      }
-      failed = true;
-      break;
-    }
-  }
+      },
+      onStepComplete: (result, _nextInput, idx, total) => {
+        send("step_complete", { ...result, index: idx, totalSteps: total });
+      },
+      onStepError: (result, idx, total) => {
+        send("step_error", { ...result, index: idx, totalSteps: total });
+        failed = true;
+      },
+    },
+  );
 
   if (!aborted) {
     try {
