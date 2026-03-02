@@ -1142,7 +1142,7 @@ async function executeFalStep(
       }
       console.log(`[fal] Calling ${falEndpoint} with params:`, JSON.stringify(logParams, null, 2));
 
-      const response = await fetch(`https://fal.run/${falEndpoint}`, {
+      const response = await fetch(`https://queue.fal.run/${falEndpoint}`, {
         method: "POST",
         headers: {
           Authorization: `Key ${process.env.FAL_KEY}`,
@@ -1156,7 +1156,37 @@ async function executeFalStep(
         return { text: `[fal.ai error: ${err.slice(0, 200)}]`, files: [] };
       }
 
-      const result = await response.json();
+      let result = await response.json();
+
+      if (result.request_id && result.status !== "COMPLETED") {
+        const requestId = result.request_id;
+        const maxAttempts = 120;
+        const pollInterval = 3000;
+        for (let i = 0; i < maxAttempts; i++) {
+          await new Promise((r) => setTimeout(r, pollInterval));
+          const statusRes = await fetch(
+            `https://queue.fal.run/${falEndpoint}/requests/${requestId}/status`,
+            { headers: { Authorization: `Key ${process.env.FAL_KEY}` } }
+          );
+          if (!statusRes.ok) continue;
+          const statusData = await statusRes.json();
+          console.log(`[fal] Poll ${i + 1}: status=${statusData.status}`);
+          if (statusData.status === "COMPLETED") {
+            const resultRes = await fetch(
+              `https://queue.fal.run/${falEndpoint}/requests/${requestId}`,
+              { headers: { Authorization: `Key ${process.env.FAL_KEY}` } }
+            );
+            if (resultRes.ok) {
+              result = await resultRes.json();
+            }
+            break;
+          }
+          if (statusData.status === "FAILED") {
+            const errMsg = statusData.error || "fal.ai request failed";
+            return { text: `[fal.ai error: ${typeof errMsg === "string" ? errMsg.slice(0, 300) : JSON.stringify(errMsg).slice(0, 300)}]`, files: [] };
+          }
+        }
+      }
 
       if (result.images?.[0]?.url) {
         const url = result.images[0].url;

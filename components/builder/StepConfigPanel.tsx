@@ -58,50 +58,68 @@ export default function StepConfigPanel() {
   const data = node.data;
   const nodeType = node.type || "basicNode";
 
-  // Build bind options from nodes actually connected as parents via edges
-  const parentNodeIds = edges
-    .filter((e) => e.target === selectedNodeId)
-    .map((e) => e.source);
-  const parentNodes = parentNodeIds
+  // Collect all ancestors via BFS (any node reachable by walking edges backward)
+  const directParentIds = new Set(
+    edges.filter((e) => e.target === selectedNodeId).map((e) => e.source)
+  );
+  const allAncestorIds = new Set<string>();
+  const queue = [...directParentIds];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    if (allAncestorIds.has(cur)) continue;
+    allAncestorIds.add(cur);
+    for (const e of edges) {
+      if (e.target === cur && !allAncestorIds.has(e.source)) {
+        queue.push(e.source);
+      }
+    }
+  }
+
+  const allInputNodes = nodes.filter((n) => n.type === "inputNode");
+  const ancestorNodes = [...allAncestorIds]
     .map((id) => nodes.find((n) => n.id === id))
     .filter(Boolean) as typeof nodes;
 
-  const allInputNodes = nodes.filter((n) => n.type === "inputNode");
+  function buildOptsForNode(pn: (typeof nodes)[number], isDirectParent: boolean) {
+    if (pn.type === "inputNode") {
+      const idx = allInputNodes.findIndex((n) => n.id === pn.id);
+      const accepts = pn.data.acceptTypes || ["text"];
+      return accepts.map((type) => ({
+        value: `input_${idx + 1}_${type}`,
+        label: `${pn.data.label || `Input ${idx + 1}`}: ${type}`,
+      }));
+    }
+    if (pn.type === "outputNode") return [];
+    const nodeLabel = pn.data.label || (isDirectParent ? "Previous node" : `Step (${pn.id.slice(0, 6)})`);
+    const opts: { value: string; label: string }[] = [
+      { value: `step_${pn.id}_output`, label: `${nodeLabel}: text output` },
+    ];
+    const outType = (pn.data.outputType || "TEXT").toLowerCase();
+    if (outType === "image" || pn.type === "falAiNode" || pn.type === "replicateNode") {
+      opts.push({ value: `step_${pn.id}_image`, label: `${nodeLabel}: image` });
+    }
+    if (outType === "video") {
+      opts.push({ value: `step_${pn.id}_video`, label: `${nodeLabel}: video` });
+    }
+    if (outType === "audio") {
+      opts.push({ value: `step_${pn.id}_audio`, label: `${nodeLabel}: audio` });
+    }
+    return opts;
+  }
+
+  const directParents = ancestorNodes.filter((n) => directParentIds.has(n.id));
+  const indirectAncestors = ancestorNodes.filter((n) => !directParentIds.has(n.id));
 
   const inputBindOptions = [
-    // Options from connected parent nodes
-    ...parentNodes.flatMap((pn) => {
-      if (pn.type === "inputNode") {
-        const idx = allInputNodes.findIndex((n) => n.id === pn.id);
-        const accepts = pn.data.acceptTypes || ["text"];
-        return accepts.map((type) => ({
-          value: `input_${idx + 1}_${type}`,
-          label: `${pn.data.label || `Input ${idx + 1}`}: ${type}`,
-        }));
-      }
-      const nodeLabel = pn.data.label || "Previous node";
-      const opts: { value: string; label: string }[] = [
-        { value: `step_${pn.id}_output`, label: `${nodeLabel}: text output` },
-      ];
-      const outType = (pn.data.outputType || "TEXT").toLowerCase();
-      if (outType === "image" || pn.type === "falAiNode" || pn.type === "replicateNode") {
-        opts.push({ value: `step_${pn.id}_image`, label: `${nodeLabel}: image` });
-      }
-      if (outType === "video") {
-        opts.push({ value: `step_${pn.id}_video`, label: `${nodeLabel}: video` });
-      }
-      if (outType === "audio") {
-        opts.push({ value: `step_${pn.id}_audio`, label: `${nodeLabel}: audio` });
-      }
-      return opts;
-    }),
-    // Input parameters from connected input nodes
-    ...parentNodes
+    ...directParents.flatMap((pn) => buildOptsForNode(pn, true)),
+    ...indirectAncestors.flatMap((pn) => buildOptsForNode(pn, false)),
+    // Input parameters from any ancestor input nodes
+    ...ancestorNodes
       .filter((pn) => pn.type === "inputNode")
       .flatMap((pn) =>
         (pn.data.inputParameters || [])
-          .filter((p) => p.name)
-          .map((p) => ({
+          .filter((p: any) => p.name)
+          .map((p: any) => ({
             value: p.name,
             label: `Param: ${p.label || p.name}`,
           }))
@@ -636,20 +654,18 @@ function ModelParamsEditor({
                 {param.label}
                 {param.required && <span className="text-red-400 ml-0.5">*</span>}
               </label>
-              {param.bindable && (
-                <select
-                  value={binding || "manual"}
-                  onChange={(e) => setBinding(param.key, e.target.value)}
-                  className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-transparent"
-                >
-                  <option value="manual">Manual</option>
-                  {inputBindOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value.startsWith("{{") ? opt.value : `{{${opt.value}}}`}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <select
+                value={binding || "manual"}
+                onChange={(e) => setBinding(param.key, e.target.value)}
+                className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-transparent"
+              >
+                <option value="manual">Manual</option>
+                {inputBindOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value.startsWith("{{") ? opt.value : `{{${opt.value}}}`}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {param.description && (
