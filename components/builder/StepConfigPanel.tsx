@@ -1726,7 +1726,11 @@ function CustomReplicateModelEditor({
         resolvedVersionId: info.resolvedVersionId || null,
       });
 
-      updateNodeData(nodeId, { customReplicatePrice: info.costPerUse });
+      updateNodeData(nodeId, {
+        customReplicatePrice: info.costPerUse,
+        customReplicateCostPerSecond: info.costPerSecond ?? undefined,
+        customReplicateDurationParamKey: info.durationParamKey ?? undefined,
+      });
 
       if (info.params && info.params.length > 0) {
         const currentParams: CustomReplicateParam[] = data.customReplicateParams || [];
@@ -1959,18 +1963,34 @@ function CustomReplicateModelEditor({
           <input
             type="number"
             min={1}
-            value={customReplicatePrice}
+            value={(() => {
+              const cps = data.customReplicateCostPerSecond as number | undefined;
+              const dKey = data.customReplicateDurationParamKey as string | undefined;
+              if (!cps || !dKey) return customReplicatePrice;
+              const entry = customReplicateParams.find((p: CustomReplicateParam) => p.key === dKey);
+              const sec = entry ? parseFloat(entry.value) : 0;
+              return sec > 0 ? Math.max(1, Math.ceil(cps * sec)) : customReplicatePrice;
+            })()}
             readOnly
             className="input-field text-sm pl-8 bg-gray-50 dark:bg-gray-800/50 cursor-not-allowed"
           />
           <Zap className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-brand-500" />
         </div>
-        <div className="flex items-start gap-1 mt-1">
-          <Info className="w-3 h-3 text-gray-400 shrink-0 mt-0.5" />
-          <p className="text-[10px] text-gray-400">
-            Automatically calculated from Replicate pricing. Click Fetch Info to update.
-          </p>
-        </div>
+        {data.customReplicateCostPerSecond ? (
+          <div className="flex items-center gap-1.5 px-2 py-1.5 mt-1.5 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+            <Zap className="w-3.5 h-3.5 text-orange-500" />
+            <span className="text-[11px] font-medium text-orange-600 dark:text-orange-400">
+              {data.customReplicateCostPerSecond} NL/s — price scales with duration
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-start gap-1 mt-1">
+            <Info className="w-3 h-3 text-gray-400 shrink-0 mt-0.5" />
+            <p className="text-[10px] text-gray-400">
+              Automatically calculated from Replicate pricing. Click Fetch Info to update.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Custom parameters */}
@@ -3079,7 +3099,11 @@ function CustomFalModelEditor({
         unit: info.unit,
       });
 
-      updateNodeData(nodeId, { customFalPrice: info.costPerUse });
+      updateNodeData(nodeId, {
+        customFalPrice: info.costPerUse,
+        customFalCostPerSecond: info.costPerSecond ?? undefined,
+        customFalDurationParamKey: info.durationParamKey ?? undefined,
+      });
 
       if (info.params && info.params.length > 0) {
         const currentParams: CustomFalParam[] = data.customFalParams || [];
@@ -3264,18 +3288,34 @@ function CustomFalModelEditor({
           <input
             type="number"
             min={1}
-            value={customFalPrice}
+            value={(() => {
+              const cps = data.customFalCostPerSecond as number | undefined;
+              const dKey = data.customFalDurationParamKey as string | undefined;
+              if (!cps || !dKey) return customFalPrice;
+              const entry = customFalParams.find((p: CustomFalParam) => p.key === dKey);
+              const sec = entry ? parseFloat(entry.value) : 0;
+              return sec > 0 ? Math.max(1, Math.ceil(cps * sec)) : customFalPrice;
+            })()}
             readOnly
             className="input-field text-sm pl-8 bg-gray-50 dark:bg-gray-800/50 cursor-not-allowed"
           />
           <Zap className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-brand-500" />
         </div>
-        <div className="flex items-start gap-1 mt-1">
-          <Info className="w-3 h-3 text-gray-400 shrink-0 mt-0.5" />
-          <p className="text-[10px] text-gray-400">
-            Automatically calculated from fal.ai pricing. Click Fetch Info to update.
-          </p>
-        </div>
+        {data.customFalCostPerSecond ? (
+          <div className="flex items-center gap-1.5 px-2 py-1.5 mt-1.5 rounded-lg bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800">
+            <Zap className="w-3.5 h-3.5 text-pink-500" />
+            <span className="text-[11px] font-medium text-pink-600 dark:text-pink-400">
+              {data.customFalCostPerSecond} NL/s — price scales with duration
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-start gap-1 mt-1">
+            <Info className="w-3 h-3 text-gray-400 shrink-0 mt-0.5" />
+            <p className="text-[10px] text-gray-400">
+              Automatically calculated from fal.ai pricing. Click Fetch Info to update.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Custom parameters */}

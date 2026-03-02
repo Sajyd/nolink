@@ -232,10 +232,36 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
     onClose?.();
   };
 
+  const customKvCost = (
+    base: number,
+    cps: number | undefined,
+    dKey: string | undefined,
+    kvParams: { key: string; value: string }[] | undefined
+  ) => {
+    if (!cps || !dKey || !kvParams) return base;
+    const entry = kvParams.find((p) => p.key === dKey);
+    const sec = entry ? parseFloat(entry.value) : 0;
+    return sec > 0 ? Math.max(1, Math.ceil(cps * sec)) : base;
+  };
+
   const estimatedCost = store.nodes.reduce((sum, n) => {
     if (n.type === "customApiNode") return sum + (n.data.customApiPrice ?? 0);
-    if (n.data.aiModel === "fal-custom") return sum + (n.data.customFalPrice ?? 0);
-    if (n.data.aiModel === "rep-custom") return sum + (n.data.customReplicatePrice ?? 0);
+    if (n.data.aiModel === "fal-custom") {
+      return sum + customKvCost(
+        n.data.customFalPrice ?? 0,
+        n.data.customFalCostPerSecond as number | undefined,
+        n.data.customFalDurationParamKey as string | undefined,
+        n.data.customFalParams as { key: string; value: string }[] | undefined
+      );
+    }
+    if (n.data.aiModel === "rep-custom") {
+      return sum + customKvCost(
+        n.data.customReplicatePrice ?? 0,
+        n.data.customReplicateCostPerSecond as number | undefined,
+        n.data.customReplicateDurationParamKey as string | undefined,
+        n.data.customReplicateParams as { key: string; value: string }[] | undefined
+      );
+    }
     if (n.data.aiModel) {
       const m = getModelById(n.data.aiModel as string);
       if (m) return sum + computeModelCost(m, n.data.params as Record<string, unknown> | undefined);

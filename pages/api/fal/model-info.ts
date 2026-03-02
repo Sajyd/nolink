@@ -125,8 +125,31 @@ export default async function handler(
       }
     }
 
-    const costPerUse = Math.max(1, Math.ceil(unitPriceUsd * FAL_USD_TO_NL));
     const params = extractParamsFromOpenApi(model.openapi);
+
+    const isPerSecondUnit = /sec(ond)?/i.test(unit);
+    let costPerSecond: number | null = null;
+    let durationParamKey: string | null = null;
+
+    const durationParam = params.find(
+      (p) => /^(duration|seconds|length_seconds|duration_seconds)$/i.test(p.key)
+    );
+
+    if (isPerSecondUnit && unitPriceUsd > 0) {
+      costPerSecond = Math.max(1, Math.ceil(unitPriceUsd * FAL_USD_TO_NL));
+      durationParamKey = durationParam?.key || "duration";
+    } else if (durationParam) {
+      const defaultDuration = parseFloat(durationParam.default || "5");
+      if (defaultDuration > 0) {
+        const baseCost = Math.max(1, Math.ceil(unitPriceUsd * FAL_USD_TO_NL));
+        costPerSecond = Math.max(1, Math.round(baseCost / defaultDuration));
+        durationParamKey = durationParam.key;
+      }
+    }
+
+    const costPerUse = costPerSecond && durationParamKey && durationParam
+      ? Math.max(1, Math.ceil(costPerSecond * parseFloat(durationParam.default || "5")))
+      : Math.max(1, Math.ceil(unitPriceUsd * FAL_USD_TO_NL));
 
     return res.json({
       endpointId: endpoint_id,
@@ -134,6 +157,8 @@ export default async function handler(
       category: model.metadata?.category || "unknown",
       description: model.metadata?.description || "",
       costPerUse,
+      costPerSecond,
+      durationParamKey,
       unitPriceUsd,
       unit,
       params,

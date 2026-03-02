@@ -124,9 +124,13 @@ export interface StepNodeData {
   customFalEndpoint?: string;
   customFalParams?: CustomFalParam[];
   customFalPrice?: number;
+  customFalCostPerSecond?: number;
+  customFalDurationParamKey?: string;
   customReplicateModel?: string;
   customReplicateParams?: CustomReplicateParam[];
   customReplicatePrice?: number;
+  customReplicateCostPerSecond?: number;
+  customReplicateDurationParamKey?: string;
   customApiUrl?: string;
   customApiMethod?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   customApiHeaders?: CustomApiParam[];

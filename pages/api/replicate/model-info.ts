@@ -166,9 +166,33 @@ export default async function handler(
       }
     }
 
-    const costPerUse = unitPriceUsd > 0
-      ? Math.max(1, Math.ceil(unitPriceUsd * REPLICATE_USD_TO_NL))
-      : 5;
+    const isPerSecondUnit = /sec(ond)?/i.test(unit);
+    let costPerSecond: number | null = null;
+    let durationParamKey: string | null = null;
+
+    const durationParam = params.find(
+      (p) => /^(duration|seconds|length_seconds|duration_seconds)$/i.test(p.key)
+    );
+
+    if (isPerSecondUnit && unitPriceUsd > 0) {
+      costPerSecond = Math.max(1, Math.ceil(unitPriceUsd * REPLICATE_USD_TO_NL));
+      durationParamKey = durationParam?.key || "duration";
+    } else if (durationParam) {
+      const defaultDuration = parseFloat(durationParam.default || "5");
+      if (defaultDuration > 0) {
+        const baseCost = unitPriceUsd > 0
+          ? Math.max(1, Math.ceil(unitPriceUsd * REPLICATE_USD_TO_NL))
+          : 5;
+        costPerSecond = Math.max(1, Math.round(baseCost / defaultDuration));
+        durationParamKey = durationParam.key;
+      }
+    }
+
+    const costPerUse = costPerSecond && durationParamKey && durationParam
+      ? Math.max(1, Math.ceil(costPerSecond * parseFloat(durationParam.default || "5")))
+      : unitPriceUsd > 0
+        ? Math.max(1, Math.ceil(unitPriceUsd * REPLICATE_USD_TO_NL))
+        : 5;
 
     return res.json({
       modelId: basePath,
@@ -181,6 +205,8 @@ export default async function handler(
       latestVersionId: model.latest_version?.id || null,
       resolvedVersionId: resolvedVersion,
       costPerUse,
+      costPerSecond,
+      durationParamKey,
       unitPriceUsd,
       unit,
       params,

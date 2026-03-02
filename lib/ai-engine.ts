@@ -46,9 +46,13 @@ export interface StepDefinition {
   customFalEndpoint?: string;
   customFalParams?: { key: string; value: string }[];
   customFalPrice?: number;
+  customFalCostPerSecond?: number;
+  customFalDurationParamKey?: string;
   customReplicateModel?: string;
   customReplicateParams?: { key: string; value: string }[];
   customReplicatePrice?: number;
+  customReplicateCostPerSecond?: number;
+  customReplicateDurationParamKey?: string;
   customApiUrl?: string;
   customApiMethod?: string;
   customApiHeaders?: { key: string; value: string }[];
@@ -86,15 +90,38 @@ interface StepInput {
   files: FileInput[];
 }
 
+function computeCustomCost(
+  basePrice: number,
+  costPerSecond: number | undefined,
+  durationKey: string | undefined,
+  kvParams: { key: string; value: string }[] | undefined
+): number {
+  if (!costPerSecond || !durationKey || !kvParams) return basePrice;
+  const entry = kvParams.find((p) => p.key === durationKey);
+  const seconds = entry ? parseFloat(entry.value) : 0;
+  if (!seconds || seconds <= 0) return basePrice;
+  return Math.max(1, Math.ceil(costPerSecond * seconds));
+}
+
 export function estimateWorkflowCost(steps: StepDefinition[]): number {
   let total = 0;
   for (const step of steps) {
     if (step.stepType === "CUSTOM_API") {
       total += step.customApiPrice || 0;
     } else if (step.aiModel === "fal-custom") {
-      total += step.customFalPrice || 0;
+      total += computeCustomCost(
+        step.customFalPrice || 0,
+        step.customFalCostPerSecond,
+        step.customFalDurationParamKey,
+        step.customFalParams
+      );
     } else if (step.aiModel === "rep-custom") {
-      total += step.customReplicatePrice || 0;
+      total += computeCustomCost(
+        step.customReplicatePrice || 0,
+        step.customReplicateCostPerSecond,
+        step.customReplicateDurationParamKey,
+        step.customReplicateParams
+      );
     } else if (step.aiModel) {
       const model = getModelById(step.aiModel);
       if (model) {
