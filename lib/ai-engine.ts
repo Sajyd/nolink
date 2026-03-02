@@ -1803,6 +1803,57 @@ function executeUtilityStep(
       return { text: results.join(joinWith), files: input.files || [] };
     }
 
+    case "math_add":
+    case "math_subtract":
+    case "math_multiply":
+    case "math_divide":
+    case "math_modulo": {
+      const a = parseFloat(inputText);
+      const b = parseFloat(resolve(cfg.operand || "0"));
+      if (isNaN(a) || isNaN(b)) return { text: "NaN", files: input.files || [] };
+      let result: number;
+      switch (op) {
+        case "math_add": result = a + b; break;
+        case "math_subtract": result = a - b; break;
+        case "math_multiply": result = a * b; break;
+        case "math_divide": result = b === 0 ? NaN : a / b; break;
+        case "math_modulo": result = b === 0 ? NaN : a % b; break;
+        default: result = a;
+      }
+      return { text: String(result), files: input.files || [] };
+    }
+
+    case "math_round": {
+      const n = parseFloat(inputText);
+      if (isNaN(n)) return { text: "NaN", files: input.files || [] };
+      const places = parseInt(resolve(cfg.operand || "0")) || 0;
+      const factor = Math.pow(10, places);
+      return { text: String(Math.round(n * factor) / factor), files: input.files || [] };
+    }
+
+    case "math_abs": {
+      const n = parseFloat(inputText);
+      return { text: isNaN(n) ? "NaN" : String(Math.abs(n)), files: input.files || [] };
+    }
+
+    case "math_min":
+    case "math_max": {
+      const nums = inputText.split(",").map((s) => parseFloat(s.trim())).filter((n) => !isNaN(n));
+      if (nums.length === 0) return { text: "NaN", files: input.files || [] };
+      return { text: String(op === "math_min" ? Math.min(...nums) : Math.max(...nums)), files: input.files || [] };
+    }
+
+    case "math_expression": {
+      let expr = resolve(cfg.operand || inputText).replace(/\{\{input\}\}/g, inputText);
+      expr = expr.replace(/[^0-9+\-*/%().eE\s]/g, "");
+      try {
+        const result = Function(`"use strict"; return (${expr})`)();
+        return { text: String(result), files: input.files || [] };
+      } catch {
+        return { text: "Error: invalid expression", files: input.files || [] };
+      }
+    }
+
     case "audio_duration":
     case "video_duration":
       return (async () => {

@@ -2209,12 +2209,22 @@ const UTILITY_OPERATIONS: { value: UtilityOperation; label: string; group: strin
   { value: "base64_encode", label: "Base64 Encode", group: "Encode", description: "Encode text to Base64" },
   { value: "base64_decode", label: "Base64 Decode", group: "Encode", description: "Decode Base64 to text" },
   { value: "for_each", label: "For Each", group: "Loop", description: "Process each item in a list" },
+  { value: "math_add", label: "Add (+)", group: "Math", description: "Add a number to the input" },
+  { value: "math_subtract", label: "Subtract (−)", group: "Math", description: "Subtract a number from the input" },
+  { value: "math_multiply", label: "Multiply (×)", group: "Math", description: "Multiply the input by a number" },
+  { value: "math_divide", label: "Divide (÷)", group: "Math", description: "Divide the input by a number" },
+  { value: "math_modulo", label: "Modulo (%)", group: "Math", description: "Remainder after division" },
+  { value: "math_round", label: "Round", group: "Math", description: "Round to N decimal places" },
+  { value: "math_abs", label: "Absolute", group: "Math", description: "Absolute value of a number" },
+  { value: "math_min", label: "Min", group: "Math", description: "Minimum of comma-separated numbers" },
+  { value: "math_max", label: "Max", group: "Math", description: "Maximum of comma-separated numbers" },
+  { value: "math_expression", label: "Expression", group: "Math", description: "Evaluate an arithmetic expression" },
   { value: "audio_duration", label: "Audio Duration", group: "Media", description: "Get duration of an audio file (seconds)" },
   { value: "video_duration", label: "Video Duration", group: "Media", description: "Get duration of a video file (seconds)" },
   { value: "media_info", label: "Media Info", group: "Media", description: "Get format, duration, and size of a media URL" },
 ];
 
-const UTILITY_GROUPS = ["Text", "Data", "Encode", "Loop", "Media"];
+const UTILITY_GROUPS = ["Text", "Data", "Encode", "Loop", "Math", "Media"];
 
 function UtilityNodeConfig({
   nodeId,
@@ -2397,6 +2407,61 @@ function UtilityNodeConfig({
               </select>
             </div>
           </>
+        )}
+
+        {/* Math binary ops (input OP operand) */}
+        {["math_add", "math_subtract", "math_multiply", "math_divide", "math_modulo"].includes(op) && (
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Value</label>
+            <input
+              type="text"
+              value={config.operand || ""}
+              onChange={(e) => updateConfig({ operand: e.target.value })}
+              className="input-field text-xs font-mono"
+              placeholder="e.g. 2"
+            />
+            <p className="text-[9px] text-gray-400 mt-0.5">
+              The input text is parsed as a number, then {op === "math_add" ? "added to" : op === "math_subtract" ? "subtracted by" : op === "math_multiply" ? "multiplied by" : op === "math_divide" ? "divided by" : "modulo"} this value.
+            </p>
+          </div>
+        )}
+
+        {/* Math round */}
+        {op === "math_round" && (
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Decimal places</label>
+            <input
+              type="text"
+              value={config.operand || "0"}
+              onChange={(e) => updateConfig({ operand: e.target.value })}
+              className="input-field text-xs font-mono"
+              placeholder="0"
+            />
+          </div>
+        )}
+
+        {/* Math expression */}
+        {op === "math_expression" && (
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Expression</label>
+            <input
+              type="text"
+              value={config.operand || ""}
+              onChange={(e) => updateConfig({ operand: e.target.value })}
+              className="input-field text-xs font-mono"
+              placeholder="{{input}} * 2 + 10"
+            />
+            <p className="text-[9px] text-gray-400 mt-0.5">
+              Supports +, −, *, /, %, parentheses. Use {"{{input}}"} for the input value.
+            </p>
+          </div>
+        )}
+
+        {/* Math no-config ops */}
+        {["math_abs", "math_min", "math_max"].includes(op) && (
+          <p className="text-[10px] text-gray-500 dark:text-gray-400">
+            {op === "math_abs" ? "Returns the absolute value of the input number." : `Pass comma-separated numbers as input. Returns the ${op === "math_min" ? "smallest" : "largest"} value.`}
+          </p>
         )}
 
         {/* Media ops — no config needed */}

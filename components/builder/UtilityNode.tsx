@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import type { NodeProps } from "@xyflow/react";
 import {
-  Wrench, Type, Hash, Repeat, Music, Film, Globe, Code, FileText,
+  Wrench, Type, Hash, Repeat, Music, Film, Globe, Code, FileText, Calculator,
 } from "lucide-react";
 import { useWorkflowStore, topologicalOrder, type StepNodeData, type UtilityOperation } from "@/lib/workflow-store";
 import NodeShell from "./NodeShell";
@@ -24,6 +24,16 @@ const OP_INFO: Record<UtilityOperation, { label: string; icon: typeof Wrench; co
   base64_encode: { label: "Base64 Encode", icon: Code, color: "text-teal-500" },
   base64_decode: { label: "Base64 Decode", icon: Code, color: "text-teal-500" },
   for_each: { label: "For Each", icon: Repeat, color: "text-cyan-500" },
+  math_add: { label: "Add (+)", icon: Calculator, color: "text-orange-500" },
+  math_subtract: { label: "Subtract (−)", icon: Calculator, color: "text-orange-500" },
+  math_multiply: { label: "Multiply (×)", icon: Calculator, color: "text-orange-500" },
+  math_divide: { label: "Divide (÷)", icon: Calculator, color: "text-orange-500" },
+  math_modulo: { label: "Modulo (%)", icon: Calculator, color: "text-orange-500" },
+  math_round: { label: "Round", icon: Calculator, color: "text-orange-500" },
+  math_abs: { label: "Absolute", icon: Calculator, color: "text-orange-500" },
+  math_min: { label: "Min", icon: Calculator, color: "text-orange-500" },
+  math_max: { label: "Max", icon: Calculator, color: "text-orange-500" },
+  math_expression: { label: "Expression", icon: Calculator, color: "text-orange-500" },
   audio_duration: { label: "Audio Duration", icon: Music, color: "text-pink-500" },
   video_duration: { label: "Video Duration", icon: Film, color: "text-pink-500" },
   media_info: { label: "Media Info", icon: Film, color: "text-pink-500" },
@@ -85,6 +95,17 @@ function UtilityNode({ id, data, selected }: NodeProps) {
           )}
           {operation === "regex_extract" && (
             <div className="truncate">/{d.utilityConfig.operand || "..."}/</div>
+          )}
+          {["math_add", "math_subtract", "math_multiply", "math_divide", "math_modulo"].includes(operation) && d.utilityConfig.operand && (
+            <div className="truncate">
+              input {operation === "math_add" ? "+" : operation === "math_subtract" ? "−" : operation === "math_multiply" ? "×" : operation === "math_divide" ? "÷" : "%"} {d.utilityConfig.operand}
+            </div>
+          )}
+          {operation === "math_expression" && d.utilityConfig.operand && (
+            <div className="truncate">{d.utilityConfig.operand}</div>
+          )}
+          {operation === "math_round" && (
+            <div className="truncate">to {d.utilityConfig.operand || "0"} decimals</div>
           )}
           {["audio_duration", "video_duration", "media_info"].includes(operation) && (
             <div className="truncate">from media URL</div>
