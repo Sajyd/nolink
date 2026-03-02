@@ -110,6 +110,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             if (step.inputParameters && step.inputParameters.length > 0) config.inputParameters = step.inputParameters;
             if (step.logicMode) config.logicMode = step.logicMode;
             if (step.logicCondition) config.logicCondition = step.logicCondition;
+            if (step.utilityConfig) config.utilityConfig = step.utilityConfig;
             return {
               ...(step.nodeId && { id: step.nodeId }),
               order: step.order,

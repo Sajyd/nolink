@@ -29,8 +29,9 @@ import {
   Lock, Clock, Zap, Link2, Globe, Shield, AlertTriangle, SlidersHorizontal,
   Paperclip, Image, FileText, Music, Film, Search, Loader2, CheckCircle2, Info,
   GitBranch,
+  Wrench,
 } from "lucide-react";
-import type { LogicMode, LogicCondition, ConditionOperator } from "@/lib/workflow-store";
+import type { LogicMode, LogicCondition, ConditionOperator, UtilityOperation, UtilityConfig } from "@/lib/workflow-store";
 
 const IO_TYPES = ["TEXT", "IMAGE", "AUDIO", "VIDEO", "DOCUMENT"];
 
@@ -117,6 +118,7 @@ export default function StepConfigPanel() {
           {nodeType === "replicateNode" && <Box className="w-4 h-4 text-orange-500" />}
           {nodeType === "customApiNode" && <Globe className="w-4 h-4 text-rose-500" />}
           {nodeType === "logicNode" && <GitBranch className="w-4 h-4 text-amber-500" />}
+          {nodeType === "utilityNode" && <Wrench className="w-4 h-4 text-purple-500" />}
           {(nodeType === "basicNode" || nodeType === "stepNode") && <Settings2 className="w-4 h-4 text-brand-500" />}
           Configure {
             nodeType === "inputNode" ? "Input" :
@@ -125,6 +127,7 @@ export default function StepConfigPanel() {
             nodeType === "replicateNode" ? "Replicate Node" :
             nodeType === "customApiNode" ? "Custom API" :
             nodeType === "logicNode" ? "Logic Gate" :
+            nodeType === "utilityNode" ? "Utility" :
             "Step"
           }
         </h3>
@@ -258,6 +261,15 @@ export default function StepConfigPanel() {
         {/* ── LOGIC NODE CONFIG ──────────────────────────── */}
         {nodeType === "logicNode" && (
           <LogicNodeConfig
+            nodeId={selectedNodeId}
+            data={data}
+            inputBindOptions={inputBindOptions}
+          />
+        )}
+
+        {/* ── UTILITY NODE CONFIG ─────────────────────────── */}
+        {nodeType === "utilityNode" && (
+          <UtilityNodeConfig
             nodeId={selectedNodeId}
             data={data}
             inputBindOptions={inputBindOptions}
@@ -2173,6 +2185,292 @@ function LogicNodeConfig({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Utility Node Config ─────────────────────────────────────────
+
+const UTILITY_OPERATIONS: { value: UtilityOperation; label: string; group: string; description: string }[] = [
+  { value: "uppercase", label: "UPPERCASE", group: "Text", description: "Convert to uppercase" },
+  { value: "lowercase", label: "lowercase", group: "Text", description: "Convert to lowercase" },
+  { value: "trim", label: "Trim", group: "Text", description: "Remove leading/trailing whitespace" },
+  { value: "reverse", label: "Reverse", group: "Text", description: "Reverse the text" },
+  { value: "length", label: "Length", group: "Text", description: "Character count" },
+  { value: "word_count", label: "Word Count", group: "Text", description: "Count words in text" },
+  { value: "replace", label: "Replace", group: "Text", description: "Find and replace text" },
+  { value: "split", label: "Split", group: "Text", description: "Split text by delimiter" },
+  { value: "join", label: "Join", group: "Text", description: "Join lines into one string" },
+  { value: "template", label: "Template", group: "Text", description: "Wrap input in a template" },
+  { value: "extract_json", label: "JSON Extract", group: "Data", description: "Extract a field from JSON" },
+  { value: "regex_extract", label: "Regex Extract", group: "Data", description: "Extract text matching a regex" },
+  { value: "url_encode", label: "URL Encode", group: "Encode", description: "Percent-encode text for URLs" },
+  { value: "url_decode", label: "URL Decode", group: "Encode", description: "Decode percent-encoded text" },
+  { value: "base64_encode", label: "Base64 Encode", group: "Encode", description: "Encode text to Base64" },
+  { value: "base64_decode", label: "Base64 Decode", group: "Encode", description: "Decode Base64 to text" },
+  { value: "for_each", label: "For Each", group: "Loop", description: "Process each item in a list" },
+  { value: "audio_duration", label: "Audio Duration", group: "Media", description: "Get duration of an audio file (seconds)" },
+  { value: "video_duration", label: "Video Duration", group: "Media", description: "Get duration of a video file (seconds)" },
+  { value: "media_info", label: "Media Info", group: "Media", description: "Get format, duration, and size of a media URL" },
+];
+
+const UTILITY_GROUPS = ["Text", "Data", "Encode", "Loop", "Media"];
+
+function UtilityNodeConfig({
+  nodeId,
+  data,
+  inputBindOptions,
+}: {
+  nodeId: string;
+  data: any;
+  inputBindOptions: { value: string; label: string }[];
+}) {
+  const { updateNodeData } = useWorkflowStore();
+  const config: UtilityConfig = data.utilityConfig || { operation: "uppercase" };
+
+  const updateConfig = (updates: Partial<UtilityConfig>) => {
+    updateNodeData(nodeId, {
+      utilityConfig: { ...config, ...updates },
+    });
+  };
+
+  const op = config.operation;
+
+  const inputChips: { token: string; label: string; color: string }[] = [
+    {
+      token: "{{input}}",
+      label: "input",
+      color: "bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/40",
+    },
+    ...inputBindOptions.map((opt) => ({
+      token: opt.value.startsWith("{{") ? opt.value : `{{${opt.value}}}`,
+      label: opt.label,
+      color: "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40",
+    })),
+  ];
+
+  const loopItemChips: { token: string; label: string; color: string }[] = [
+    {
+      token: "{{item}}",
+      label: "item",
+      color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/40",
+    },
+    {
+      token: "{{index}}",
+      label: "index (0)",
+      color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/40",
+    },
+    {
+      token: "{{index1}}",
+      label: "index (1)",
+      color: "bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/40",
+    },
+    ...inputChips,
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Operation selector grouped */}
+      <div>
+        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+          Operation
+        </label>
+        <select
+          value={op}
+          onChange={(e) => updateConfig({ operation: e.target.value as UtilityOperation, operand: "", replacement: "", delimiter: undefined, itemTemplate: undefined, joinWith: undefined })}
+          className="input-field text-xs"
+        >
+          {UTILITY_GROUPS.map((group) => (
+            <optgroup key={group} label={group}>
+              {UTILITY_OPERATIONS.filter((o) => o.group === group).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label} — {o.description}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+
+      {/* Operation-specific config */}
+      <div className="space-y-3 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 p-3">
+        {/* Replace */}
+        {op === "replace" && (
+          <>
+            <UtilityInput label="Find" value={config.operand || ""} onChange={(v) => updateConfig({ operand: v })} placeholder="text to find..." chips={inputChips} />
+            <UtilityInput label="Replace with" value={config.replacement || ""} onChange={(v) => updateConfig({ replacement: v })} placeholder="replacement..." chips={inputChips} />
+          </>
+        )}
+
+        {/* Template */}
+        {op === "template" && (
+          <UtilityInput label="Template" value={config.operand || ""} onChange={(v) => updateConfig({ operand: v })} placeholder="The result is: {{input}}" chips={inputChips} />
+        )}
+
+        {/* JSON Extract */}
+        {op === "extract_json" && (
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">JSON path (dot notation)</label>
+            <input
+              type="text"
+              value={config.operand || ""}
+              onChange={(e) => updateConfig({ operand: e.target.value })}
+              className="input-field text-xs font-mono"
+              placeholder="data.result.text"
+            />
+          </div>
+        )}
+
+        {/* Regex Extract */}
+        {op === "regex_extract" && (
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Regex pattern</label>
+            <input
+              type="text"
+              value={config.operand || ""}
+              onChange={(e) => updateConfig({ operand: e.target.value })}
+              className="input-field text-xs font-mono"
+              placeholder="\\d+"
+            />
+            <p className="text-[9px] text-gray-400 mt-0.5">Returns the first match (or capture group 1 if present)</p>
+          </div>
+        )}
+
+        {/* Split */}
+        {op === "split" && (
+          <>
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Split by</label>
+              <input type="text" value={config.operand || ""} onChange={(e) => updateConfig({ operand: e.target.value })} className="input-field text-xs font-mono" placeholder=", (comma)" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Join with</label>
+              <input type="text" value={config.replacement || ""} onChange={(e) => updateConfig({ replacement: e.target.value })} className="input-field text-xs font-mono" placeholder="\n (newline)" />
+            </div>
+          </>
+        )}
+
+        {/* Join */}
+        {op === "join" && (
+          <>
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Split lines by</label>
+              <input type="text" value={config.operand || ""} onChange={(e) => updateConfig({ operand: e.target.value })} className="input-field text-xs font-mono" placeholder="\n (newline)" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Join with</label>
+              <input type="text" value={config.replacement || ""} onChange={(e) => updateConfig({ replacement: e.target.value })} className="input-field text-xs font-mono" placeholder=", " />
+            </div>
+          </>
+        )}
+
+        {/* For Each */}
+        {op === "for_each" && (
+          <>
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Split delimiter</label>
+              <select
+                value={config.delimiter || "\\n"}
+                onChange={(e) => updateConfig({ delimiter: e.target.value })}
+                className="input-field text-xs"
+              >
+                <option value="\\n">Newline</option>
+                <option value=",">Comma</option>
+                <option value=";">Semicolon</option>
+                <option value="|">Pipe</option>
+                <option value="\t">Tab</option>
+              </select>
+            </div>
+            <UtilityInput label="Item template" value={config.itemTemplate || "{{item}}"} onChange={(v) => updateConfig({ itemTemplate: v })} placeholder="Process: {{item}}" chips={loopItemChips} />
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Join results with</label>
+              <select
+                value={config.joinWith || "\\n"}
+                onChange={(e) => updateConfig({ joinWith: e.target.value })}
+                className="input-field text-xs"
+              >
+                <option value="\\n">Newline</option>
+                <option value=", ">Comma + space</option>
+                <option value=" ">Space</option>
+                <option value=" | ">Pipe</option>
+                <option value="">Nothing (concatenate)</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {/* Media ops — no config needed */}
+        {["audio_duration", "video_duration", "media_info"].includes(op) && (
+          <p className="text-[10px] text-gray-500 dark:text-gray-400">
+            Pass a media URL as input. The node will fetch the file header and return {op === "media_info" ? "JSON with format, duration, and size." : "the duration in seconds."}
+          </p>
+        )}
+
+        {/* Simple ops — no config */}
+        {["uppercase", "lowercase", "trim", "reverse", "length", "word_count", "url_encode", "url_decode", "base64_encode", "base64_decode"].includes(op) && (
+          <p className="text-[10px] text-gray-500 dark:text-gray-400">
+            No configuration needed — applies directly to the input text.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UtilityInput({
+  value,
+  onChange,
+  placeholder,
+  chips,
+  label,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  chips: { token: string; label: string; color: string }[];
+  label?: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+
+  const insertAtCursor = (token: string) => {
+    const el = ref.current;
+    if (!el) {
+      onChange((value || "") + token);
+      return;
+    }
+    const start = el.selectionStart ?? (value || "").length;
+    const end = el.selectionEnd ?? start;
+    const before = (value || "").slice(0, start);
+    const after = (value || "").slice(end);
+    const next = before + token + after;
+    onChange(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + token.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
+  return (
+    <div>
+      {label && <label className="block text-[10px] font-medium mb-0.5 text-gray-500">{label}</label>}
+      <input ref={ref} type="text" value={value} onChange={(e) => onChange(e.target.value)} className="input-field text-xs font-mono" placeholder={placeholder} />
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {chips.map((chip) => (
+            <button
+              key={chip.token}
+              type="button"
+              onClick={() => insertAtCursor(chip.token)}
+              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-medium border transition-all cursor-pointer hover:scale-105 active:scale-95 ${chip.color}`}
+              title={`Insert ${chip.token}`}
+            >
+              <Plus className="w-2.5 h-2.5" />
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

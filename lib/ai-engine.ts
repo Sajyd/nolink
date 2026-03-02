@@ -61,6 +61,14 @@ export interface StepDefinition {
     operator: string;
     rightOperand: string;
   };
+  utilityConfig?: {
+    operation: string;
+    operand?: string;
+    replacement?: string;
+    delimiter?: string;
+    itemTemplate?: string;
+    joinWith?: string;
+  };
 }
 
 export interface StepResult {
@@ -1623,6 +1631,200 @@ function applyCustomParamsToStep(
   };
 }
 
+// ── Utility step execution ──────────────────────────────────────
+
+async function fetchMediaDuration(url: string): Promise<{ duration: number; format?: string; size?: number }> {
+  try {
+    const resp = await fetch(url, { method: "HEAD" });
+    const contentType = resp.headers.get("content-type") || "";
+    const contentLength = parseInt(resp.headers.get("content-length") || "0", 10);
+
+    const fullResp = await fetch(url);
+    const buffer = Buffer.from(await fullResp.arrayBuffer());
+
+    let duration = 0;
+    let format = contentType.split("/")[1] || "unknown";
+
+    if (contentType.includes("audio/mpeg") || contentType.includes("audio/mp3")) {
+      const bitrate = 128000;
+      duration = Math.round((buffer.length * 8) / bitrate);
+      format = "mp3";
+    } else if (contentType.includes("audio/wav")) {
+      if (buffer.length > 44) {
+        const sampleRate = buffer.readUInt32LE(24);
+        const byteRate = buffer.readUInt32LE(28);
+        if (byteRate > 0) duration = Math.round((buffer.length - 44) / byteRate);
+      }
+      format = "wav";
+    } else if (contentType.includes("video/mp4") || contentType.includes("audio/mp4") || contentType.includes("audio/m4a")) {
+      duration = parseMp4Duration(buffer);
+      format = contentType.includes("video") ? "mp4" : "m4a";
+    } else if (contentType.includes("video/webm") || contentType.includes("audio/webm")) {
+      duration = Math.round(contentLength / 50000);
+      format = "webm";
+    } else if (contentType.includes("audio/ogg")) {
+      duration = Math.round(contentLength / 16000);
+      format = "ogg";
+    } else {
+      duration = parseMp4Duration(buffer);
+      if (duration === 0 && contentLength > 0) {
+        duration = Math.round(contentLength / 50000);
+      }
+    }
+
+    return { duration, format, size: contentLength || buffer.length };
+  } catch {
+    return { duration: 0 };
+  }
+}
+
+function parseMp4Duration(buf: Buffer): number {
+  const str = buf.toString("binary");
+  const mvhdIdx = str.indexOf("mvhd");
+  if (mvhdIdx === -1) return 0;
+  try {
+    const offset = mvhdIdx + 4;
+    const version = buf[offset];
+    let timescale: number;
+    let duration: number;
+    if (version === 0) {
+      timescale = buf.readUInt32BE(offset + 13);
+      duration = buf.readUInt32BE(offset + 17);
+    } else {
+      timescale = buf.readUInt32BE(offset + 21);
+      const hi = buf.readUInt32BE(offset + 25);
+      const lo = buf.readUInt32BE(offset + 29);
+      duration = hi * 0x100000000 + lo;
+    }
+    if (timescale > 0) return Math.round(duration / timescale);
+  } catch {}
+  return 0;
+}
+
+function executeUtilityStep(
+  step: StepDefinition,
+  input: StepInput
+): StepInput | Promise<StepInput> {
+  const inputText = input.text || "";
+  const cfg = step.utilityConfig;
+  if (!cfg) return { text: inputText, files: input.files || [] };
+
+  const op = cfg.operation;
+  const resolve = (v: string) => v.replace(/\{\{input\}\}/g, inputText);
+
+  switch (op) {
+    case "uppercase":
+      return { text: inputText.toUpperCase(), files: input.files || [] };
+    case "lowercase":
+      return { text: inputText.toLowerCase(), files: input.files || [] };
+    case "trim":
+      return { text: inputText.trim(), files: input.files || [] };
+    case "reverse":
+      return { text: inputText.split("").reverse().join(""), files: input.files || [] };
+    case "length":
+      return { text: String(inputText.length), files: input.files || [] };
+    case "word_count":
+      return { text: String(inputText.trim().split(/\s+/).filter(Boolean).length), files: input.files || [] };
+
+    case "replace":
+      return { text: inputText.replaceAll(cfg.operand || "", cfg.replacement || ""), files: input.files || [] };
+
+    case "split": {
+      const delim = cfg.operand === "\\n" ? "\n" : (cfg.operand || ",");
+      const joinW = cfg.replacement === "\\n" ? "\n" : (cfg.replacement || "\n");
+      return { text: inputText.split(delim).map((s) => s.trim()).filter(Boolean).join(joinW), files: input.files || [] };
+    }
+    case "join": {
+      const delim2 = cfg.operand === "\\n" ? "\n" : (cfg.operand || "\n");
+      const joinW2 = cfg.replacement || ", ";
+      return { text: inputText.split(delim2).map((s) => s.trim()).filter(Boolean).join(joinW2), files: input.files || [] };
+    }
+    case "template":
+      return { text: resolve(cfg.operand || "{{input}}"), files: input.files || [] };
+
+    case "extract_json": {
+      try {
+        const parsed = JSON.parse(inputText);
+        const path = (cfg.operand || "").split(".");
+        let val: unknown = parsed;
+        for (const key of path) {
+          if (val && typeof val === "object" && key in (val as Record<string, unknown>)) {
+            val = (val as Record<string, unknown>)[key];
+          } else {
+            val = undefined;
+            break;
+          }
+        }
+        const result = val !== undefined ? (typeof val === "string" ? val : JSON.stringify(val)) : "";
+        return { text: result, files: input.files || [] };
+      } catch {
+        return { text: "Error: invalid JSON", files: input.files || [] };
+      }
+    }
+
+    case "regex_extract": {
+      try {
+        const re = new RegExp(cfg.operand || "");
+        const match = re.exec(inputText);
+        return { text: match ? (match[1] || match[0]) : "", files: input.files || [] };
+      } catch {
+        return { text: "Error: invalid regex", files: input.files || [] };
+      }
+    }
+
+    case "url_encode":
+      return { text: encodeURIComponent(inputText), files: input.files || [] };
+    case "url_decode":
+      try {
+        return { text: decodeURIComponent(inputText), files: input.files || [] };
+      } catch {
+        return { text: inputText, files: input.files || [] };
+      }
+    case "base64_encode":
+      return { text: Buffer.from(inputText).toString("base64"), files: input.files || [] };
+    case "base64_decode":
+      try {
+        return { text: Buffer.from(inputText, "base64").toString("utf-8"), files: input.files || [] };
+      } catch {
+        return { text: inputText, files: input.files || [] };
+      }
+
+    case "for_each": {
+      const delimiter = cfg.delimiter === "\\n" ? "\n" : (cfg.delimiter || "\n");
+      const items = inputText.split(delimiter).filter((s) => s.trim());
+      const template = cfg.itemTemplate || "{{item}}";
+      const joinWith = cfg.joinWith === "\\n" ? "\n" : (cfg.joinWith || "\n");
+      const results = items.map((item, index) =>
+        template
+          .replace(/\{\{item\}\}/g, item.trim())
+          .replace(/\{\{index\}\}/g, String(index))
+          .replace(/\{\{index1\}\}/g, String(index + 1))
+      );
+      return { text: results.join(joinWith), files: input.files || [] };
+    }
+
+    case "audio_duration":
+    case "video_duration":
+      return (async () => {
+        const url = inputText.trim();
+        if (!url) return { text: "0", files: input.files || [] };
+        const info = await fetchMediaDuration(url);
+        return { text: String(info.duration), files: input.files || [] };
+      })();
+
+    case "media_info":
+      return (async () => {
+        const url = inputText.trim();
+        if (!url) return { text: "{}", files: input.files || [] };
+        const info = await fetchMediaDuration(url);
+        return { text: JSON.stringify(info), files: input.files || [] };
+      })();
+
+    default:
+      return { text: inputText, files: input.files || [] };
+  }
+}
+
 // ── Logic gate condition evaluation (used by graph executor) ────
 
 export function evaluateLogicCondition(
@@ -1695,6 +1897,9 @@ export async function executeStep(
         break;
       case "CUSTOM_API":
         stepOutput = await executeCustomApiStep(step, input);
+        break;
+      case "UTILITY":
+        stepOutput = await Promise.resolve(executeUtilityStep(step, input));
         break;
       case "BASIC":
       default:

@@ -1359,6 +1359,7 @@ export const NODE_TYPES = {
   FAL_AI: "falAiNode",
   REPLICATE: "replicateNode",
   LOGIC: "logicNode",
+  UTILITY: "utilityNode",
 } as const;
 
 export type NodeType = (typeof NODE_TYPES)[keyof typeof NODE_TYPES];

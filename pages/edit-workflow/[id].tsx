@@ -25,6 +25,7 @@ const STEP_TYPE_TO_NODE: Record<string, string> = {
   REPLICATE: "replicateNode",
   CUSTOM_API: "customApiNode",
   LOGIC: "logicNode",
+  UTILITY: "utilityNode",
 };
 
 export default function EditWorkflow() {
@@ -158,6 +159,7 @@ export default function EditWorkflow() {
           inputParameters: (config.inputParameters as any[]) || undefined,
           logicMode: (config.logicMode as any) || undefined,
           logicCondition: (config.logicCondition as any) || undefined,
+          utilityConfig: (config.utilityConfig as any) || undefined,
         };
 
         nodes.push({
@@ -221,6 +223,7 @@ export default function EditWorkflow() {
           stepNode: "BASIC",
           customApiNode: "CUSTOM_API",
           logicNode: "LOGIC",
+          utilityNode: "UTILITY",
         };
         const mergedParams = { ...(n.data.modelParams || {}) };
         const bindings = n.data.paramBindings || {};
@@ -248,6 +251,7 @@ export default function EditWorkflow() {
         );
         const isCustomApi = n.type === "customApiNode";
         const isLogic = n.type === "logicNode";
+        const isUtility = n.type === "utilityNode";
         return {
           nodeId: n.id,
           order: idx + 1,
@@ -279,6 +283,7 @@ export default function EditWorkflow() {
           ),
           logicMode: isLogic ? (n.data.logicMode || null) : null,
           logicCondition: isLogic ? (n.data.logicCondition || null) : null,
+          utilityConfig: isUtility ? (n.data.utilityConfig || null) : null,
           positionX: n.position.x,
           positionY: n.position.y,
         };

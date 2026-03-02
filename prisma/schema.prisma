@@ -125,6 +125,7 @@ enum StepType {
   REPLICATE
   CUSTOM_API
   LOGIC
+  UTILITY
 }
 
 model Step {

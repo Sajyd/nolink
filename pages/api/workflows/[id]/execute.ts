@@ -131,6 +131,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       fileBindings: (config.fileBindings as string[] | undefined) || undefined,
       logicMode: (config.logicMode as string | undefined) || undefined,
       logicCondition: (config.logicCondition as any) || undefined,
+      utilityConfig: (config.utilityConfig as any) || undefined,
     };
   });
 

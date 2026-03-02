@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Node, Edge } from "@xyflow/react";
 
-export type StepNodeType = "inputNode" | "outputNode" | "basicNode" | "falAiNode" | "replicateNode" | "customApiNode" | "logicNode";
+export type StepNodeType = "inputNode" | "outputNode" | "basicNode" | "falAiNode" | "replicateNode" | "customApiNode" | "logicNode" | "utilityNode";
 
 // ─── Logic Gate Types ───────────────────────────────────────────
 export type LogicMode = "condition" | "while_loop";
@@ -24,6 +24,38 @@ export interface LogicCondition {
   leftOperand: string;
   operator: ConditionOperator;
   rightOperand: string;
+}
+
+// ─── Utility Node Types ─────────────────────────────────────────
+export type UtilityOperation =
+  | "uppercase"
+  | "lowercase"
+  | "trim"
+  | "reverse"
+  | "length"
+  | "word_count"
+  | "replace"
+  | "split"
+  | "join"
+  | "template"
+  | "extract_json"
+  | "regex_extract"
+  | "url_encode"
+  | "url_decode"
+  | "base64_encode"
+  | "base64_decode"
+  | "for_each"
+  | "audio_duration"
+  | "video_duration"
+  | "media_info";
+
+export interface UtilityConfig {
+  operation: UtilityOperation;
+  operand?: string;
+  replacement?: string;
+  delimiter?: string;
+  itemTemplate?: string;
+  joinWith?: string;
 }
 
 export interface CustomParam {
@@ -94,6 +126,7 @@ export interface StepNodeData {
   inputParameters?: InputParameter[];
   logicMode?: LogicMode;
   logicCondition?: LogicCondition;
+  utilityConfig?: UtilityConfig;
   [key: string]: unknown;
 }
 

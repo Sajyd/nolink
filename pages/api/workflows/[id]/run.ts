@@ -142,6 +142,8 @@ async function runWorkflowInBackground(
         (config.logicMode as string | undefined) || undefined,
       logicCondition:
         (config.logicCondition as any) || undefined,
+      utilityConfig:
+        (config.utilityConfig as any) || undefined,
     };
   });
 
