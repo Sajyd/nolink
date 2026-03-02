@@ -1635,72 +1635,31 @@ function applyCustomParamsToStep(
 
 async function fetchMediaDuration(url: string): Promise<{ duration: number; format?: string; size?: number }> {
   try {
-    const resp = await fetch(url, { method: "HEAD" });
-    const contentType = resp.headers.get("content-type") || "";
-    const contentLength = parseInt(resp.headers.get("content-length") || "0", 10);
-
     const fullResp = await fetch(url);
+    const contentType = fullResp.headers.get("content-type") || "";
+    const contentLength = parseInt(fullResp.headers.get("content-length") || "0", 10);
     const buffer = Buffer.from(await fullResp.arrayBuffer());
 
     let duration = 0;
     let format = contentType.split("/")[1] || "unknown";
 
-    if (contentType.includes("audio/mpeg") || contentType.includes("audio/mp3")) {
-      const bitrate = 128000;
-      duration = Math.round((buffer.length * 8) / bitrate);
-      format = "mp3";
-    } else if (contentType.includes("audio/wav")) {
-      if (buffer.length > 44) {
-        const sampleRate = buffer.readUInt32LE(24);
-        const byteRate = buffer.readUInt32LE(28);
-        if (byteRate > 0) duration = Math.round((buffer.length - 44) / byteRate);
+    try {
+      const mm = await import("music-metadata");
+      const metadata = await mm.parseBuffer(buffer, { mimeType: contentType || undefined });
+      if (metadata.format.duration) {
+        duration = Math.round(metadata.format.duration);
       }
-      format = "wav";
-    } else if (contentType.includes("video/mp4") || contentType.includes("audio/mp4") || contentType.includes("audio/m4a")) {
-      duration = parseMp4Duration(buffer);
-      format = contentType.includes("video") ? "mp4" : "m4a";
-    } else if (contentType.includes("video/webm") || contentType.includes("audio/webm")) {
-      duration = Math.round(contentLength / 50000);
-      format = "webm";
-    } else if (contentType.includes("audio/ogg")) {
-      duration = Math.round(contentLength / 16000);
-      format = "ogg";
-    } else {
-      duration = parseMp4Duration(buffer);
-      if (duration === 0 && contentLength > 0) {
-        duration = Math.round(contentLength / 50000);
+      if (metadata.format.container) {
+        format = metadata.format.container.toLowerCase();
       }
+    } catch {
+      // fallback: nothing
     }
 
     return { duration, format, size: contentLength || buffer.length };
   } catch {
     return { duration: 0 };
   }
-}
-
-function parseMp4Duration(buf: Buffer): number {
-  const str = buf.toString("binary");
-  const mvhdIdx = str.indexOf("mvhd");
-  if (mvhdIdx === -1) return 0;
-  try {
-    const offset = mvhdIdx + 4;
-    const version = buf[offset];
-    let timescale: number;
-    let duration: number;
-    if (version === 0) {
-      // v0: version(1) + flags(3) + creation(4) + modification(4) = +12 for timescale, +16 for duration
-      timescale = buf.readUInt32BE(offset + 12);
-      duration = buf.readUInt32BE(offset + 16);
-    } else {
-      // v1: version(1) + flags(3) + creation(8) + modification(8) = +20 for timescale, +24 for duration
-      timescale = buf.readUInt32BE(offset + 20);
-      const hi = buf.readUInt32BE(offset + 24);
-      const lo = buf.readUInt32BE(offset + 28);
-      duration = hi * 0x100000000 + lo;
-    }
-    if (timescale > 0) return Math.round(duration / timescale);
-  } catch {}
-  return 0;
 }
 
 function executeUtilityStep(
@@ -1885,7 +1844,10 @@ export function evaluateLogicCondition(
   input: StepInput
 ): boolean {
   const cond = step.logicCondition;
-  if (!cond) return false;
+  if (!cond) {
+    console.log("[LogicGate] No condition found on step", step.id);
+    return false;
+  }
 
   const inputText = input.text || "";
   const resolve = (v: string) => v.replace(/\{\{input\}\}/g, inputText);
@@ -1893,36 +1855,41 @@ export function evaluateLogicCondition(
   const r = resolve(cond.rightOperand || "");
   const op = cond.operator || "equals";
 
+  let result: boolean;
   switch (op) {
     case "equals":
-      return l === r;
+      result = l === r; break;
     case "not_equals":
-      return l !== r;
+      result = l !== r; break;
     case "contains":
-      return l.includes(r);
+      result = l.includes(r); break;
     case "not_contains":
-      return !l.includes(r);
+      result = !l.includes(r); break;
     case "starts_with":
-      return l.startsWith(r);
+      result = l.startsWith(r); break;
     case "ends_with":
-      return l.endsWith(r);
+      result = l.endsWith(r); break;
     case "greater_than":
-      return parseFloat(l) > parseFloat(r);
+      result = parseFloat(l) > parseFloat(r); break;
     case "less_than":
-      return parseFloat(l) < parseFloat(r);
+      result = parseFloat(l) < parseFloat(r); break;
     case "is_empty":
-      return l.trim() === "";
+      result = l.trim() === ""; break;
     case "is_not_empty":
-      return l.trim() !== "";
+      result = l.trim() !== ""; break;
     case "matches_regex":
       try {
-        return new RegExp(r).test(l);
+        result = new RegExp(r).test(l);
       } catch {
-        return false;
+        result = false;
       }
+      break;
     default:
-      return false;
+      result = false;
   }
+
+  console.log(`[LogicGate] step=${step.id} | left=${JSON.stringify(l)} (raw=${JSON.stringify(cond.leftOperand)}) | op=${op} | right=${JSON.stringify(r)} (raw=${JSON.stringify(cond.rightOperand)}) | input=${JSON.stringify(inputText.slice(0, 100))} | result=${result}`);
+  return result;
 }
 
 // ── Main execution ──────────────────────────────────────────────

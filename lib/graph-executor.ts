@@ -315,7 +315,9 @@ export async function executeWorkflowGraph(
 
     // ─── LOGIC gate: route without executing ─────────────
     if (step.stepType === "LOGIC") {
+      console.log(`[GraphExec] LOGIC node ${step.id} | inputText=${JSON.stringify((currentInput.text || "").slice(0, 200))} | rawCondition=${JSON.stringify(step.logicCondition)} | customParamKeys=${Object.keys(customParamMap).join(",")}`);
       const resolvedLogicStep = resolveStep(step, customParamMap);
+      console.log(`[GraphExec] LOGIC node ${step.id} | resolvedCondition=${JSON.stringify(resolvedLogicStep.logicCondition)}`);
       const condResult = evaluateLogicCondition(resolvedLogicStep, currentInput);
       stepOutputMap.set(step.id, currentInput); // pass-through
 
