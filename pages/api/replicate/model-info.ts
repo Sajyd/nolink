@@ -21,10 +21,12 @@ function resolveSchema(root: any, schema: any): any {
   if (!schema) return schema;
   if (schema.$ref) return resolveSchema(root, resolveRef(root, schema.$ref));
   if (schema.allOf) {
-    return schema.allOf.reduce(
+    const { allOf, ...sibling } = schema;
+    const merged = allOf.reduce(
       (acc: any, s: any) => ({ ...acc, ...resolveSchema(root, s) }),
       {}
     );
+    return { ...merged, ...sibling };
   }
   return schema;
 }
@@ -45,11 +47,21 @@ function extractInputParams(openapi: any): ReplicateParam[] {
     const params: ReplicateParam[] = [];
 
     for (const [key, raw] of Object.entries<any>(properties)) {
-      const prop = resolveSchema(openapi, raw);
+      const rawProp = resolveSchema(openapi, raw);
+
+      let prop = rawProp;
+      if (prop.anyOf && Array.isArray(prop.anyOf)) {
+        const nonNull = prop.anyOf.find((s: any) => s.type !== "null");
+        if (nonNull) {
+          const { anyOf, ...sibling } = prop;
+          prop = { ...resolveSchema(openapi, nonNull), ...sibling };
+        }
+      }
+
       const paramType = prop.type || "string";
       const enumValues = prop.enum as string[] | undefined;
       let defaultVal: string | undefined;
-      if (prop.default !== undefined) {
+      if (prop.default !== undefined && prop.default !== null) {
         defaultVal = String(prop.default);
       }
 

@@ -1255,10 +1255,12 @@ async function executeReplicateStep(
         resolvedParams[key] = val.map((v) =>
           typeof v === "string" && v.includes("{{input}}")
             ? v.replace(/\{\{input\}\}/g, input.text)
-            : v
+            : typeof v === "string" ? coerceReplicateValue(v) : v
         );
       } else if (typeof val === "string" && val.includes("{{input}}")) {
         resolvedParams[key] = val.replace(/\{\{input\}\}/g, input.text);
+      } else if (typeof val === "string") {
+        resolvedParams[key] = coerceReplicateValue(val);
       } else {
         resolvedParams[key] = val;
       }
