@@ -1568,6 +1568,7 @@ interface ReplicateSearchResult {
   description: string;
   coverImageUrl: string;
   runCount: number;
+  latestVersionId: string | null;
 }
 
 function CustomReplicateModelEditor({
@@ -1593,6 +1594,8 @@ function CustomReplicateModelEditor({
     unitPriceUsd: number;
     unit: string;
     runCount: number;
+    latestVersionId: string | null;
+    resolvedVersionId: string | null;
   } | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -1675,6 +1678,8 @@ function CustomReplicateModelEditor({
         unitPriceUsd: info.unitPriceUsd,
         unit: info.unit,
         runCount: info.runCount,
+        latestVersionId: info.latestVersionId || null,
+        resolvedVersionId: info.resolvedVersionId || null,
       });
 
       updateNodeData(nodeId, { customReplicatePrice: info.costPerUse });
@@ -1804,7 +1809,7 @@ function CustomReplicateModelEditor({
             value={replicateModel}
             onChange={(e) => setReplicateModel(e.target.value)}
             className="input-field text-xs font-mono flex-1"
-            placeholder="owner/model-name (e.g. stability-ai/sdxl)"
+            placeholder="owner/name or owner/name:version"
           />
           <button
             onClick={fetchModelInfo}
@@ -1820,7 +1825,7 @@ function CustomReplicateModelEditor({
           </button>
         </div>
         <p className="mt-1 text-[10px] text-gray-400">
-          Select a model above or enter an identifier manually and click Fetch Info.
+          Enter owner/name to use the latest version, or owner/name:version to pin a specific version.
         </p>
       </div>
 
@@ -1842,7 +1847,7 @@ function CustomReplicateModelEditor({
             </span>
           </div>
           <p className="text-[10px] text-gray-500 dark:text-gray-400">{modelMeta.description?.slice(0, 120)}</p>
-          <div className="flex items-center gap-3 text-[10px]">
+          <div className="flex flex-wrap items-center gap-2 text-[10px]">
             {modelMeta.runCount > 0 && (
               <span className="px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 font-medium">
                 {modelMeta.runCount.toLocaleString()} runs
@@ -1854,6 +1859,50 @@ function CustomReplicateModelEditor({
               </span>
             )}
           </div>
+
+          {/* Version info */}
+          {modelMeta.resolvedVersionId && (
+            <div className="space-y-1 pt-1 border-t border-green-200 dark:border-green-800">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-gray-500 dark:text-gray-400">Version:</span>
+                <span className="text-[10px] font-mono text-green-600 dark:text-green-400 truncate">
+                  {modelMeta.resolvedVersionId.slice(0, 12)}…
+                </span>
+                {!replicateModel.includes(":") && modelMeta.latestVersionId && (
+                  <span className="text-[9px] px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium">
+                    latest
+                  </span>
+                )}
+                {replicateModel.includes(":") && (
+                  <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 font-medium">
+                    pinned
+                  </span>
+                )}
+              </div>
+              {!replicateModel.includes(":") && modelMeta.latestVersionId && (
+                <button
+                  onClick={() => {
+                    const base = replicateModel.split(":")[0];
+                    setReplicateModel(`${base}:${modelMeta.latestVersionId}`);
+                  }}
+                  className="text-[10px] font-medium text-blue-500 hover:text-blue-600 transition-colors"
+                >
+                  Pin to this version ({modelMeta.latestVersionId.slice(0, 12)}…)
+                </button>
+              )}
+              {replicateModel.includes(":") && (
+                <button
+                  onClick={() => {
+                    const base = replicateModel.split(":")[0];
+                    setReplicateModel(base);
+                  }}
+                  className="text-[10px] font-medium text-amber-500 hover:text-amber-600 transition-colors"
+                >
+                  Unpin — use latest version
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 

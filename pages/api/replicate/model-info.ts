@@ -69,6 +69,23 @@ function extractInputParams(openapi: any): ReplicateParam[] {
   }
 }
 
+/** Parse "owner/name" or "owner/name:version_id" */
+function parseModelId(raw: string): {
+  owner: string;
+  name: string;
+  version: string | null;
+} {
+  const colonIdx = raw.indexOf(":");
+  if (colonIdx !== -1) {
+    const base = raw.slice(0, colonIdx);
+    const version = raw.slice(colonIdx + 1);
+    const [owner, ...rest] = base.split("/");
+    return { owner, name: rest.join("/"), version: version || null };
+  }
+  const [owner, ...rest] = raw.split("/");
+  return { owner, name: rest.join("/"), version: null };
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -78,7 +95,7 @@ export default async function handler(
 
   const { model_id } = req.query;
   if (!model_id || typeof model_id !== "string") {
-    return res.status(400).json({ error: "model_id is required (owner/name)" });
+    return res.status(400).json({ error: "model_id is required (owner/name or owner/name:version)" });
   }
 
   const token = process.env.REPLICATE_API_TOKEN;
@@ -86,8 +103,11 @@ export default async function handler(
     return res.status(500).json({ error: "REPLICATE_API_TOKEN not configured" });
 
   try {
+    const { owner, name, version: requestedVersion } = parseModelId(model_id);
+    const basePath = `${owner}/${name}`;
+
     const modelRes = await fetch(
-      `https://api.replicate.com/v1/models/${model_id}`,
+      `https://api.replicate.com/v1/models/${basePath}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
@@ -100,15 +120,29 @@ export default async function handler(
 
     const model = await modelRes.json();
 
-    const latestVersion = model.latest_version;
-    const openapi = latestVersion?.openapi_schema;
+    let versionData = model.latest_version;
+    let resolvedVersion = versionData?.id || null;
+
+    if (requestedVersion) {
+      const versionRes = await fetch(
+        `https://api.replicate.com/v1/models/${basePath}/versions/${requestedVersion}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (versionRes.ok) {
+        versionData = await versionRes.json();
+        resolvedVersion = requestedVersion;
+      } else {
+        return res.status(404).json({
+          error: `Version ${requestedVersion} not found for ${basePath}`,
+        });
+      }
+    }
+
+    const openapi = versionData?.openapi_schema;
     const params = extractInputParams(openapi);
 
     let unitPriceUsd = 0;
     let unit = "prediction";
-    const hardware = latestVersion?.cog_version
-      ? "gpu"
-      : "cpu";
 
     if (model.pricing) {
       if (model.pricing.predict) {
@@ -125,14 +159,15 @@ export default async function handler(
       : 5;
 
     return res.json({
-      modelId: model_id,
-      name: model.name || model_id,
-      owner: model.owner?.username || model_id.split("/")[0],
+      modelId: basePath,
+      name: model.name || name,
+      owner: model.owner?.username || owner,
       description: model.description || "",
       coverImageUrl: model.cover_image_url || "",
       visibility: model.visibility,
       runCount: model.run_count || 0,
-      hardware,
+      latestVersionId: model.latest_version?.id || null,
+      resolvedVersionId: resolvedVersion,
       costPerUse,
       unitPriceUsd,
       unit,

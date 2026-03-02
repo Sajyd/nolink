@@ -1216,8 +1216,18 @@ async function executeReplicateStep(
   const model = getModelById(step.aiModel);
   if (!isCustom && (!model || !model.isReplicate)) return { text: `[Unknown Replicate model: ${step.aiModel}]`, files: [] };
 
-  let replicateModel = isCustom ? step.customReplicateModel : model?.replicateModel;
-  if (!replicateModel) return { text: `[No Replicate model configured]`, files: [] };
+  const rawReplicateModel = isCustom ? step.customReplicateModel : model?.replicateModel;
+  if (!rawReplicateModel) return { text: `[No Replicate model configured]`, files: [] };
+
+  let replicateModel: string;
+  let replicateVersion: string | null = null;
+  const colonIdx = rawReplicateModel.indexOf(":");
+  if (colonIdx !== -1) {
+    replicateModel = rawReplicateModel.slice(0, colonIdx);
+    replicateVersion = rawReplicateModel.slice(colonIdx + 1) || null;
+  } else {
+    replicateModel = rawReplicateModel;
+  }
 
   const resolvedParams: Record<string, unknown> = {};
 
@@ -1277,16 +1287,24 @@ async function executeReplicateStep(
         if (typeof v === "string" && v.length > 150) logParams[k] = v.slice(0, 150) + "...";
         if (Array.isArray(v)) logParams[k] = v.map((i) => typeof i === "string" && i.length > 150 ? i.slice(0, 150) + "..." : i);
       }
-      console.log(`[replicate] Calling ${replicateModel} with params:`, JSON.stringify(logParams, null, 2));
+      console.log(`[replicate] Calling ${replicateModel}${replicateVersion ? `:${replicateVersion}` : ""} with params:`, JSON.stringify(logParams, null, 2));
 
-      const response = await fetch(`https://api.replicate.com/v1/models/${replicateModel}/predictions`, {
+      const apiUrl = replicateVersion
+        ? "https://api.replicate.com/v1/predictions"
+        : `https://api.replicate.com/v1/models/${replicateModel}/predictions`;
+
+      const requestBody = replicateVersion
+        ? { version: replicateVersion, input: resolvedParams }
+        : { input: resolvedParams };
+
+      const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${process.env.REPLICATE_API_TOKEN}`,
           "Content-Type": "application/json",
           Prefer: "wait",
         },
-        body: JSON.stringify({ input: resolvedParams }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {

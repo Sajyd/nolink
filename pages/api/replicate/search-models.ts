@@ -38,6 +38,7 @@ export default async function handler(
       coverImageUrl: m.cover_image_url || "",
       visibility: m.visibility,
       runCount: m.run_count || 0,
+      latestVersionId: m.latest_version?.id || null,
     }));
 
     return res.json({ models });
