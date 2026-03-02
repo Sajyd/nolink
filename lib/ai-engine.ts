@@ -1206,6 +1206,15 @@ async function executeFalStep(
 
 // ── Replicate execution ─────────────────────────────────────────
 
+function coerceReplicateValue(value: string): unknown {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (value === "") return value;
+  if (/^-?\d+$/.test(value)) return parseInt(value, 10);
+  if (/^-?\d+\.\d+$/.test(value)) return parseFloat(value);
+  return value;
+}
+
 async function executeReplicateStep(
   step: StepDefinition,
   input: StepInput
@@ -1237,7 +1246,7 @@ async function executeReplicateStep(
       if (typeof value === "string" && value.includes("{{input}}")) {
         resolvedParams[key] = value.replace(/\{\{input\}\}/g, input.text);
       } else {
-        resolvedParams[key] = value;
+        resolvedParams[key] = coerceReplicateValue(value);
       }
     }
   } else if (step.params) {
