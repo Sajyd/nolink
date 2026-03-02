@@ -1,7 +1,7 @@
 import { useWorkflowStore, topologicalOrder, type StepNodeData, type StepNodeType } from "@/lib/workflow-store";
 import { v4 as uuid } from "uuid";
 import type { Node } from "@xyflow/react";
-import { estimateCostFromModels } from "@/lib/models";
+import { getModelById, computeModelCost } from "@/lib/models";
 import { playAddNode } from "@/lib/sounds";
 import {
   Upload,
@@ -232,19 +232,17 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
     onClose?.();
   };
 
-  const modelIds = store.nodes
-    .filter((n) => n.data.aiModel)
-    .map((n) => n.data.aiModel);
-  const customApiCost = store.nodes
-    .filter((n) => n.type === "customApiNode")
-    .reduce((sum, n) => sum + (n.data.customApiPrice ?? 0), 0);
-  const customFalCost = store.nodes
-    .filter((n) => n.data.aiModel === "fal-custom")
-    .reduce((sum, n) => sum + (n.data.customFalPrice ?? 0), 0);
-  const customReplicateCost = store.nodes
-    .filter((n) => n.data.aiModel === "rep-custom")
-    .reduce((sum, n) => sum + (n.data.customReplicatePrice ?? 0), 0);
-  const estimatedCost = estimateCostFromModels(modelIds) + customApiCost + customFalCost + customReplicateCost;
+  const estimatedCost = store.nodes.reduce((sum, n) => {
+    if (n.type === "customApiNode") return sum + (n.data.customApiPrice ?? 0);
+    if (n.data.aiModel === "fal-custom") return sum + (n.data.customFalPrice ?? 0);
+    if (n.data.aiModel === "rep-custom") return sum + (n.data.customReplicatePrice ?? 0);
+    if (n.data.aiModel) {
+      const m = getModelById(n.data.aiModel as string);
+      if (m) return sum + computeModelCost(m, n.data.params as Record<string, unknown> | undefined);
+      return sum + 2;
+    }
+    return sum;
+  }, 0);
 
   return (
     <div className="w-72 h-full border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col overflow-y-auto">

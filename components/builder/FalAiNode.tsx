@@ -2,7 +2,7 @@ import { memo, useMemo } from "react";
 import type { NodeProps } from "@xyflow/react";
 import { Sparkles, Link2, PenLine, Variable, Zap, Clock } from "lucide-react";
 import { useWorkflowStore, topologicalOrder, type StepNodeData } from "@/lib/workflow-store";
-import { getModelById } from "@/lib/models";
+import { getModelById, computeModelCost } from "@/lib/models";
 import NodeShell from "./NodeShell";
 
 function FalAiNode({ id, data, selected }: NodeProps) {
@@ -99,7 +99,7 @@ function FalAiNode({ id, data, selected }: NodeProps) {
               </span>
             ) : (
               <span className="text-pink-600 dark:text-pink-400 font-medium">
-                {model.costPerUse} NL
+                {computeModelCost(model, nodeData.params as Record<string, unknown> | undefined)} NL
               </span>
             )}
           </div>

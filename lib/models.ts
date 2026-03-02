@@ -20,6 +20,8 @@ export interface AIModel {
   provider: ModelProvider;
   category: ModelCategory;
   costPerUse: number;
+  costPerSecond?: number;
+  durationParamKey?: string;
   description: string;
   params: ModelParam[];
   isFal?: boolean;
@@ -609,6 +611,8 @@ export const REPLICATE_VIDEO_MODELS: AIModel[] = [
     provider: "replicate",
     category: "video",
     costPerUse: 18,
+    costPerSecond: 4,
+    durationParamKey: "duration",
     isReplicate: true,
     replicateModel: "luma/ray2",
     description: "Cinematic AI video generation with 720p output",
@@ -656,6 +660,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 12,
+    costPerSecond: 2,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/bytedance/seedance/v1.5/pro/text-to-video",
     description: "Dual-branch diffusion with synchronized audio-video generation (720p)",
@@ -684,6 +690,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 12,
+    costPerSecond: 2,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/bytedance/seedance/v1.5/pro/image-to-video",
     description: "Animate images with start/end frame support and lip-sync audio",
@@ -706,6 +714,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 8,
+    costPerSecond: 2,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/bytedance/seedance/v1/pro/fast/text-to-video",
     description: "Fast and affordable video generation (up to 1080p)",
@@ -735,6 +745,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 25,
+    costPerSecond: 5,
+    durationParamKey: "duration",
     isFal: true,
     comingSoon: true,
     falEndpoint: "fal-ai/bytedance/seedance/v2/pro/text-to-video",
@@ -762,6 +774,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 18,
+    costPerSecond: 4,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/kling-video/v3/standard/text-to-video",
     description: "Multi-shot storyboarding with native audio and 1080p output",
@@ -789,6 +803,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 18,
+    costPerSecond: 4,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/kling-video/v3/standard/image-to-video",
     description: "Animate images with element referencing and native audio",
@@ -812,6 +828,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 25,
+    costPerSecond: 5,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/kling-video/v3/pro/text-to-video",
     description: "Pro-tier Kling 3 with enhanced detail, audio, and multi-shot",
@@ -839,6 +857,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 25,
+    costPerSecond: 5,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/kling-video/v3/pro/image-to-video",
     description: "Pro-tier image-to-video with custom element support and audio",
@@ -865,6 +885,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 18,
+    costPerSecond: 4,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/kling-video/o3/standard/text-to-video",
     description: "Omni model with multi-image elements and native audio ($0.17/s)",
@@ -892,6 +914,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 25,
+    costPerSecond: 5,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/kling-video/o3/pro/text-to-video",
     description: "Pro omni model with multi-character coreference and voice input",
@@ -919,6 +943,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 25,
+    costPerSecond: 5,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/kling-video/o3/pro/image-to-video",
     description: "Pro omni image-to-video with 1080p output and native audio",
@@ -960,6 +986,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 10,
+    costPerSecond: 2,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/kling-video/v2.5-turbo/standard/text-to-video",
     description: "Fast video gen with smooth motion and robust camera control",
@@ -983,6 +1011,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 10,
+    costPerSecond: 2,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/kling-video/v2.5-turbo/standard/image-to-video",
     description: "Affordable image-to-video with temporal consistency",
@@ -1005,6 +1035,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 15,
+    costPerSecond: 3,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/kling-video/v1.6/standard/text-to-video",
     description: "Reliable video generation with motion control",
@@ -1028,6 +1060,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 20,
+    costPerSecond: 4,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/kling-video/v1.6/pro/image-to-video",
     description: "Image-to-video with precise motion control",
@@ -1050,6 +1084,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 15,
+    costPerSecond: 2,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/sora-2/text-to-video",
     description: "OpenAI's video generation with audio ($0.10/s)",
@@ -1077,6 +1113,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 15,
+    costPerSecond: 2,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/sora-2/image-to-video",
     description: "Animate images into video with OpenAI Sora 2",
@@ -1115,6 +1153,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 25,
+    costPerSecond: 3,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/sora-2/text-to-video/pro",
     description: "Premium-quality Sora 2 with higher fidelity output",
@@ -1142,6 +1182,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 25,
+    costPerSecond: 3,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/sora-2/image-to-video/pro",
     description: "Premium image-to-video with Sora 2 Pro quality",
@@ -1169,6 +1211,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 22,
+    costPerSecond: 6,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/veo3",
     description: "Google's high-fidelity video generation model",
@@ -1194,6 +1238,8 @@ export const FAL_VIDEO_MODELS: AIModel[] = [
     provider: "fal",
     category: "video",
     costPerUse: 20,
+    costPerSecond: 4,
+    durationParamKey: "duration",
     isFal: true,
     falEndpoint: "fal-ai/runway-gen3/turbo/image-to-video",
     description: "Professional video generation from text or images",
@@ -1350,6 +1396,17 @@ export function estimateCostFromModels(modelIds: string[]): number {
     const model = getModelById(id);
     return sum + (model?.costPerUse ?? 2);
   }, 0);
+}
+
+export function computeModelCost(
+  model: AIModel,
+  params?: Record<string, unknown> | null
+): number {
+  if (!model.costPerSecond || !model.durationParamKey) return model.costPerUse;
+  const raw = params?.[model.durationParamKey];
+  const seconds = typeof raw === "number" ? raw : parseFloat(String(raw || "0"));
+  if (!seconds || seconds <= 0) return model.costPerUse;
+  return Math.max(1, Math.ceil(model.costPerSecond * seconds));
 }
 
 export const NODE_TYPES = {

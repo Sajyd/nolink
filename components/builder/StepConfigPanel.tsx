@@ -18,6 +18,7 @@ import {
   getReplicateModels,
   getCustomReplicateModel,
   getModelsByCategory,
+  computeModelCost,
   INPUT_ACCEPT_TYPES,
   type ModelParam,
 } from "@/lib/models";
@@ -34,6 +35,11 @@ import {
 import type { LogicMode, LogicCondition, ConditionOperator, UtilityOperation, UtilityConfig } from "@/lib/workflow-store";
 
 const IO_TYPES = ["TEXT", "IMAGE", "AUDIO", "VIDEO", "DOCUMENT"];
+
+function modelCostLabel(m: { costPerUse: number; costPerSecond?: number }): string {
+  if (m.costPerSecond) return `${m.costPerUse} NL · ${m.costPerSecond}/s`;
+  return `${m.costPerUse} NL`;
+}
 
 function groupFalVideoModels() {
   const video = getFalModels().filter((m) => m.category === "video");
@@ -483,7 +489,7 @@ function BasicNodeConfig({
           <option value="">Select model...</option>
           {getBasicModels().map((m) => (
             <option key={m.id} value={m.id}>
-              {m.name} — {m.category} ({m.costPerUse} NL)
+              {m.name} — {m.category} ({modelCostLabel(m)})
             </option>
           ))}
         </select>
@@ -1365,56 +1371,56 @@ function FalAiNodeConfig({
 
           <optgroup label="Image Generation">
             {getFalModels().filter((m) => m.category === "image").map((m) => (
-              <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+              <option key={m.id} value={m.id}>{m.name} ({modelCostLabel(m)})</option>
             ))}
           </optgroup>
 
           <optgroup label="Seedance (ByteDance)">
             {groups.seedance.map((m) => (
               <option key={m.id} value={m.id} disabled={m.comingSoon}>
-                {m.name} {m.comingSoon ? "— Coming Soon" : `(${m.costPerUse} NL)`}
+                {m.name} {m.comingSoon ? "— Coming Soon" : `(${modelCostLabel(m)})`}
               </option>
             ))}
           </optgroup>
 
           <optgroup label="Kling 3 / V3 (Kuaishou)">
             {groups.kling3.map((m) => (
-              <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+              <option key={m.id} value={m.id}>{m.name} ({modelCostLabel(m)})</option>
             ))}
           </optgroup>
 
           <optgroup label="Kling O3 Omni (Kuaishou)">
             {groups.klingO3.map((m) => (
-              <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+              <option key={m.id} value={m.id}>{m.name} ({modelCostLabel(m)})</option>
             ))}
           </optgroup>
 
           <optgroup label="Kling 2.5 Turbo (Kuaishou)">
             {groups.kling25.map((m) => (
-              <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+              <option key={m.id} value={m.id}>{m.name} ({modelCostLabel(m)})</option>
             ))}
           </optgroup>
 
           <optgroup label="Sora 2 (OpenAI)">
             {groups.sora.map((m) => (
-              <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+              <option key={m.id} value={m.id}>{m.name} ({modelCostLabel(m)})</option>
             ))}
           </optgroup>
 
           {(groups.kling16.length > 0 || groups.other.length > 0) && (
             <optgroup label="Other Video">
               {groups.kling16.map((m) => (
-                <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+                <option key={m.id} value={m.id}>{m.name} ({modelCostLabel(m)})</option>
               ))}
               {groups.other.map((m) => (
-                <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+                <option key={m.id} value={m.id}>{m.name} ({modelCostLabel(m)})</option>
               ))}
             </optgroup>
           )}
 
           <optgroup label="Audio Generation">
             {getFalModels().filter((m) => m.category === "audio").map((m) => (
-              <option key={m.id} value={m.id}>{m.name} ({m.costPerUse} NL)</option>
+              <option key={m.id} value={m.id}>{m.name} ({modelCostLabel(m)})</option>
             ))}
           </optgroup>
 
@@ -1442,6 +1448,17 @@ function FalAiNodeConfig({
             <p className="text-[10px] font-mono text-pink-500 bg-pink-50 dark:bg-pink-900/20 px-2 py-1 rounded">
               {selectedModel.falEndpoint}
             </p>
+          )}
+          {selectedModel.costPerSecond && (
+            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800">
+              <Zap className="w-3.5 h-3.5 text-pink-500" />
+              <span className="text-[11px] font-medium text-pink-600 dark:text-pink-400">
+                {computeModelCost(selectedModel, data.params as Record<string, unknown> | undefined)} NL
+                <span className="font-normal text-gray-400 ml-1">
+                  ({selectedModel.costPerSecond} NL/s)
+                </span>
+              </span>
+            </div>
           )}
         </div>
       )}
@@ -1511,7 +1528,7 @@ function ReplicateNodeConfig({
             <optgroup label="Image Generation">
               {replicateImageModels.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name} ({m.costPerUse} NL)
+                  {m.name} ({modelCostLabel(m)})
                 </option>
               ))}
             </optgroup>
@@ -1521,7 +1538,7 @@ function ReplicateNodeConfig({
             <optgroup label="Video Generation">
               {replicateVideoModels.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name} ({m.costPerUse} NL)
+                  {m.name} ({modelCostLabel(m)})
                 </option>
               ))}
             </optgroup>
@@ -1531,7 +1548,7 @@ function ReplicateNodeConfig({
             <optgroup label="Audio Generation">
               {replicateAudioModels.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name} ({m.costPerUse} NL)
+                  {m.name} ({modelCostLabel(m)})
                 </option>
               ))}
             </optgroup>
@@ -1560,6 +1577,17 @@ function ReplicateNodeConfig({
             <p className="text-[10px] font-mono text-orange-500 bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded">
               {selectedModel.replicateModel}
             </p>
+          )}
+          {selectedModel.costPerSecond && (
+            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+              <Zap className="w-3.5 h-3.5 text-orange-500" />
+              <span className="text-[11px] font-medium text-orange-600 dark:text-orange-400">
+                {computeModelCost(selectedModel, data.params as Record<string, unknown> | undefined)} NL
+                <span className="font-normal text-gray-400 ml-1">
+                  ({selectedModel.costPerSecond} NL/s)
+                </span>
+              </span>
+            </div>
           )}
         </div>
       )}

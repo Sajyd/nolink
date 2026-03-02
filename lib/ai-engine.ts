@@ -4,7 +4,7 @@ import path from "path";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v4 as uuidv4 } from "uuid";
-import { getModelById, estimateCostFromModels, type AIModel } from "./models";
+import { getModelById, computeModelCost, type AIModel } from "./models";
 
 function getOpenAI() {
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
@@ -87,17 +87,24 @@ interface StepInput {
 }
 
 export function estimateWorkflowCost(steps: StepDefinition[]): number {
-  const modelIds = steps.filter((s) => s.aiModel).map((s) => s.aiModel!);
-  const apiCost = steps
-    .filter((s) => s.stepType === "CUSTOM_API")
-    .reduce((sum, s) => sum + (s.customApiPrice || 0), 0);
-  const customFalCost = steps
-    .filter((s) => s.aiModel === "fal-custom")
-    .reduce((sum, s) => sum + (s.customFalPrice || 0), 0);
-  const customReplicateCost = steps
-    .filter((s) => s.aiModel === "rep-custom")
-    .reduce((sum, s) => sum + (s.customReplicatePrice || 0), 0);
-  return estimateCostFromModels(modelIds) + apiCost + customFalCost + customReplicateCost;
+  let total = 0;
+  for (const step of steps) {
+    if (step.stepType === "CUSTOM_API") {
+      total += step.customApiPrice || 0;
+    } else if (step.aiModel === "fal-custom") {
+      total += step.customFalPrice || 0;
+    } else if (step.aiModel === "rep-custom") {
+      total += step.customReplicatePrice || 0;
+    } else if (step.aiModel) {
+      const model = getModelById(step.aiModel);
+      if (model) {
+        total += computeModelCost(model, step.params);
+      } else {
+        total += 2;
+      }
+    }
+  }
+  return total;
 }
 
 function resolveFileUrl(fileUrl: string): string {
