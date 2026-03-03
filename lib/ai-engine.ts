@@ -1071,6 +1071,73 @@ async function executeBasicStep(
   return { text: `[${model.name}] Processed: "${input.text.slice(0, 200)}"`, files: [] };
 }
 
+function extractFalResult(result: any): StepInput {
+  if (!result) return { text: "[fal.ai error: empty result]", files: [] };
+
+  if (result.images?.[0]?.url) {
+    const url = result.images[0].url;
+    return { text: url, files: [{ url, type: "image", name: "generated.png" }] };
+  }
+  if (result.image?.url) {
+    const url = result.image.url;
+    return { text: url, files: [{ url, type: "image", name: "generated.png" }] };
+  }
+  if (result.video?.url) {
+    const url = result.video.url;
+    return { text: url, files: [{ url, type: "video", name: "generated.mp4" }] };
+  }
+  if (typeof result.video === "string" && result.video.startsWith("http")) {
+    return { text: result.video, files: [{ url: result.video, type: "video", name: "generated.mp4" }] };
+  }
+  if (result.videos?.[0]?.url) {
+    const url = result.videos[0].url;
+    return { text: url, files: [{ url, type: "video", name: "generated.mp4" }] };
+  }
+  if (result.audio?.url) {
+    const url = result.audio.url;
+    return { text: url, files: [{ url, type: "audio", name: "generated.mp3" }] };
+  }
+  if (typeof result.audio === "string" && result.audio.startsWith("http")) {
+    return { text: result.audio, files: [{ url: result.audio, type: "audio", name: "generated.mp3" }] };
+  }
+  if (result.audio_file?.url) {
+    const url = result.audio_file.url;
+    return { text: url, files: [{ url, type: "audio", name: "generated.mp3" }] };
+  }
+
+  if (result.data) {
+    const nested = extractFalResult(result.data);
+    if (nested.files.length > 0) return nested;
+  }
+
+  for (const key of Object.keys(result)) {
+    const val = result[key];
+    if (val && typeof val === "object" && val.url && typeof val.url === "string" && val.url.startsWith("http")) {
+      const lk = key.toLowerCase();
+      const type = lk.includes("video") ? "video"
+        : lk.includes("audio") ? "audio"
+        : lk.includes("image") ? "image"
+        : "video";
+      const ext = type === "video" ? "mp4" : type === "audio" ? "mp3" : "png";
+      return { text: val.url, files: [{ url: val.url, type, name: `generated.${ext}` }] };
+    }
+    if (typeof val === "string" && val.startsWith("http") && /\.(mp4|webm|mov|mp3|wav|png|jpg|jpeg|gif|webp)/i.test(val)) {
+      const match = val.match(/\.(mp4|webm|mov)/i) ? "video"
+        : val.match(/\.(mp3|wav)/i) ? "audio"
+        : "image";
+      const ext = match === "video" ? "mp4" : match === "audio" ? "mp3" : "png";
+      return { text: val, files: [{ url: val, type: match, name: `generated.${ext}` }] };
+    }
+  }
+
+  if (result.output) {
+    const out = typeof result.output === "string" ? result.output : JSON.stringify(result.output);
+    return { text: out, files: [] };
+  }
+
+  return { text: JSON.stringify(result), files: [] };
+}
+
 async function executeFalStep(
   step: StepDefinition,
   input: StepInput
@@ -1199,31 +1266,43 @@ async function executeFalStep(
 
         if (result.request_id && result.status !== "COMPLETED") {
           const requestId = result.request_id;
-          const maxAttempts = 120;
+          const statusUrl = result.status_url || `https://queue.fal.run/${falEndpoint}/requests/${requestId}/status`;
+          const responseUrl = result.response_url || `https://queue.fal.run/${falEndpoint}/requests/${requestId}`;
+          const maxAttempts = 180;
           const pollInterval = 3000;
+          let completed = false;
           for (let i = 0; i < maxAttempts; i++) {
             await new Promise((r) => setTimeout(r, pollInterval));
-            const statusRes = await fetch(
-              `https://queue.fal.run/${falEndpoint}/requests/${requestId}/status`,
-              { headers: { Authorization: `Key ${process.env.FAL_KEY}` } }
-            );
-            if (!statusRes.ok) continue;
+            const statusRes = await fetch(statusUrl, {
+              headers: { Authorization: `Key ${process.env.FAL_KEY}` },
+            });
+            if (!statusRes.ok) {
+              console.log(`[fal] Poll ${i + 1}: status check failed (${statusRes.status})`);
+              continue;
+            }
             const statusData = await statusRes.json();
             console.log(`[fal] Poll ${i + 1}: status=${statusData.status}`);
             if (statusData.status === "COMPLETED") {
-              const resultRes = await fetch(
-                `https://queue.fal.run/${falEndpoint}/requests/${requestId}`,
-                { headers: { Authorization: `Key ${process.env.FAL_KEY}` } }
-              );
+              const resultRes = await fetch(responseUrl, {
+                headers: { Authorization: `Key ${process.env.FAL_KEY}` },
+              });
               if (resultRes.ok) {
                 result = await resultRes.json();
+              } else {
+                console.log(`[fal] Result fetch failed (${resultRes.status}), using status response`);
+                if (statusData.response) result = statusData.response;
               }
+              completed = true;
               break;
             }
             if (statusData.status === "FAILED") {
               const errMsg = statusData.error || "fal.ai request failed";
               return { text: `[fal.ai error: ${typeof errMsg === "string" ? errMsg.slice(0, 300) : JSON.stringify(errMsg).slice(0, 300)}]`, files: [] };
             }
+          }
+          if (!completed) {
+            console.log(`[fal] Polling timed out after ${maxAttempts * pollInterval / 1000}s for request ${requestId}`);
+            return { text: `[fal.ai error: Request timed out after ${maxAttempts * pollInterval / 1000}s — try a shorter duration]`, files: [] };
           }
         }
       } else {
@@ -1242,32 +1321,9 @@ async function executeFalStep(
         result = await syncRes.json();
       }
 
-      if (result.images?.[0]?.url) {
-        const url = result.images[0].url;
-        return { text: url, files: [{ url, type: "image", name: "generated.png" }] };
-      }
-      if (result.image?.url) {
-        const url = result.image.url;
-        return { text: url, files: [{ url, type: "image", name: "generated.png" }] };
-      }
-      if (result.video?.url) {
-        const url = result.video.url;
-        return { text: url, files: [{ url, type: "video", name: "generated.mp4" }] };
-      }
-      if (result.audio?.url) {
-        const url = result.audio.url;
-        return { text: url, files: [{ url, type: "audio", name: "generated.mp3" }] };
-      }
-      if (result.audio_file?.url) {
-        const url = result.audio_file.url;
-        return { text: url, files: [{ url, type: "audio", name: "generated.mp3" }] };
-      }
-      if (result.output) {
-        const out = typeof result.output === "string" ? result.output : JSON.stringify(result.output);
-        return { text: out, files: [] };
-      }
+      console.log(`[fal] Result keys: ${Object.keys(result || {}).join(", ")}`);
 
-      return { text: JSON.stringify(result), files: [] };
+      return extractFalResult(result);
     } catch (err) {
       return { text: `[fal.ai error: ${err instanceof Error ? err.message : "Unknown"}]`, files: [] };
     }
