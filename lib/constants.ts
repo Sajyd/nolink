@@ -31,6 +31,13 @@ export const EXECUTION_TIMEOUT_MS: Record<string, number> = {
   ENTERPRISE: 30 * 60 * 1000,
 };
 
+// Vercel function maxDuration (must match vercel.json)
+// Used to compute the internal deadline so functions save state before being killed.
+export const FUNCTION_MAX_DURATION_S = 300;
+
+// Buffer before the hard timeout to trigger state save (seconds)
+export const DEADLINE_BUFFER_S = 30;
+
 export const SUBSCRIPTION_PLANS = [
   {
     tier: "FREE" as const,

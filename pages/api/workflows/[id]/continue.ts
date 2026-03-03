@@ -7,11 +7,11 @@ import { type StepDefinition, type StepCustomParam, type FileInput, type StepRes
 import { executeWorkflowGraph, type ResumeState } from "@/lib/graph-executor";
 import { deductCredits } from "@/lib/credits";
 import { estimateWorkflowCost } from "@/lib/ai-engine";
-import { EXECUTION_TIMEOUT_MS } from "@/lib/constants";
+import { EXECUTION_TIMEOUT_MS, FUNCTION_MAX_DURATION_S, DEADLINE_BUFFER_S } from "@/lib/constants";
 import { waitUntil } from "@vercel/functions";
 
 export const config = {
-  maxDuration: 900,
+  maxDuration: 300,
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -70,9 +70,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(408).json({ error: "Execution timed out" });
   }
 
-  const resumeState = execution.resumeState as ResumeState | null;
+  let resumeState = execution.resumeState as ResumeState | null;
+
+  // If no saved resumeState, rebuild from stepResults (function was killed before saving)
   if (!resumeState) {
-    return res.status(400).json({ error: "No resume state available" });
+    const stepResults = (execution.stepResults as any[]) || [];
+    if (stepResults.length > 0) {
+      const completedStepIds = stepResults.map((r: any) => r.stepId);
+      const stepOutputs: Record<string, { text: string; files: FileInput[] }> = {};
+      for (const r of stepResults) {
+        stepOutputs[r.stepId] = {
+          text: r._nextInput?.text || r.output || "",
+          files: r._nextInput?.files || [],
+        };
+      }
+      resumeState = { completedStepIds, stepOutputs };
+    } else {
+      resumeState = { completedStepIds: [], stepOutputs: {} };
+    }
   }
 
   const workflow = execution.workflow;
@@ -80,13 +95,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const baseCost = estimateWorkflowCost(workflow.steps as unknown as StepDefinition[]);
   const cost = Math.max(workflow.priceInNolinks, baseCost);
 
-  // Mark as running again and update heartbeat
   await prisma.execution.update({
     where: { id: executionId },
     data: { status: "RUNNING", lastHeartbeat: new Date(), resumeState: Prisma.DbNull },
   });
 
-  // Respond immediately — execution continues in background via waitUntil
   res.status(200).json({ ok: true });
 
   waitUntil(runContinuation(executionId, workflow, execution, resumeState, isAnonymous, cost, baseCost));
@@ -166,8 +179,7 @@ async function runContinuation(
 
   const edgeList = (workflow.edges as { source: string; target: string; sourceHandle?: string; targetHandle?: string }[] | null) || [];
 
-  const functionTimeout = parseInt(process.env.FUNCTION_TIMEOUT_SECONDS || "300", 10);
-  const deadline = Date.now() + (functionTimeout - 30) * 1000;
+  const deadline = Date.now() + (FUNCTION_MAX_DURATION_S - DEADLINE_BUFFER_S) * 1000;
 
   let failed = false;
   let deadlineSaved = false;

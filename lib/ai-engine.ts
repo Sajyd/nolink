@@ -1343,14 +1343,14 @@ async function executeFalStep(
           console.log(`[fal] Polling statusUrl=${statusUrl}`);
           console.log(`[fal] responseUrl=${responseUrl}`);
 
-          const maxAttempts = 180;
           const pollInterval = 3000;
+          const fallbackMaxAttempts = 6000;
           let completed = false;
           let consecutiveErrors = 0;
 
-          for (let i = 0; i < maxAttempts; i++) {
+          for (let i = 0; i < fallbackMaxAttempts; i++) {
             if (deadline && Date.now() > deadline - 30_000) {
-              console.log(`[fal] Approaching deadline, throwing DeadlineExceededError for ${requestId}`);
+              console.log(`[fal] Deadline approaching at poll ${i}, throwing DeadlineExceededError for ${requestId}`);
               throw new DeadlineExceededError(requestId!, "fal");
             }
 
@@ -1364,9 +1364,9 @@ async function executeFalStep(
               });
               if (!statusRes.ok) {
                 consecutiveErrors++;
-                console.log(`[fal] Poll ${i + 1}/${maxAttempts}: HTTP ${statusRes.status} (${consecutiveErrors} consecutive errors)`);
+                console.log(`[fal] Poll ${i + 1}: HTTP ${statusRes.status} (${consecutiveErrors} consecutive errors)`);
                 if (consecutiveErrors >= 10) {
-                  console.log(`[fal] Aborting after ${consecutiveErrors} consecutive status errors`);
+                  if (deadline) throw new DeadlineExceededError(requestId!, "fal");
                   return { text: `[fal.ai error: Status endpoint returning ${statusRes.status} — request ${requestId} may still be running on fal.ai]`, files: [] };
                 }
                 continue;
@@ -1374,11 +1374,12 @@ async function executeFalStep(
               statusData = await statusRes.json();
               consecutiveErrors = 0;
             } catch (e) {
+              if (e instanceof DeadlineExceededError) throw e;
               consecutiveErrors++;
               const msg = e instanceof Error ? e.message : String(e);
-              console.log(`[fal] Poll ${i + 1}/${maxAttempts}: fetch error: ${msg} (${consecutiveErrors} consecutive errors)`);
+              console.log(`[fal] Poll ${i + 1}: fetch error: ${msg} (${consecutiveErrors} consecutive errors)`);
               if (consecutiveErrors >= 10) {
-                console.log(`[fal] Aborting after ${consecutiveErrors} consecutive fetch errors`);
+                if (deadline) throw new DeadlineExceededError(requestId!, "fal");
                 return { text: `[fal.ai error: Cannot reach status endpoint — ${msg}]`, files: [] };
               }
               continue;
@@ -1386,7 +1387,7 @@ async function executeFalStep(
 
             const status = statusData.status;
             if (i % 10 === 0 || status === "COMPLETED" || status === "FAILED") {
-              console.log(`[fal] Poll ${i + 1}/${maxAttempts}: status=${status}`);
+              console.log(`[fal] Poll ${i + 1}: status=${status}`);
             }
 
             if (status === "COMPLETED") {
@@ -1448,13 +1449,16 @@ async function executeFalStep(
             }
 
             if (status !== "IN_QUEUE" && status !== "IN_PROGRESS") {
-              console.log(`[fal] Poll ${i + 1}/${maxAttempts}: unexpected status="${status}", full response: ${JSON.stringify(statusData).slice(0, 300)}`);
+              console.log(`[fal] Poll ${i + 1}: unexpected status="${status}", full response: ${JSON.stringify(statusData).slice(0, 300)}`);
             }
           }
 
           if (!completed) {
-            console.log(`[fal] Polling timed out after ${maxAttempts * pollInterval / 1000}s for ${requestId}`);
-            return { text: `[fal.ai error: Request timed out after ${maxAttempts * pollInterval / 1000}s — try a shorter duration]`, files: [] };
+            if (deadline && requestId) {
+              console.log(`[fal] Polling loop exhausted, throwing DeadlineExceededError for ${requestId}`);
+              throw new DeadlineExceededError(requestId, "fal");
+            }
+            return { text: `[fal.ai error: Request timed out — try a shorter duration]`, files: [] };
           }
       }
 
@@ -1687,13 +1691,13 @@ async function executeReplicateStep(
       if (needsPoll && pollUrl) {
         console.log(`[replicate] Polling ${pollUrl}`);
 
-        const maxAttempts = 180;
         const pollInterval = 3000;
+        const fallbackMaxAttempts = 6000;
         let consecutiveErrors = 0;
 
-        for (let i = 0; i < maxAttempts; i++) {
+        for (let i = 0; i < fallbackMaxAttempts; i++) {
           if (deadline && Date.now() > deadline - 30_000) {
-            console.log(`[replicate] Approaching deadline, throwing DeadlineExceededError for ${predictionId}`);
+            console.log(`[replicate] Deadline approaching at poll ${i}, throwing DeadlineExceededError for ${predictionId}`);
             throw new DeadlineExceededError(predictionId!, "replicate");
           }
 
@@ -1707,8 +1711,9 @@ async function executeReplicateStep(
             });
             if (!pollRes.ok) {
               consecutiveErrors++;
-              console.log(`[replicate] Poll ${i + 1}/${maxAttempts}: HTTP ${pollRes.status} (${consecutiveErrors} consecutive errors)`);
+              console.log(`[replicate] Poll ${i + 1}: HTTP ${pollRes.status} (${consecutiveErrors} consecutive errors)`);
               if (consecutiveErrors >= 10) {
+                if (deadline) throw new DeadlineExceededError(predictionId!, "replicate");
                 return { text: `[Replicate error: Status endpoint returning ${pollRes.status} — prediction ${result.id} may still be running]`, files: [] };
               }
               continue;
@@ -1716,17 +1721,19 @@ async function executeReplicateStep(
             prediction = await pollRes.json();
             consecutiveErrors = 0;
           } catch (e) {
+            if (e instanceof DeadlineExceededError) throw e;
             consecutiveErrors++;
             const msg = e instanceof Error ? e.message : String(e);
-            console.log(`[replicate] Poll ${i + 1}/${maxAttempts}: fetch error: ${msg} (${consecutiveErrors} consecutive errors)`);
+            console.log(`[replicate] Poll ${i + 1}: fetch error: ${msg} (${consecutiveErrors} consecutive errors)`);
             if (consecutiveErrors >= 10) {
+              if (deadline) throw new DeadlineExceededError(predictionId!, "replicate");
               return { text: `[Replicate error: Cannot reach status endpoint — ${msg}]`, files: [] };
             }
             continue;
           }
 
           if (i % 10 === 0 || prediction.status === "succeeded" || prediction.status === "failed") {
-            console.log(`[replicate] Poll ${i + 1}/${maxAttempts}: status=${prediction.status}`);
+            console.log(`[replicate] Poll ${i + 1}: status=${prediction.status}`);
           }
 
           if (prediction.status === "succeeded") {
@@ -1744,8 +1751,11 @@ async function executeReplicateStep(
         }
 
         if (result.status !== "succeeded") {
-          console.log(`[replicate] Polling timed out after ${maxAttempts * pollInterval / 1000}s for ${result.id}`);
-          return { text: `[Replicate error: Prediction timed out after ${maxAttempts * pollInterval / 1000}s]`, files: [] };
+          if (deadline && predictionId) {
+            console.log(`[replicate] Polling loop exhausted, throwing DeadlineExceededError for ${predictionId}`);
+            throw new DeadlineExceededError(predictionId, "replicate");
+          }
+          return { text: `[Replicate error: Prediction timed out]`, files: [] };
         }
       }
 

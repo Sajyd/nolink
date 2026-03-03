@@ -83,7 +83,11 @@ export default async function handler(
     (!execution.lastHeartbeat ||
       Date.now() - execution.lastHeartbeat.getTime() > HEARTBEAT_STALE_MS);
 
-  const needsContinuation = heartbeatStale && execution.resumeState != null;
+  // If heartbeat is stale, the function was killed or saved state and exited.
+  // resumeState set → can continue from saved checkpoint.
+  // resumeState null → function was killed before saving — still signal continuation
+  //   so the continue endpoint can restart the in-progress step.
+  const needsContinuation = heartbeatStale;
 
   // Tier timeout
   const tier = session?.user?.subscription || "FREE";
