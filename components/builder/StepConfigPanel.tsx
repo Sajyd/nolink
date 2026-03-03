@@ -1020,12 +1020,25 @@ function CustomParamsEditor({
   };
 
   const otherParams = allNodes
-    .filter((n) => n.id !== nodeId && (n.data.customParams?.length ?? 0) > 0)
-    .flatMap((n) =>
-      (n.data.customParams as CustomParam[])
-        .filter((p) => p.name)
-        .map((p) => ({ node: n.data.label || "Unnamed", name: p.name }))
-    );
+    .filter((n) => n.id !== nodeId)
+    .flatMap((n) => {
+      const params: { node: string; name: string }[] = [];
+      if (n.data.customParams?.length > 0) {
+        params.push(
+          ...(n.data.customParams as CustomParam[])
+            .filter((p) => p.name)
+            .map((p) => ({ node: n.data.label || "Unnamed", name: p.name }))
+        );
+      }
+      if ((n.type === "inputNode") && n.data.inputParameters?.length > 0) {
+        params.push(
+          ...(n.data.inputParameters as InputParameter[])
+            .filter((p) => p.name)
+            .map((p) => ({ node: n.data.label || "Unnamed", name: p.name }))
+        );
+      }
+      return params;
+    });
 
   return (
     <div className="space-y-3 border-t border-gray-200 dark:border-gray-800 pt-4">

@@ -2363,7 +2363,7 @@ export async function executeWorkflow(
   for (const step of sortedSteps) {
     if (step.customParams) {
       for (const cp of step.customParams) {
-        if (cp.name) customParamMap[cp.name] = cp.value;
+        if (cp.name) customParamMap[cp.name] = resolveCustomParams(cp.value, customParamMap);
       }
     }
 

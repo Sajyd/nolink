@@ -13,7 +13,7 @@ import { deductCredits, checkBalance } from "@/lib/credits";
 import { estimateWorkflowCost } from "@/lib/ai-engine";
 
 export const config = {
-  maxDuration: 900,
+  maxDuration: 800,
 };
 
 export default async function handler(
