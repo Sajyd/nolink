@@ -477,7 +477,9 @@ async function persistMediaToS3(
   if (!isTemporaryMediaUrl(mediaUrl)) return null;
 
   try {
-    const response = await fetch(mediaUrl);
+    const response = await fetch(mediaUrl, {
+      signal: AbortSignal.timeout(120_000),
+    });
     if (!response.ok) return null;
 
     const buffer = Buffer.from(await response.arrayBuffer());
@@ -1257,6 +1259,10 @@ async function executeFalStep(
   }
 
   if (process.env.FAL_KEY) {
+    const FAL_SUBMIT_TIMEOUT = 60_000;
+    const FAL_POLL_TIMEOUT = 15_000;
+    const FAL_RESULT_TIMEOUT = 60_000;
+
     try {
       const logParams = { ...resolvedParams };
       for (const [k, v] of Object.entries(logParams)) {
@@ -1274,80 +1280,126 @@ async function executeFalStep(
       let result: any;
       const authHeader = { Authorization: `Key ${process.env.FAL_KEY}` };
 
+      console.log(`[fal] Submitting to queue: https://queue.fal.run/${falEndpoint}`);
       const queueRes = await fetch(`https://queue.fal.run/${falEndpoint}`, {
         method: "POST",
         headers,
         body: bodyJson,
+        signal: AbortSignal.timeout(FAL_SUBMIT_TIMEOUT),
       });
 
       if (queueRes.ok) {
         result = await queueRes.json();
+        console.log(`[fal] Queue response: request_id=${result.request_id}, status=${result.status}, keys=${Object.keys(result).join(",")}`);
 
         if (result.request_id && result.status !== "COMPLETED") {
           const requestId = result.request_id;
           const statusUrl = result.status_url || `https://queue.fal.run/${falEndpoint}/requests/${requestId}/status`;
           const responseUrl = result.response_url || `https://queue.fal.run/${falEndpoint}/requests/${requestId}`;
+          console.log(`[fal] Polling statusUrl=${statusUrl}`);
+          console.log(`[fal] responseUrl=${responseUrl}`);
+
           const maxAttempts = 180;
           const pollInterval = 3000;
           let completed = false;
+          let consecutiveErrors = 0;
 
           for (let i = 0; i < maxAttempts; i++) {
             await new Promise((r) => setTimeout(r, pollInterval));
-            const statusRes = await fetch(statusUrl, { headers: authHeader });
-            if (!statusRes.ok) {
-              console.log(`[fal] Poll ${i + 1}: status check failed (${statusRes.status})`);
+
+            let statusData: any;
+            try {
+              const statusRes = await fetch(statusUrl, {
+                headers: authHeader,
+                signal: AbortSignal.timeout(FAL_POLL_TIMEOUT),
+              });
+              if (!statusRes.ok) {
+                consecutiveErrors++;
+                console.log(`[fal] Poll ${i + 1}/${maxAttempts}: HTTP ${statusRes.status} (${consecutiveErrors} consecutive errors)`);
+                if (consecutiveErrors >= 10) {
+                  console.log(`[fal] Aborting after ${consecutiveErrors} consecutive status errors`);
+                  return { text: `[fal.ai error: Status endpoint returning ${statusRes.status} — request ${requestId} may still be running on fal.ai]`, files: [] };
+                }
+                continue;
+              }
+              statusData = await statusRes.json();
+              consecutiveErrors = 0;
+            } catch (e) {
+              consecutiveErrors++;
+              const msg = e instanceof Error ? e.message : String(e);
+              console.log(`[fal] Poll ${i + 1}/${maxAttempts}: fetch error: ${msg} (${consecutiveErrors} consecutive errors)`);
+              if (consecutiveErrors >= 10) {
+                console.log(`[fal] Aborting after ${consecutiveErrors} consecutive fetch errors`);
+                return { text: `[fal.ai error: Cannot reach status endpoint — ${msg}]`, files: [] };
+              }
               continue;
             }
-            const statusData = await statusRes.json();
-            console.log(`[fal] Poll ${i + 1}: status=${statusData.status}`);
 
-            if (statusData.status === "COMPLETED") {
+            const status = statusData.status;
+            if (i % 10 === 0 || status === "COMPLETED" || status === "FAILED") {
+              console.log(`[fal] Poll ${i + 1}/${maxAttempts}: status=${status}`);
+            }
+
+            if (status === "COMPLETED") {
+              console.log(`[fal] Request ${requestId} completed, fetching result from ${responseUrl}`);
               let fetched = false;
 
               for (let retry = 0; retry < 3; retry++) {
                 try {
-                  const resultRes = await fetch(responseUrl, { headers: authHeader });
+                  const resultRes = await fetch(responseUrl, {
+                    headers: authHeader,
+                    signal: AbortSignal.timeout(FAL_RESULT_TIMEOUT),
+                  });
                   if (resultRes.ok) {
-                    const raw = await resultRes.json();
-                    result = raw?.response && typeof raw.response === "object" ? raw.response : raw;
+                    result = await resultRes.json();
+                    console.log(`[fal] Result fetched, keys=${Object.keys(result).join(",")}`);
                     fetched = true;
                     break;
                   }
-                  console.log(`[fal] Result fetch attempt ${retry + 1} failed (${resultRes.status})`);
+                  console.log(`[fal] Result fetch attempt ${retry + 1} failed: HTTP ${resultRes.status}`);
                 } catch (e) {
-                  console.log(`[fal] Result fetch attempt ${retry + 1} error: ${e}`);
+                  console.log(`[fal] Result fetch attempt ${retry + 1} error: ${e instanceof Error ? e.message : e}`);
                 }
                 if (retry < 2) await new Promise((r) => setTimeout(r, 2000));
               }
 
               if (!fetched) {
-                console.log(`[fal] Trying status endpoint with response...`);
+                console.log(`[fal] Primary result fetch failed, trying status endpoint fallback...`);
                 try {
-                  const fullStatusRes = await fetch(`${statusUrl}?logs=0`, { headers: authHeader });
+                  const fullStatusRes = await fetch(`${statusUrl}?logs=0`, {
+                    headers: authHeader,
+                    signal: AbortSignal.timeout(FAL_RESULT_TIMEOUT),
+                  });
                   if (fullStatusRes.ok) {
                     const fullStatus = await fullStatusRes.json();
                     if (fullStatus.response) {
                       result = fullStatus.response;
+                      console.log(`[fal] Got result from status fallback, keys=${Object.keys(result).join(",")}`);
                       fetched = true;
                     }
                   }
-                } catch {}
+                } catch (e) {
+                  console.log(`[fal] Status fallback error: ${e instanceof Error ? e.message : e}`);
+                }
               }
 
               if (!fetched) {
                 console.log(`[fal] All result fetch attempts failed for ${requestId}`);
-                return { text: `[fal.ai error: Video completed but result could not be retrieved — try running again]`, files: [] };
+                return { text: `[fal.ai error: Completed but result could not be retrieved — try running again]`, files: [] };
               }
 
               completed = true;
               break;
             }
-            if (statusData.status === "FAILED") {
+
+            if (status === "FAILED") {
               const errMsg = statusData.error || "fal.ai request failed";
+              console.log(`[fal] Request ${requestId} FAILED: ${typeof errMsg === "string" ? errMsg.slice(0, 200) : JSON.stringify(errMsg).slice(0, 200)}`);
               return { text: `[fal.ai error: ${typeof errMsg === "string" ? errMsg.slice(0, 300) : JSON.stringify(errMsg).slice(0, 300)}]`, files: [] };
             }
-            if (statusData.status !== "IN_QUEUE" && statusData.status !== "IN_PROGRESS") {
-              console.log(`[fal] Poll ${i + 1}: unexpected status "${statusData.status}"`);
+
+            if (status !== "IN_QUEUE" && status !== "IN_PROGRESS") {
+              console.log(`[fal] Poll ${i + 1}/${maxAttempts}: unexpected status="${status}", full response: ${JSON.stringify(statusData).slice(0, 300)}`);
             }
           }
 
@@ -1355,13 +1407,18 @@ async function executeFalStep(
             console.log(`[fal] Polling timed out after ${maxAttempts * pollInterval / 1000}s for ${requestId}`);
             return { text: `[fal.ai error: Request timed out after ${maxAttempts * pollInterval / 1000}s — try a shorter duration]`, files: [] };
           }
+        } else {
+          console.log(`[fal] Got immediate result (no polling needed), keys=${Object.keys(result).join(",")}`);
         }
       } else {
-        console.log(`[fal] Queue endpoint failed (${queueRes.status}), falling back to fal.run`);
+        const errBody = await queueRes.text().catch(() => "");
+        console.log(`[fal] Queue endpoint failed: HTTP ${queueRes.status}, body=${errBody.slice(0, 300)}`);
+        console.log(`[fal] Falling back to sync endpoint: https://fal.run/${falEndpoint}`);
         const syncRes = await fetch(`https://fal.run/${falEndpoint}`, {
           method: "POST",
           headers,
           body: bodyJson,
+          signal: AbortSignal.timeout(FAL_SUBMIT_TIMEOUT),
         });
 
         if (!syncRes.ok) {
@@ -1370,20 +1427,24 @@ async function executeFalStep(
         }
 
         result = await syncRes.json();
+        console.log(`[fal] Sync result keys=${Object.keys(result).join(",")}`);
       }
 
-      if (result?.response && typeof result.response === "object" && !result.images && !result.video && !result.audio) {
+      // Unwrap fal.ai response wrapper: { status, logs, response: { ...actualData } }
+      if (result?.response && typeof result.response === "object" && !result.images && !result.video && !result.audio && !result.image) {
+        console.log(`[fal] Unwrapping response wrapper, inner keys=${Object.keys(result.response).join(",")}`);
         result = result.response;
       }
 
       if (result?.request_id && !result.images && !result.video && !result.audio && !result.output && !result.image) {
-        console.log(`[fal] WARNING: result still looks like queue response:`, JSON.stringify(result).slice(0, 300));
+        console.log(`[fal] WARNING: result still looks like queue response: ${JSON.stringify(result).slice(0, 300)}`);
         return { text: `[fal.ai error: Processing completed but no result returned — check fal.ai dashboard]`, files: [] };
       }
 
-      console.log(`[fal] Result keys: ${Object.keys(result || {}).join(", ")}`);
+      console.log(`[fal] Final result keys: ${Object.keys(result || {}).join(", ")}`);
       return extractFalResult(result);
     } catch (err) {
+      console.log(`[fal] executeFalStep error: ${err instanceof Error ? err.stack || err.message : err}`);
       return { text: `[fal.ai error: ${err instanceof Error ? err.message : "Unknown"}]`, files: [] };
     }
   }
