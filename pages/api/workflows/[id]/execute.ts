@@ -209,7 +209,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const edgeList = (workflow.edges as { source: string; target: string; sourceHandle?: string; targetHandle?: string }[] | null) || [];
 
-  const deadline = Date.now() + (config.maxDuration - 30) * 1000;
+  const functionTimeout = parseInt(process.env.FUNCTION_TIMEOUT_SECONDS || "300", 10);
+  const deadline = Date.now() + (functionTimeout - 30) * 1000;
 
   const allResults = await executeWorkflowGraph(
     stepDefs,
