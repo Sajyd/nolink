@@ -313,7 +313,50 @@ export default function WorkflowPage() {
     });
   };
 
-  const POLL_INTERVAL_MS = 2000;
+  const updateLiveStepsFromPoll = (pollSteps: any[]) => {
+    setLiveSteps((prev) => {
+      if (prev.length === 0) {
+        return pollSteps.map((s: any) => ({
+          stepId: s.stepId,
+          stepName: s.stepName,
+          stepType: s.stepType,
+          outputType: s.outputType,
+          aiModel: s.aiModel,
+          modelName: s.modelName,
+          index: s.index,
+          totalSteps: pollSteps.length,
+          status: s.status as LiveStep["status"],
+          output: s.output ?? undefined,
+          duration: s.duration ?? undefined,
+        }));
+      }
+      return prev.map((existing) => {
+        const poll = pollSteps.find((p: any) => p.stepId === existing.stepId);
+        if (!poll) return existing;
+        if (poll.status === "completed" && existing.status !== "completed") {
+          return {
+            ...existing,
+            status: "completed" as const,
+            output: poll.output,
+            duration: poll.duration,
+            outputType: poll.outputType || existing.outputType,
+          };
+        }
+        if (poll.status === "error" && existing.status !== "error") {
+          return {
+            ...existing,
+            status: "error" as const,
+            output: poll.output,
+            duration: poll.duration,
+          };
+        }
+        if (poll.status === "running" && existing.status === "pending") {
+          return { ...existing, status: "running" as const, startedAt: Date.now() };
+        }
+        return existing;
+      });
+    });
+  };
 
   const handleExecute = async () => {
     const hasAnyInput = inputSteps.some((s) => {
@@ -361,11 +404,15 @@ export default function WorkflowPage() {
 
     const firstInput = inputSteps.length > 0 ? getStepInput(inputSteps[0].id) : { text: "", files: [] as UploadedFile[] };
 
+    let executionId: string | null = null;
+    let receivedComplete = false;
     const startTime = Date.now();
+
     const tier = (session as any)?.user?.subscription || "FREE";
     const isPro = tier === "PRO" || tier === "ENTERPRISE";
     const maxTimeout = isPro ? 30 * 60 * 1000 : 15 * 60 * 1000;
 
+    // ── Phase 1: SSE (real-time events until stream ends) ──
     try {
       const res = await fetch(`/api/workflows/${id}/execute`, {
         method: "POST",
@@ -383,9 +430,8 @@ export default function WorkflowPage() {
         }),
       });
 
-      if (!res.ok) {
-        let data: any = {};
-        try { data = await res.json(); } catch {}
+      if (!res.ok && res.headers.get("content-type")?.includes("application/json")) {
+        const data = await res.json();
         if (data.error === "signup_required") {
           setTrialExpired(true);
           setExecuting(false);
@@ -400,28 +446,111 @@ export default function WorkflowPage() {
         return;
       }
 
-      const submitData = await res.json();
-      const jobId: string = submitData.jobId;
-      if (submitData.isTrialRun) setIsTrialRun(true);
+      if (!res.ok) {
+        setError("Execution failed");
+        setExecuting(false);
+        return;
+      }
 
-      let done = false;
-      while (!done && Date.now() - startTime < maxTimeout) {
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setError("Streaming not supported");
+        setExecuting(false);
+        return;
+      }
 
-        let job: any;
-        try {
-          const pollRes = await fetch(`/api/jobs/${jobId}`);
-          if (!pollRes.ok) {
-            const errData = await pollRes.json().catch(() => ({}));
-            setError(errData.error || "Failed to poll job status");
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          if (!part.trim()) continue;
+
+          let eventName = "";
+          let eventData = "";
+
+          for (const line of part.split("\n")) {
+            if (line.startsWith("event: ")) eventName = line.slice(7);
+            else if (line.startsWith("data: ")) eventData = line.slice(6);
+          }
+
+          if (!eventName || !eventData) continue;
+
+          try {
+            const data = JSON.parse(eventData);
+            handleSSE(eventName, data);
+            if (eventName === "workflow_start" && data.executionId) {
+              executionId = data.executionId;
+            }
+            if (eventName === "workflow_complete" && !data.needsContinuation) {
+              receivedComplete = true;
+            }
+          } catch {}
+        }
+      }
+    } catch {
+      // Network error or stream aborted — fall through to polling
+    }
+
+    // ── Phase 2: Polling fallback (if SSE died without completing) ──
+    if (!receivedComplete && executionId) {
+      try {
+        while (Date.now() - startTime < maxTimeout) {
+          await new Promise((r) => setTimeout(r, 3000));
+
+          const pollRes = await fetch(`/api/jobs/${executionId}`);
+          if (!pollRes.ok) continue;
+          const data = await pollRes.json();
+
+          updateLiveStepsFromPoll(data.steps);
+
+          if (data.needsContinuation) {
+            await fetch(`/api/workflows/${id}/continue`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ executionId }),
+            }).catch(() => {});
+            continue;
+          }
+
+          if (data.status === "COMPLETED") {
+            setCreditsUsed(data.creditsUsed || 0);
+            receivedComplete = true;
             break;
           }
-          job = await pollRes.json();
-        } catch {
-          continue;
+
+          if (data.status === "FAILED") {
+            setError(data.error || "Execution failed");
+            receivedComplete = true;
+            break;
+          }
         }
 
-        const steps: LiveStep[] = (job.steps || []).map((s: any) => ({
+        if (!receivedComplete) {
+          setError("Execution timed out");
+        }
+      } catch {
+        setError("An error occurred while checking execution status");
+      }
+    }
+
+    setExecuting(false);
+    setFinished(true);
+    if (session) updateSession();
+  };
+
+  const handleSSE = (event: string, data: any) => {
+    switch (event) {
+      case "workflow_start": {
+        const pending: LiveStep[] = data.steps.map((s: any) => ({
           stepId: s.stepId,
           stepName: s.stepName,
           stepType: s.stepType,
@@ -429,53 +558,58 @@ export default function WorkflowPage() {
           aiModel: s.aiModel,
           modelName: s.modelName,
           index: s.index,
-          totalSteps: job.progress?.total || 0,
-          status: s.status as LiveStep["status"],
-          output: s.output ?? undefined,
-          duration: s.duration ?? undefined,
-          startedAt: s.status === "running" ? Date.now() : undefined,
+          totalSteps: data.totalSteps,
+          status: "pending" as const,
         }));
-        setLiveSteps(steps);
-
-        if (job.status === "COMPLETED") {
-          setCreditsUsed(job.creditsUsed || 0);
-          done = true;
-        } else if (job.status === "FAILED") {
-          setError(job.error || "Workflow failed");
-          done = true;
-        } else if (job.needsContinuation) {
-          try {
-            const contRes = await fetch(`/api/workflows/${id}/continue`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ executionId: jobId }),
-            });
-            if (!contRes.ok) {
-              const errData = await contRes.json().catch(() => ({}));
-              if (contRes.status === 408) {
-                setError("Execution timed out");
-                done = true;
-              } else {
-                setError(errData.error || "Continuation failed");
-                done = true;
-              }
-            }
-          } catch {
-            setError("Failed to continue execution");
-            done = true;
-          }
-        }
+        setLiveSteps(pending);
+        break;
       }
-
-      if (!done && Date.now() - startTime >= maxTimeout) {
-        setError("Execution timed out");
+      case "step_start": {
+        setLiveSteps((prev) =>
+          prev.map((s) =>
+            s.stepId === data.stepId
+              ? { ...s, status: "running" as const, startedAt: Date.now() }
+              : s
+          )
+        );
+        break;
       }
-    } catch {
-      setError("An error occurred during execution");
-    } finally {
-      setExecuting(false);
-      setFinished(true);
-      if (session) updateSession();
+      case "step_complete": {
+        setLiveSteps((prev) =>
+          prev.map((s) =>
+            s.stepId === data.stepId
+              ? {
+                  ...s,
+                  status: "completed" as const,
+                  output: data.output,
+                  duration: data.duration,
+                  outputType: data.outputType,
+                }
+              : s
+          )
+        );
+        break;
+      }
+      case "step_error": {
+        setLiveSteps((prev) =>
+          prev.map((s) =>
+            s.stepId === data.stepId
+              ? {
+                  ...s,
+                  status: "error" as const,
+                  output: data.output,
+                  duration: data.duration,
+                }
+              : s
+          )
+        );
+        break;
+      }
+      case "workflow_complete": {
+        setCreditsUsed(data.creditsUsed || 0);
+        if (data.isTrialRun) setIsTrialRun(true);
+        break;
+      }
     }
   };
 

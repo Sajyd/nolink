@@ -2,13 +2,7 @@
   "framework": "nextjs",
   "functions": {
     "pages/api/workflows/[id]/execute.ts": {
-      "maxDuration": 300
-    },
-    "pages/api/workflows/[id]/continue.ts": {
-      "maxDuration": 300
-    },
-    "pages/api/workflows/[id]/run.ts": {
-      "maxDuration": 300
+      "maxDuration": 800
     }
   }
 }
