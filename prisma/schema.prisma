@@ -158,19 +158,17 @@ enum ExecutionStatus {
 }
 
 model Execution {
-  id            String          @id @default(cuid())
-  workflowId    String
-  userId        String?
-  status        ExecutionStatus @default(PENDING)
-  inputs        Json
-  outputs       Json?
-  stepResults   Json?
-  creditsUsed   Int             @default(0)
-  errorMessage  String?
-  startedAt     DateTime        @default(now())
-  completedAt   DateTime?
-  lastHeartbeat DateTime?
-  resumeState   Json?
+  id           String          @id @default(cuid())
+  workflowId   String
+  userId       String?
+  status       ExecutionStatus @default(PENDING)
+  inputs       Json
+  outputs      Json?
+  stepResults  Json?
+  creditsUsed  Int             @default(0)
+  errorMessage String?
+  startedAt    DateTime        @default(now())
+  completedAt  DateTime?
 
   workflow Workflow @relation(fields: [workflowId], references: [id])
   user     User?    @relation(fields: [userId], references: [id])

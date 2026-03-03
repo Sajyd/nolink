@@ -23,14 +23,6 @@ export const CREDIT_PACKAGES = [
   { id: "pack_1200", nolinks: 1200, priceInCents: 3999, label: "1,200 Nolinks" },
 ] as const;
 
-// Max workflow execution time per subscription tier
-export const EXECUTION_TIMEOUT_MS: Record<string, number> = {
-  FREE: 15 * 60 * 1000,
-  STARTER: 15 * 60 * 1000,
-  PRO: 30 * 60 * 1000,
-  ENTERPRISE: 30 * 60 * 1000,
-};
-
 export const SUBSCRIPTION_PLANS = [
   {
     tier: "FREE" as const,

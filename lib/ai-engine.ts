@@ -90,16 +90,6 @@ interface StepInput {
   files: FileInput[];
 }
 
-export class DeadlineExceededError extends Error {
-  constructor(
-    public externalJobId: string,
-    public service: "fal" | "replicate",
-  ) {
-    super("Deadline exceeded during AI step polling");
-    this.name = "DeadlineExceededError";
-  }
-}
-
 function computeCustomCost(
   basePrice: number,
   costPerSecond: number | undefined,
@@ -1172,7 +1162,6 @@ async function executeFalStep(
   step: StepDefinition,
   input: StepInput,
   deadline?: number,
-  externalJobId?: string,
 ): Promise<StepInput> {
   if (!step.aiModel) return input;
 
@@ -1292,54 +1281,22 @@ async function executeFalStep(
       let result: any;
       const authHeader = { Authorization: `Key ${process.env.FAL_KEY}` };
 
-      let requestId: string | null = externalJobId || null;
-      let needsPoll = !!externalJobId;
+      console.log(`[fal] Submitting to queue: https://queue.fal.run/${falEndpoint}`);
+      const queueRes = await fetch(`https://queue.fal.run/${falEndpoint}`, {
+        method: "POST",
+        headers,
+        body: bodyJson,
+        signal: AbortSignal.timeout(FAL_SUBMIT_TIMEOUT),
+      });
 
-      if (externalJobId) {
-        console.log(`[fal] Resuming poll for existing request_id=${externalJobId}`);
-        result = { request_id: externalJobId, status: "IN_PROGRESS" };
-      } else {
-        console.log(`[fal] Submitting to queue: https://queue.fal.run/${falEndpoint}`);
-        const queueRes = await fetch(`https://queue.fal.run/${falEndpoint}`, {
-          method: "POST",
-          headers,
-          body: bodyJson,
-          signal: AbortSignal.timeout(FAL_SUBMIT_TIMEOUT),
-        });
+      if (queueRes.ok) {
+        result = await queueRes.json();
+        console.log(`[fal] Queue response: request_id=${result.request_id}, status=${result.status}, keys=${Object.keys(result).join(",")}`);
 
-        if (!queueRes.ok) {
-          const errBody = await queueRes.text().catch(() => "");
-          console.log(`[fal] Queue endpoint failed: HTTP ${queueRes.status}, body=${errBody.slice(0, 300)}`);
-          console.log(`[fal] Falling back to sync endpoint: https://fal.run/${falEndpoint}`);
-          const syncRes = await fetch(`https://fal.run/${falEndpoint}`, {
-            method: "POST",
-            headers,
-            body: bodyJson,
-            signal: AbortSignal.timeout(FAL_SUBMIT_TIMEOUT),
-          });
-
-          if (!syncRes.ok) {
-            const err = await syncRes.text();
-            return { text: `[fal.ai error: ${err.slice(0, 200)}]`, files: [] };
-          }
-
-          result = await syncRes.json();
-          console.log(`[fal] Sync result keys=${Object.keys(result).join(",")}`);
-        } else {
-          result = await queueRes.json();
-          console.log(`[fal] Queue response: request_id=${result.request_id}, status=${result.status}, keys=${Object.keys(result).join(",")}`);
-          if (result.request_id && result.status !== "COMPLETED") {
-            requestId = result.request_id;
-            needsPoll = true;
-          } else {
-            console.log(`[fal] Got immediate result (no polling needed), keys=${Object.keys(result).join(",")}`);
-          }
-        }
-      }
-
-      if (needsPoll && requestId) {
-          const statusUrl = `https://queue.fal.run/${falEndpoint}/requests/${requestId}/status`;
-          const responseUrl = `https://queue.fal.run/${falEndpoint}/requests/${requestId}`;
+        if (result.request_id && result.status !== "COMPLETED") {
+          const requestId = result.request_id;
+          const statusUrl = result.status_url || `https://queue.fal.run/${falEndpoint}/requests/${requestId}/status`;
+          const responseUrl = result.response_url || `https://queue.fal.run/${falEndpoint}/requests/${requestId}`;
           console.log(`[fal] Polling statusUrl=${statusUrl}`);
           console.log(`[fal] responseUrl=${responseUrl}`);
 
@@ -1350,8 +1307,8 @@ async function executeFalStep(
 
           for (let i = 0; i < maxAttempts; i++) {
             if (deadline && Date.now() > deadline - 30_000) {
-              console.log(`[fal] Approaching deadline, throwing DeadlineExceededError for ${requestId}`);
-              throw new DeadlineExceededError(requestId!, "fal");
+              console.log(`[fal] Approaching deadline, stopping poll at ${i + 1}/${maxAttempts} for ${requestId}`);
+              return { text: `[fal.ai error: Server timeout approaching — request ${requestId} is still processing on fal.ai, try again shortly]`, files: [] };
             }
 
             await new Promise((r) => setTimeout(r, pollInterval));
@@ -1456,6 +1413,27 @@ async function executeFalStep(
             console.log(`[fal] Polling timed out after ${maxAttempts * pollInterval / 1000}s for ${requestId}`);
             return { text: `[fal.ai error: Request timed out after ${maxAttempts * pollInterval / 1000}s — try a shorter duration]`, files: [] };
           }
+        } else {
+          console.log(`[fal] Got immediate result (no polling needed), keys=${Object.keys(result).join(",")}`);
+        }
+      } else {
+        const errBody = await queueRes.text().catch(() => "");
+        console.log(`[fal] Queue endpoint failed: HTTP ${queueRes.status}, body=${errBody.slice(0, 300)}`);
+        console.log(`[fal] Falling back to sync endpoint: https://fal.run/${falEndpoint}`);
+        const syncRes = await fetch(`https://fal.run/${falEndpoint}`, {
+          method: "POST",
+          headers,
+          body: bodyJson,
+          signal: AbortSignal.timeout(FAL_SUBMIT_TIMEOUT),
+        });
+
+        if (!syncRes.ok) {
+          const err = await syncRes.text();
+          return { text: `[fal.ai error: ${err.slice(0, 200)}]`, files: [] };
+        }
+
+        result = await syncRes.json();
+        console.log(`[fal] Sync result keys=${Object.keys(result).join(",")}`);
       }
 
       // Unwrap fal.ai response wrapper: { status, logs, response: { ...actualData } }
@@ -1472,7 +1450,6 @@ async function executeFalStep(
       console.log(`[fal] Final result keys: ${Object.keys(result || {}).join(", ")}`);
       return extractFalResult(result);
     } catch (err) {
-      if (err instanceof DeadlineExceededError) throw err;
       console.log(`[fal] executeFalStep error: ${err instanceof Error ? err.stack || err.message : err}`);
       return { text: `[fal.ai error: ${err instanceof Error ? err.message : "Unknown"}]`, files: [] };
     }
@@ -1547,7 +1524,6 @@ async function executeReplicateStep(
   step: StepDefinition,
   input: StepInput,
   deadline?: number,
-  externalJobId?: string,
 ): Promise<StepInput> {
   if (!step.aiModel) return input;
 
@@ -1647,44 +1623,28 @@ async function executeReplicateStep(
 
       const authHeader = { Authorization: `Bearer ${process.env.REPLICATE_API_TOKEN}` };
 
-      let result: any;
-      let predictionId: string | null = externalJobId || null;
-      let pollUrl: string | null = null;
-      let needsPoll = !!externalJobId;
+      console.log(`[replicate] Submitting prediction to ${apiUrl}`);
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          ...authHeader,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(REP_SUBMIT_TIMEOUT),
+      });
 
-      if (externalJobId) {
-        console.log(`[replicate] Resuming poll for existing prediction=${externalJobId}`);
-        pollUrl = `https://api.replicate.com/v1/predictions/${externalJobId}`;
-        result = { id: externalJobId, status: "processing" };
-      } else {
-        console.log(`[replicate] Submitting prediction to ${apiUrl}`);
-        const response = await fetch(apiUrl, {
-          method: "POST",
-          headers: {
-            ...authHeader,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-          signal: AbortSignal.timeout(REP_SUBMIT_TIMEOUT),
-        });
-
-        if (!response.ok) {
-          const err = await response.text();
-          console.log(`[replicate] Submit failed: HTTP ${response.status}, body=${err.slice(0, 300)}`);
-          return { text: `[Replicate error: ${err.slice(0, 200)}]`, files: [] };
-        }
-
-        result = await response.json();
-        console.log(`[replicate] Submit response: id=${result.id}, status=${result.status}`);
-        predictionId = result.id;
-
-        if (result.status && result.status !== "succeeded" && result.status !== "failed" && result.status !== "canceled") {
-          needsPoll = true;
-          pollUrl = result.urls?.get || `https://api.replicate.com/v1/predictions/${result.id}`;
-        }
+      if (!response.ok) {
+        const err = await response.text();
+        console.log(`[replicate] Submit failed: HTTP ${response.status}, body=${err.slice(0, 300)}`);
+        return { text: `[Replicate error: ${err.slice(0, 200)}]`, files: [] };
       }
 
-      if (needsPoll && pollUrl) {
+      let result = await response.json();
+      console.log(`[replicate] Submit response: id=${result.id}, status=${result.status}`);
+
+      if (result.status && result.status !== "succeeded" && result.status !== "failed" && result.status !== "canceled") {
+        const pollUrl = result.urls?.get || `https://api.replicate.com/v1/predictions/${result.id}`;
         console.log(`[replicate] Polling ${pollUrl}`);
 
         const maxAttempts = 180;
@@ -1693,8 +1653,8 @@ async function executeReplicateStep(
 
         for (let i = 0; i < maxAttempts; i++) {
           if (deadline && Date.now() > deadline - 30_000) {
-            console.log(`[replicate] Approaching deadline, throwing DeadlineExceededError for ${predictionId}`);
-            throw new DeadlineExceededError(predictionId!, "replicate");
+            console.log(`[replicate] Approaching deadline, stopping poll at ${i + 1}/${maxAttempts} for ${result.id}`);
+            return { text: `[Replicate error: Server timeout approaching — prediction ${result.id} is still processing, try again shortly]`, files: [] };
           }
 
           await new Promise((r) => setTimeout(r, pollInterval));
@@ -1752,7 +1712,6 @@ async function executeReplicateStep(
       console.log(`[replicate] Final status=${result.status}, output type=${typeof result.output}`);
       return extractReplicateOutput(result);
     } catch (err) {
-      if (err instanceof DeadlineExceededError) throw err;
       console.log(`[replicate] executeReplicateStep error: ${err instanceof Error ? err.stack || err.message : err}`);
       return { text: `[Replicate error: ${err instanceof Error ? err.message : "Unknown"}]`, files: [] };
     }
@@ -2320,7 +2279,6 @@ export async function executeStep(
   step: StepDefinition,
   input: StepInput,
   deadline?: number,
-  externalJobId?: string,
 ): Promise<StepResult & { _nextInput: StepInput }> {
   const start = Date.now();
 
@@ -2334,10 +2292,10 @@ export async function executeStep(
         stepOutput = await executeOutputStep(step, input);
         break;
       case "FAL_AI":
-        stepOutput = await executeFalStep(step, input, deadline, externalJobId);
+        stepOutput = await executeFalStep(step, input, deadline);
         break;
       case "REPLICATE":
-        stepOutput = await executeReplicateStep(step, input, deadline, externalJobId);
+        stepOutput = await executeReplicateStep(step, input, deadline);
         break;
       case "CUSTOM_API":
         stepOutput = await executeCustomApiStep(step, input);
@@ -2351,7 +2309,6 @@ export async function executeStep(
         break;
     }
   } catch (error) {
-    if (error instanceof DeadlineExceededError) throw error;
     stepOutput = { text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`, files: [] };
   }
 

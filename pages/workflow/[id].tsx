@@ -313,51 +313,6 @@ export default function WorkflowPage() {
     });
   };
 
-  const updateLiveStepsFromPoll = (pollSteps: any[]) => {
-    setLiveSteps((prev) => {
-      if (prev.length === 0) {
-        return pollSteps.map((s: any) => ({
-          stepId: s.stepId,
-          stepName: s.stepName,
-          stepType: s.stepType,
-          outputType: s.outputType,
-          aiModel: s.aiModel,
-          modelName: s.modelName,
-          index: s.index,
-          totalSteps: pollSteps.length,
-          status: s.status as LiveStep["status"],
-          output: s.output ?? undefined,
-          duration: s.duration ?? undefined,
-        }));
-      }
-      return prev.map((existing) => {
-        const poll = pollSteps.find((p: any) => p.stepId === existing.stepId);
-        if (!poll) return existing;
-        if (poll.status === "completed" && existing.status !== "completed") {
-          return {
-            ...existing,
-            status: "completed" as const,
-            output: poll.output,
-            duration: poll.duration,
-            outputType: poll.outputType || existing.outputType,
-          };
-        }
-        if (poll.status === "error" && existing.status !== "error") {
-          return {
-            ...existing,
-            status: "error" as const,
-            output: poll.output,
-            duration: poll.duration,
-          };
-        }
-        if (poll.status === "running" && existing.status === "pending") {
-          return { ...existing, status: "running" as const, startedAt: Date.now() };
-        }
-        return existing;
-      });
-    });
-  };
-
   const handleExecute = async () => {
     const hasAnyInput = inputSteps.some((s) => {
       const si = getStepInput(s.id);
@@ -402,15 +357,10 @@ export default function WorkflowPage() {
       };
     }
 
+    // Backward-compatible: also send legacy `input` and `files` from first input step
     const firstInput = inputSteps.length > 0 ? getStepInput(inputSteps[0].id) : { text: "", files: [] as UploadedFile[] };
 
-    const startTime = Date.now();
-    const tier = (session as any)?.user?.subscription || "FREE";
-    const isPro = tier === "PRO" || tier === "ENTERPRISE";
-    const maxTimeout = isPro ? 30 * 60 * 1000 : 15 * 60 * 1000;
-
     try {
-      // ── Submit execution ──
       const res = await fetch(`/api/workflows/${id}/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -427,9 +377,8 @@ export default function WorkflowPage() {
         }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
+      if (!res.ok && res.headers.get("content-type")?.includes("application/json")) {
+        const data = await res.json();
         if (data.error === "signup_required") {
           setTrialExpired(true);
           setExecuting(false);
@@ -444,12 +393,63 @@ export default function WorkflowPage() {
         return;
       }
 
-      const executionId = data.executionId;
-      if (data.isTrialRun) setIsTrialRun(true);
+      if (!res.ok) {
+        setError("Execution failed");
+        setExecuting(false);
+        return;
+      }
 
-      // Initialize steps as pending from the submit response
-      setLiveSteps(
-        (data.steps || []).map((s: any) => ({
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setError("Streaming not supported");
+        setExecuting(false);
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          if (!part.trim()) continue;
+
+          let eventName = "";
+          let eventData = "";
+
+          for (const line of part.split("\n")) {
+            if (line.startsWith("event: ")) eventName = line.slice(7);
+            else if (line.startsWith("data: ")) eventData = line.slice(6);
+          }
+
+          if (!eventName || !eventData) continue;
+
+          try {
+            const data = JSON.parse(eventData);
+            handleSSE(eventName, data);
+          } catch {}
+        }
+      }
+    } catch {
+      setError("An error occurred during execution");
+    } finally {
+      setExecuting(false);
+      setFinished(true);
+      if (session) updateSession();
+    }
+  };
+
+  const handleSSE = (event: string, data: any) => {
+    switch (event) {
+      case "workflow_start": {
+        const pending: LiveStep[] = data.steps.map((s: any) => ({
           stepId: s.stepId,
           stepName: s.stepName,
           stepType: s.stepType,
@@ -459,47 +459,56 @@ export default function WorkflowPage() {
           index: s.index,
           totalSteps: data.totalSteps,
           status: "pending" as const,
-        }))
-      );
-
-      // ── Poll for progress ──
-      let done = false;
-      while (!done && Date.now() - startTime < maxTimeout) {
-        await new Promise((r) => setTimeout(r, 3000));
-
-        const pollRes = await fetch(`/api/jobs/${executionId}`);
-        if (!pollRes.ok) continue;
-        const poll = await pollRes.json();
-
-        updateLiveStepsFromPoll(poll.steps);
-
-        if (poll.needsContinuation) {
-          await fetch(`/api/workflows/${id}/continue`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ executionId }),
-          }).catch(() => {});
-          continue;
-        }
-
-        if (poll.status === "COMPLETED") {
-          setCreditsUsed(poll.creditsUsed || 0);
-          done = true;
-        } else if (poll.status === "FAILED") {
-          setError(poll.error || "Execution failed");
-          done = true;
-        }
+        }));
+        setLiveSteps(pending);
+        break;
       }
-
-      if (!done) {
-        setError("Execution timed out");
+      case "step_start": {
+        setLiveSteps((prev) =>
+          prev.map((s) =>
+            s.stepId === data.stepId
+              ? { ...s, status: "running" as const, startedAt: Date.now() }
+              : s
+          )
+        );
+        break;
       }
-    } catch {
-      setError("An error occurred during execution");
-    } finally {
-      setExecuting(false);
-      setFinished(true);
-      if (session) updateSession();
+      case "step_complete": {
+        setLiveSteps((prev) =>
+          prev.map((s) =>
+            s.stepId === data.stepId
+              ? {
+                  ...s,
+                  status: "completed" as const,
+                  output: data.output,
+                  duration: data.duration,
+                  outputType: data.outputType,
+                }
+              : s
+          )
+        );
+        break;
+      }
+      case "step_error": {
+        setLiveSteps((prev) =>
+          prev.map((s) =>
+            s.stepId === data.stepId
+              ? {
+                  ...s,
+                  status: "error" as const,
+                  output: data.output,
+                  duration: data.duration,
+                }
+              : s
+          )
+        );
+        break;
+      }
+      case "workflow_complete": {
+        setCreditsUsed(data.creditsUsed || 0);
+        if (data.isTrialRun) setIsTrialRun(true);
+        break;
+      }
     }
   };
 

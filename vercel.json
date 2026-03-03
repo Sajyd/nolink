@@ -2,7 +2,7 @@
   "framework": "nextjs",
   "functions": {
     "pages/api/workflows/[id]/execute.ts": {
-      "maxDuration": 300
+      "maxDuration": 800
     }
   }
 }

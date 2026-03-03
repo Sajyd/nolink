@@ -1,7 +1,6 @@
 import {
   executeStep,
   evaluateLogicCondition,
-  DeadlineExceededError,
   type StepDefinition,
   type FileInput,
   type StepResult,
@@ -21,23 +20,11 @@ interface StepOutput {
   files: FileInput[];
 }
 
-export interface ResumeState {
-  completedStepIds: string[];
-  stepOutputs: Record<string, { text: string; files: FileInput[] }>;
-  inProgressStep?: {
-    stepId: string;
-    externalJobId: string;
-    service: "fal" | "replicate";
-  };
-}
-
 export interface GraphExecutorCallbacks {
   onStepStart?: (step: StepDefinition, visibleIndex: number, totalVisible: number) => void;
   onStepComplete?: (result: StepResult, nextInput: StepOutput, visibleIndex: number, totalVisible: number) => void;
   onStepError?: (result: StepResult, visibleIndex: number, totalVisible: number) => void;
   onIntermediateResult?: (allResults: StepResult[]) => Promise<void>;
-  onHeartbeat?: () => Promise<void>;
-  onDeadlineSaveState?: (state: ResumeState) => Promise<void>;
   isAborted?: () => boolean;
 }
 
@@ -169,19 +156,6 @@ function resolveFileBindings(
   return { ...currentInput, files: [...currentInput.files, ...extraFiles] };
 }
 
-function buildCurrentResumeState(
-  executed: Set<string>,
-  stepOutputMap: Map<string, StepOutput>,
-  inProgressStep?: ResumeState["inProgressStep"],
-): ResumeState {
-  const completedStepIds = Array.from(executed);
-  const stepOutputs: Record<string, { text: string; files: FileInput[] }> = {};
-  stepOutputMap.forEach((output, id) => {
-    stepOutputs[id] = { text: output.text, files: output.files };
-  });
-  return { completedStepIds, stepOutputs, inProgressStep };
-}
-
 /**
  * Execute a subgraph (used for while loop body).
  * Given a starting node and the full graph context, executes nodes in topological order
@@ -199,8 +173,6 @@ async function executeSubgraph(
   callbacks?: GraphExecutorCallbacks,
   visibleCounter?: { value: number },
   totalVisible?: number,
-  deadline?: number,
-  externalJobIdForStep?: string,
 ): Promise<StepOutput> {
   const queue: string[] = [startNodeId];
   const visited = new Set<string>();
@@ -239,7 +211,7 @@ async function executeSubgraph(
     }
 
     try {
-      const result = await executeStep(resolvedStep, nodeInput, deadline, externalJobIdForStep);
+      const result = await executeStep(resolvedStep, nodeInput, deadline);
       const { _nextInput, ...stepResult } = result;
       allResults.push(stepResult);
       lastOutput = _nextInput;
@@ -258,14 +230,7 @@ async function executeSubgraph(
       if (callbacks?.onIntermediateResult) {
         await callbacks.onIntermediateResult(allResults);
       }
-
-      if (callbacks?.onHeartbeat) {
-        await callbacks.onHeartbeat();
-      }
     } catch (error) {
-      if (error instanceof DeadlineExceededError) {
-        throw error;
-      }
       const errMsg = error instanceof Error ? error.message : "Unknown error";
       const stepResult: StepResult = {
         stepId: step.id,
@@ -282,6 +247,7 @@ async function executeSubgraph(
       return lastOutput;
     }
 
+    // Enqueue children except the logic gate itself (that's handled by the while loop)
     const children = adjacency.get(nodeId) || [];
     for (const child of children) {
       if (child.target !== logicGateId && !visited.has(child.target)) {
@@ -302,7 +268,6 @@ export async function executeWorkflowGraph(
   customParamMap: Record<string, string>,
   callbacks?: GraphExecutorCallbacks,
   deadline?: number,
-  resumeFrom?: ResumeState,
 ): Promise<StepResult[]> {
   const allResults: StepResult[] = [];
   const stepMap = new Map<string, StepDefinition>();
@@ -316,6 +281,8 @@ export async function executeWorkflowGraph(
   const totalVisible = visibleSteps.length;
   const visibleCounter = { value: 0 };
 
+  // Kahn's algorithm: track remaining in-degree per node.
+  // A node only becomes ready when ALL its incoming edges have been satisfied.
   const remainingInDegree = new Map<string, number>();
   for (const s of stepDefs) remainingInDegree.set(s.id, 0);
   for (const e of edges) {
@@ -324,45 +291,18 @@ export async function executeWorkflowGraph(
     }
   }
 
+  // Nodes whose branch was killed by a logic gate — they will never execute
   const skipped = new Set<string>();
+
   const executed = new Set<string>();
   const ready: string[] = [];
 
-  // Restore state from a previous partial execution
-  if (resumeFrom) {
-    for (const stepId of resumeFrom.completedStepIds) {
-      executed.add(stepId);
-    }
-    for (const [stepId, output] of Object.entries(resumeFrom.stepOutputs)) {
-      stepOutputMap.set(stepId, output);
-      customParamMap[`step_${stepId}_output`] = output.text;
-      for (const f of output.files) {
-        const key = `step_${stepId}_${f.type}`;
-        if (!customParamMap[key]) customParamMap[key] = f.url;
-      }
-    }
-    // Re-count visible steps that already completed
-    for (const sid of resumeFrom.completedStepIds) {
-      const s = stepMap.get(sid);
-      if (s && s.stepType !== "INPUT" && s.stepType !== "OUTPUT") {
-        visibleCounter.value++;
-      }
-    }
-    // Release in-degree counts for children of completed steps
-    for (const completedId of resumeFrom.completedStepIds) {
-      const children = adjacency.get(completedId) || [];
-      for (const child of children) {
-        const cur = remainingInDegree.get(child.target) ?? 0;
-        remainingInDegree.set(child.target, cur - 1);
-      }
-    }
-  }
-
+  // Seed with in-degree-0 nodes (sorted by order for determinism)
   for (const s of [...stepDefs].sort((a, b) => a.order - b.order)) {
-    if (executed.has(s.id)) continue;
-    if ((remainingInDegree.get(s.id) || 0) <= 0) ready.push(s.id);
+    if ((remainingInDegree.get(s.id) || 0) === 0) ready.push(s.id);
   }
 
+  // Helper: decrement in-degree and enqueue if ready
   function release(targetId: string) {
     if (skipped.has(targetId) || executed.has(targetId)) return;
     const cur = remainingInDegree.get(targetId) ?? 0;
@@ -373,13 +313,19 @@ export async function executeWorkflowGraph(
     }
   }
 
+  // Helper: recursively mark a node and all its descendants as skipped
   function skipBranch(nodeId: string) {
     if (skipped.has(nodeId) || executed.has(nodeId)) return;
     skipped.add(nodeId);
     const children = adjacency.get(nodeId) || [];
     for (const child of children) {
+      // Only skip if ALL parents of this child are either skipped or are the
+      // logic gate that chose not to go here. We approximate by decrementing
+      // and only skipping if the node can never become ready.
       const cur = remainingInDegree.get(child.target) ?? 0;
       remainingInDegree.set(child.target, cur - 1);
+      // If remaining is still > 0, another parent may still release it — don't skip.
+      // If remaining <= 0 and it hasn't been released to ready, skip it.
       if ((remainingInDegree.get(child.target) ?? 0) <= 0 && !ready.includes(child.target) && !executed.has(child.target)) {
         skipBranch(child.target);
       }
@@ -388,17 +334,6 @@ export async function executeWorkflowGraph(
 
   while (ready.length > 0) {
     if (callbacks?.isAborted?.()) break;
-
-    // Check deadline BEFORE starting next step to allow saving state
-    if (deadline && Date.now() > deadline - 30_000) {
-      console.log(`[graph] Deadline approaching, saving state for continuation`);
-      if (callbacks?.onDeadlineSaveState) {
-        await callbacks.onDeadlineSaveState(
-          buildCurrentResumeState(executed, stepOutputMap)
-        );
-      }
-      break;
-    }
 
     const nodeId = ready.shift()!;
     if (executed.has(nodeId) || skipped.has(nodeId)) continue;
@@ -433,11 +368,13 @@ export async function executeWorkflowGraph(
         const activeHandle = condResult ? "true" : "false";
         const killedHandle = condResult ? "false" : "true";
 
+        // Release children on the chosen handle
         for (const child of children) {
           if (child.sourceHandle === activeHandle) {
             release(child.target);
           }
         }
+        // Skip children on the unchosen handle
         for (const child of children) {
           if (child.sourceHandle === killedHandle) {
             skipBranch(child.target);
@@ -468,7 +405,6 @@ export async function executeWorkflowGraph(
               callbacks,
               visibleCounter,
               totalVisible,
-              deadline,
             );
             loopInput = bodyOutput;
 
@@ -503,14 +439,8 @@ export async function executeWorkflowGraph(
       callbacks.onStepStart(step, visibleCounter.value, totalVisible);
     }
 
-    // Determine if this step should resume an in-progress external job
-    const externalJobId =
-      resumeFrom?.inProgressStep?.stepId === step.id
-        ? resumeFrom.inProgressStep.externalJobId
-        : undefined;
-
     try {
-      const result = await executeStep(resolvedStep, currentInput, deadline, externalJobId);
+      const result = await executeStep(resolvedStep, currentInput, deadline);
       const { _nextInput, ...stepResult } = result;
       allResults.push(stepResult);
 
@@ -529,30 +459,10 @@ export async function executeWorkflowGraph(
         await callbacks.onIntermediateResult(allResults);
       }
 
-      if (callbacks?.onHeartbeat) {
-        await callbacks.onHeartbeat();
-      }
-
+      // Release all children
       const children = adjacency.get(step.id) || [];
       for (const child of children) release(child.target);
     } catch (error) {
-      // Deadline exceeded mid-step — save state with external job ID for resumption
-      if (error instanceof DeadlineExceededError) {
-        console.log(`[graph] DeadlineExceeded for step ${step.id}, saving state with jobId=${error.externalJobId}`);
-        // Remove from executed so it can be resumed
-        executed.delete(step.id);
-        if (callbacks?.onDeadlineSaveState) {
-          await callbacks.onDeadlineSaveState(
-            buildCurrentResumeState(executed, stepOutputMap, {
-              stepId: step.id,
-              externalJobId: error.externalJobId,
-              service: error.service,
-            })
-          );
-        }
-        break;
-      }
-
       const errMsg = error instanceof Error ? error.message : "Unknown error";
       const stepResult: StepResult = {
         stepId: step.id,
@@ -568,6 +478,9 @@ export async function executeWorkflowGraph(
         callbacks.onStepError(stepResult, visibleCounter.value, totalVisible);
       }
 
+      // On error, still release children so downstream nodes can attempt to run.
+      // The errored step's output won't be in stepOutputMap, so downstream
+      // mergeParentOutputs will use fallback.
       const children = adjacency.get(step.id) || [];
       for (const child of children) release(child.target);
     }
