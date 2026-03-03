@@ -1475,6 +1475,45 @@ function coerceReplicateValue(value: string): unknown {
   return value;
 }
 
+function extractReplicateOutput(result: any): StepInput {
+  const output = result.output;
+
+  if (typeof output === "string") {
+    const lc = output.toLowerCase();
+    if (lc.match(/\.(png|jpg|jpeg|webp|gif)($|\?)/)) {
+      return { text: output, files: [{ url: output, type: "image", name: "generated.png" }] };
+    }
+    if (lc.match(/\.(mp4|webm|mov)($|\?)/)) {
+      return { text: output, files: [{ url: output, type: "video", name: "generated.mp4" }] };
+    }
+    if (lc.match(/\.(mp3|wav|m4a|ogg|flac)($|\?)/)) {
+      return { text: output, files: [{ url: output, type: "audio", name: "generated.mp3" }] };
+    }
+    return { text: output, files: [] };
+  }
+  if (Array.isArray(output) && output.length > 0) {
+    const first = output[0];
+    if (typeof first === "string") {
+      const lc = first.toLowerCase();
+      if (lc.match(/\.(png|jpg|jpeg|webp|gif)($|\?)/)) {
+        return { text: first, files: output.map((u: string) => ({ url: u, type: "image", name: "generated.png" })) };
+      }
+      if (lc.match(/\.(mp4|webm|mov)($|\?)/)) {
+        return { text: first, files: [{ url: first, type: "video", name: "generated.mp4" }] };
+      }
+      if (lc.match(/\.(mp3|wav|m4a|ogg|flac)($|\?)/)) {
+        return { text: first, files: [{ url: first, type: "audio", name: "generated.mp3" }] };
+      }
+      return { text: first, files: [] };
+    }
+  }
+  if (output && typeof output === "object") {
+    return { text: JSON.stringify(output), files: [] };
+  }
+
+  return { text: JSON.stringify(result), files: [] };
+}
+
 async function executeReplicateStep(
   step: StepDefinition,
   input: StepInput
@@ -1556,6 +1595,9 @@ async function executeReplicateStep(
   }
 
   if (process.env.REPLICATE_API_TOKEN) {
+    const REP_SUBMIT_TIMEOUT = 60_000;
+    const REP_POLL_TIMEOUT = 15_000;
+
     try {
       const logParams = { ...resolvedParams };
       for (const [k, v] of Object.entries(logParams)) {
@@ -1572,59 +1614,93 @@ async function executeReplicateStep(
         ? { version: replicateVersion, input: resolvedParams }
         : { input: resolvedParams };
 
+      const authHeader = { Authorization: `Bearer ${process.env.REPLICATE_API_TOKEN}` };
+
+      console.log(`[replicate] Submitting prediction to ${apiUrl}`);
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${process.env.REPLICATE_API_TOKEN}`,
+          ...authHeader,
           "Content-Type": "application/json",
-          Prefer: "wait",
         },
         body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(REP_SUBMIT_TIMEOUT),
       });
 
       if (!response.ok) {
         const err = await response.text();
+        console.log(`[replicate] Submit failed: HTTP ${response.status}, body=${err.slice(0, 300)}`);
         return { text: `[Replicate error: ${err.slice(0, 200)}]`, files: [] };
       }
 
-      const result = await response.json();
-      const output = result.output;
+      let result = await response.json();
+      console.log(`[replicate] Submit response: id=${result.id}, status=${result.status}`);
 
-      if (typeof output === "string") {
-        const lc = output.toLowerCase();
-        if (lc.match(/\.(png|jpg|jpeg|webp|gif)($|\?)/)) {
-          return { text: output, files: [{ url: output, type: "image", name: "generated.png" }] };
-        }
-        if (lc.match(/\.(mp4|webm|mov)($|\?)/)) {
-          return { text: output, files: [{ url: output, type: "video", name: "generated.mp4" }] };
-        }
-        if (lc.match(/\.(mp3|wav|m4a|ogg|flac)($|\?)/)) {
-          return { text: output, files: [{ url: output, type: "audio", name: "generated.mp3" }] };
-        }
-        return { text: output, files: [] };
-      }
-      if (Array.isArray(output) && output.length > 0) {
-        const first = output[0];
-        if (typeof first === "string") {
-          const lc = first.toLowerCase();
-          if (lc.match(/\.(png|jpg|jpeg|webp|gif)($|\?)/)) {
-            return { text: first, files: output.map((u: string) => ({ url: u, type: "image", name: "generated.png" })) };
+      if (result.status && result.status !== "succeeded" && result.status !== "failed" && result.status !== "canceled") {
+        const pollUrl = result.urls?.get || `https://api.replicate.com/v1/predictions/${result.id}`;
+        console.log(`[replicate] Polling ${pollUrl}`);
+
+        const maxAttempts = 180;
+        const pollInterval = 3000;
+        let consecutiveErrors = 0;
+
+        for (let i = 0; i < maxAttempts; i++) {
+          await new Promise((r) => setTimeout(r, pollInterval));
+
+          let prediction: any;
+          try {
+            const pollRes = await fetch(pollUrl, {
+              headers: authHeader,
+              signal: AbortSignal.timeout(REP_POLL_TIMEOUT),
+            });
+            if (!pollRes.ok) {
+              consecutiveErrors++;
+              console.log(`[replicate] Poll ${i + 1}/${maxAttempts}: HTTP ${pollRes.status} (${consecutiveErrors} consecutive errors)`);
+              if (consecutiveErrors >= 10) {
+                return { text: `[Replicate error: Status endpoint returning ${pollRes.status} — prediction ${result.id} may still be running]`, files: [] };
+              }
+              continue;
+            }
+            prediction = await pollRes.json();
+            consecutiveErrors = 0;
+          } catch (e) {
+            consecutiveErrors++;
+            const msg = e instanceof Error ? e.message : String(e);
+            console.log(`[replicate] Poll ${i + 1}/${maxAttempts}: fetch error: ${msg} (${consecutiveErrors} consecutive errors)`);
+            if (consecutiveErrors >= 10) {
+              return { text: `[Replicate error: Cannot reach status endpoint — ${msg}]`, files: [] };
+            }
+            continue;
           }
-          if (lc.match(/\.(mp4|webm|mov)($|\?)/)) {
-            return { text: first, files: [{ url: first, type: "video", name: "generated.mp4" }] };
+
+          if (i % 10 === 0 || prediction.status === "succeeded" || prediction.status === "failed") {
+            console.log(`[replicate] Poll ${i + 1}/${maxAttempts}: status=${prediction.status}`);
           }
-          if (lc.match(/\.(mp3|wav|m4a|ogg|flac)($|\?)/)) {
-            return { text: first, files: [{ url: first, type: "audio", name: "generated.mp3" }] };
+
+          if (prediction.status === "succeeded") {
+            result = prediction;
+            break;
           }
-          return { text: first, files: [] };
+          if (prediction.status === "failed") {
+            const errMsg = prediction.error || "Prediction failed";
+            console.log(`[replicate] Prediction ${result.id} FAILED: ${typeof errMsg === "string" ? errMsg.slice(0, 200) : JSON.stringify(errMsg).slice(0, 200)}`);
+            return { text: `[Replicate error: ${typeof errMsg === "string" ? errMsg.slice(0, 300) : JSON.stringify(errMsg).slice(0, 300)}]`, files: [] };
+          }
+          if (prediction.status === "canceled") {
+            return { text: `[Replicate error: Prediction was canceled]`, files: [] };
+          }
         }
-      }
-      if (output && typeof output === "object") {
-        return { text: JSON.stringify(output), files: [] };
+
+        if (result.status !== "succeeded") {
+          console.log(`[replicate] Polling timed out after ${maxAttempts * pollInterval / 1000}s for ${result.id}`);
+          return { text: `[Replicate error: Prediction timed out after ${maxAttempts * pollInterval / 1000}s]`, files: [] };
+        }
       }
 
-      return { text: JSON.stringify(result), files: [] };
+      console.log(`[replicate] Final status=${result.status}, output type=${typeof result.output}`);
+      return extractReplicateOutput(result);
     } catch (err) {
+      console.log(`[replicate] executeReplicateStep error: ${err instanceof Error ? err.stack || err.message : err}`);
       return { text: `[Replicate error: ${err instanceof Error ? err.message : "Unknown"}]`, files: [] };
     }
   }
