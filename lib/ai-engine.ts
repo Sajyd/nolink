@@ -1254,6 +1254,7 @@ async function executeFalStep(
       };
 
       let result: any;
+      const authHeader = { Authorization: `Key ${process.env.FAL_KEY}` };
 
       const queueRes = await fetch(`https://queue.fal.run/${falEndpoint}`, {
         method: "POST",
@@ -1271,27 +1272,54 @@ async function executeFalStep(
           const maxAttempts = 180;
           const pollInterval = 3000;
           let completed = false;
+
           for (let i = 0; i < maxAttempts; i++) {
             await new Promise((r) => setTimeout(r, pollInterval));
-            const statusRes = await fetch(statusUrl, {
-              headers: { Authorization: `Key ${process.env.FAL_KEY}` },
-            });
+            const statusRes = await fetch(statusUrl, { headers: authHeader });
             if (!statusRes.ok) {
               console.log(`[fal] Poll ${i + 1}: status check failed (${statusRes.status})`);
               continue;
             }
             const statusData = await statusRes.json();
             console.log(`[fal] Poll ${i + 1}: status=${statusData.status}`);
+
             if (statusData.status === "COMPLETED") {
-              const resultRes = await fetch(responseUrl, {
-                headers: { Authorization: `Key ${process.env.FAL_KEY}` },
-              });
-              if (resultRes.ok) {
-                result = await resultRes.json();
-              } else {
-                console.log(`[fal] Result fetch failed (${resultRes.status}), using status response`);
-                if (statusData.response) result = statusData.response;
+              let fetched = false;
+
+              for (let retry = 0; retry < 3; retry++) {
+                try {
+                  const resultRes = await fetch(responseUrl, { headers: authHeader });
+                  if (resultRes.ok) {
+                    result = await resultRes.json();
+                    fetched = true;
+                    break;
+                  }
+                  console.log(`[fal] Result fetch attempt ${retry + 1} failed (${resultRes.status})`);
+                } catch (e) {
+                  console.log(`[fal] Result fetch attempt ${retry + 1} error: ${e}`);
+                }
+                if (retry < 2) await new Promise((r) => setTimeout(r, 2000));
               }
+
+              if (!fetched) {
+                console.log(`[fal] Trying status endpoint with response...`);
+                try {
+                  const fullStatusRes = await fetch(`${statusUrl}?logs=0`, { headers: authHeader });
+                  if (fullStatusRes.ok) {
+                    const fullStatus = await fullStatusRes.json();
+                    if (fullStatus.response) {
+                      result = fullStatus.response;
+                      fetched = true;
+                    }
+                  }
+                } catch {}
+              }
+
+              if (!fetched) {
+                console.log(`[fal] All result fetch attempts failed for ${requestId}`);
+                return { text: `[fal.ai error: Video completed but result could not be retrieved — try running again]`, files: [] };
+              }
+
               completed = true;
               break;
             }
@@ -1300,8 +1328,9 @@ async function executeFalStep(
               return { text: `[fal.ai error: ${typeof errMsg === "string" ? errMsg.slice(0, 300) : JSON.stringify(errMsg).slice(0, 300)}]`, files: [] };
             }
           }
+
           if (!completed) {
-            console.log(`[fal] Polling timed out after ${maxAttempts * pollInterval / 1000}s for request ${requestId}`);
+            console.log(`[fal] Polling timed out after ${maxAttempts * pollInterval / 1000}s for ${requestId}`);
             return { text: `[fal.ai error: Request timed out after ${maxAttempts * pollInterval / 1000}s — try a shorter duration]`, files: [] };
           }
         }
@@ -1321,8 +1350,12 @@ async function executeFalStep(
         result = await syncRes.json();
       }
 
-      console.log(`[fal] Result keys: ${Object.keys(result || {}).join(", ")}`);
+      if (result?.request_id && !result.images && !result.video && !result.audio && !result.output) {
+        console.log(`[fal] WARNING: result still looks like queue response:`, JSON.stringify(result).slice(0, 300));
+        return { text: `[fal.ai error: Processing completed but no result returned — check fal.ai dashboard]`, files: [] };
+      }
 
+      console.log(`[fal] Result keys: ${Object.keys(result || {}).join(", ")}`);
       return extractFalResult(result);
     } catch (err) {
       return { text: `[fal.ai error: ${err instanceof Error ? err.message : "Unknown"}]`, files: [] };
