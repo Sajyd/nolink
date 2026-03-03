@@ -10,7 +10,7 @@ import { getModelById } from "@/lib/models";
 import { serialize } from "cookie";
 
 export const config = {
-  maxDuration: 900,
+  maxDuration: 800,
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
