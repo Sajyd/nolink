@@ -1105,6 +1105,11 @@ function extractFalResult(result: any): StepInput {
     return { text: url, files: [{ url, type: "audio", name: "generated.mp3" }] };
   }
 
+  if (result.response && typeof result.response === "object") {
+    const nested = extractFalResult(result.response);
+    if (nested.files.length > 0) return nested;
+  }
+
   if (result.data) {
     const nested = extractFalResult(result.data);
     if (nested.files.length > 0) return nested;
@@ -1138,6 +1143,19 @@ function extractFalResult(result: any): StepInput {
   return { text: JSON.stringify(result), files: [] };
 }
 
+function coerceFalValue(value: string): unknown {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (value === "") return value;
+  if (/^-?\d+$/.test(value)) return parseInt(value, 10);
+  if (/^-?\d+\.\d+$/.test(value)) return parseFloat(value);
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed) || (typeof parsed === "object" && parsed !== null)) return parsed;
+  } catch {}
+  return value;
+}
+
 async function executeFalStep(
   step: StepDefinition,
   input: StepInput
@@ -1159,7 +1177,7 @@ async function executeFalStep(
       if (typeof value === "string" && value.includes("{{input}}")) {
         resolvedParams[key] = value.replace(/\{\{input\}\}/g, input.text);
       } else {
-        resolvedParams[key] = value;
+        resolvedParams[key] = coerceFalValue(value);
       }
     }
   } else if (step.params) {
@@ -1290,7 +1308,8 @@ async function executeFalStep(
                 try {
                   const resultRes = await fetch(responseUrl, { headers: authHeader });
                   if (resultRes.ok) {
-                    result = await resultRes.json();
+                    const raw = await resultRes.json();
+                    result = raw?.response && typeof raw.response === "object" ? raw.response : raw;
                     fetched = true;
                     break;
                   }
@@ -1327,6 +1346,9 @@ async function executeFalStep(
               const errMsg = statusData.error || "fal.ai request failed";
               return { text: `[fal.ai error: ${typeof errMsg === "string" ? errMsg.slice(0, 300) : JSON.stringify(errMsg).slice(0, 300)}]`, files: [] };
             }
+            if (statusData.status !== "IN_QUEUE" && statusData.status !== "IN_PROGRESS") {
+              console.log(`[fal] Poll ${i + 1}: unexpected status "${statusData.status}"`);
+            }
           }
 
           if (!completed) {
@@ -1350,7 +1372,11 @@ async function executeFalStep(
         result = await syncRes.json();
       }
 
-      if (result?.request_id && !result.images && !result.video && !result.audio && !result.output) {
+      if (result?.response && typeof result.response === "object" && !result.images && !result.video && !result.audio) {
+        result = result.response;
+      }
+
+      if (result?.request_id && !result.images && !result.video && !result.audio && !result.output && !result.image) {
         console.log(`[fal] WARNING: result still looks like queue response:`, JSON.stringify(result).slice(0, 300));
         return { text: `[fal.ai error: Processing completed but no result returned — check fal.ai dashboard]`, files: [] };
       }
