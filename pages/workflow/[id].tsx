@@ -404,16 +404,13 @@ export default function WorkflowPage() {
 
     const firstInput = inputSteps.length > 0 ? getStepInput(inputSteps[0].id) : { text: "", files: [] as UploadedFile[] };
 
-    let executionId: string | null = null;
-    let receivedComplete = false;
     const startTime = Date.now();
-
     const tier = (session as any)?.user?.subscription || "FREE";
     const isPro = tier === "PRO" || tier === "ENTERPRISE";
     const maxTimeout = isPro ? 30 * 60 * 1000 : 15 * 60 * 1000;
 
-    // ── Phase 1: SSE (real-time events until stream ends) ──
     try {
+      // ── Submit execution ──
       const res = await fetch(`/api/workflows/${id}/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -430,8 +427,9 @@ export default function WorkflowPage() {
         }),
       });
 
-      if (!res.ok && res.headers.get("content-type")?.includes("application/json")) {
-        const data = await res.json();
+      const data = await res.json();
+
+      if (!res.ok) {
         if (data.error === "signup_required") {
           setTrialExpired(true);
           setExecuting(false);
@@ -446,111 +444,12 @@ export default function WorkflowPage() {
         return;
       }
 
-      if (!res.ok) {
-        setError("Execution failed");
-        setExecuting(false);
-        return;
-      }
+      const executionId = data.executionId;
+      if (data.isTrialRun) setIsTrialRun(true);
 
-      const reader = res.body?.getReader();
-      if (!reader) {
-        setError("Streaming not supported");
-        setExecuting(false);
-        return;
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
-
-        for (const part of parts) {
-          if (!part.trim()) continue;
-
-          let eventName = "";
-          let eventData = "";
-
-          for (const line of part.split("\n")) {
-            if (line.startsWith("event: ")) eventName = line.slice(7);
-            else if (line.startsWith("data: ")) eventData = line.slice(6);
-          }
-
-          if (!eventName || !eventData) continue;
-
-          try {
-            const data = JSON.parse(eventData);
-            handleSSE(eventName, data);
-            if (eventName === "workflow_start" && data.executionId) {
-              executionId = data.executionId;
-            }
-            if (eventName === "workflow_complete" && !data.needsContinuation) {
-              receivedComplete = true;
-            }
-          } catch {}
-        }
-      }
-    } catch {
-      // Network error or stream aborted — fall through to polling
-    }
-
-    // ── Phase 2: Polling fallback (if SSE died without completing) ──
-    if (!receivedComplete && executionId) {
-      try {
-        while (Date.now() - startTime < maxTimeout) {
-          await new Promise((r) => setTimeout(r, 3000));
-
-          const pollRes = await fetch(`/api/jobs/${executionId}`);
-          if (!pollRes.ok) continue;
-          const data = await pollRes.json();
-
-          updateLiveStepsFromPoll(data.steps);
-
-          if (data.needsContinuation) {
-            await fetch(`/api/workflows/${id}/continue`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ executionId }),
-            }).catch(() => {});
-            continue;
-          }
-
-          if (data.status === "COMPLETED") {
-            setCreditsUsed(data.creditsUsed || 0);
-            receivedComplete = true;
-            break;
-          }
-
-          if (data.status === "FAILED") {
-            setError(data.error || "Execution failed");
-            receivedComplete = true;
-            break;
-          }
-        }
-
-        if (!receivedComplete) {
-          setError("Execution timed out");
-        }
-      } catch {
-        setError("An error occurred while checking execution status");
-      }
-    }
-
-    setExecuting(false);
-    setFinished(true);
-    if (session) updateSession();
-  };
-
-  const handleSSE = (event: string, data: any) => {
-    switch (event) {
-      case "workflow_start": {
-        const pending: LiveStep[] = data.steps.map((s: any) => ({
+      // Initialize steps as pending from the submit response
+      setLiveSteps(
+        (data.steps || []).map((s: any) => ({
           stepId: s.stepId,
           stepName: s.stepName,
           stepType: s.stepType,
@@ -560,56 +459,47 @@ export default function WorkflowPage() {
           index: s.index,
           totalSteps: data.totalSteps,
           status: "pending" as const,
-        }));
-        setLiveSteps(pending);
-        break;
+        }))
+      );
+
+      // ── Poll for progress ──
+      let done = false;
+      while (!done && Date.now() - startTime < maxTimeout) {
+        await new Promise((r) => setTimeout(r, 3000));
+
+        const pollRes = await fetch(`/api/jobs/${executionId}`);
+        if (!pollRes.ok) continue;
+        const poll = await pollRes.json();
+
+        updateLiveStepsFromPoll(poll.steps);
+
+        if (poll.needsContinuation) {
+          await fetch(`/api/workflows/${id}/continue`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ executionId }),
+          }).catch(() => {});
+          continue;
+        }
+
+        if (poll.status === "COMPLETED") {
+          setCreditsUsed(poll.creditsUsed || 0);
+          done = true;
+        } else if (poll.status === "FAILED") {
+          setError(poll.error || "Execution failed");
+          done = true;
+        }
       }
-      case "step_start": {
-        setLiveSteps((prev) =>
-          prev.map((s) =>
-            s.stepId === data.stepId
-              ? { ...s, status: "running" as const, startedAt: Date.now() }
-              : s
-          )
-        );
-        break;
+
+      if (!done) {
+        setError("Execution timed out");
       }
-      case "step_complete": {
-        setLiveSteps((prev) =>
-          prev.map((s) =>
-            s.stepId === data.stepId
-              ? {
-                  ...s,
-                  status: "completed" as const,
-                  output: data.output,
-                  duration: data.duration,
-                  outputType: data.outputType,
-                }
-              : s
-          )
-        );
-        break;
-      }
-      case "step_error": {
-        setLiveSteps((prev) =>
-          prev.map((s) =>
-            s.stepId === data.stepId
-              ? {
-                  ...s,
-                  status: "error" as const,
-                  output: data.output,
-                  duration: data.duration,
-                }
-              : s
-          )
-        );
-        break;
-      }
-      case "workflow_complete": {
-        setCreditsUsed(data.creditsUsed || 0);
-        if (data.isTrialRun) setIsTrialRun(true);
-        break;
-      }
+    } catch {
+      setError("An error occurred during execution");
+    } finally {
+      setExecuting(false);
+      setFinished(true);
+      if (session) updateSession();
     }
   };
 
