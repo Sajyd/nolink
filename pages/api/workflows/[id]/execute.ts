@@ -9,6 +9,10 @@ import { estimateWorkflowCost } from "@/lib/ai-engine";
 import { getModelById } from "@/lib/models";
 import { serialize } from "cookie";
 
+export const config = {
+  maxDuration: 300,
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -90,6 +94,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   let aborted = false;
   req.on("close", () => { aborted = true; });
+
+  const keepAlive = setInterval(() => {
+    if (!aborted) res.write(`: keep-alive\n\n`);
+  }, 15_000);
 
   const execution = await prisma.execution.create({
     data: {
@@ -264,5 +272,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
+  clearInterval(keepAlive);
   res.end();
 }
