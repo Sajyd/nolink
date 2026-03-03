@@ -1160,7 +1160,8 @@ function coerceFalValue(value: string): unknown {
 
 async function executeFalStep(
   step: StepDefinition,
-  input: StepInput
+  input: StepInput,
+  deadline?: number,
 ): Promise<StepInput> {
   if (!step.aiModel) return input;
 
@@ -1305,6 +1306,11 @@ async function executeFalStep(
           let consecutiveErrors = 0;
 
           for (let i = 0; i < maxAttempts; i++) {
+            if (deadline && Date.now() > deadline - 30_000) {
+              console.log(`[fal] Approaching deadline, stopping poll at ${i + 1}/${maxAttempts} for ${requestId}`);
+              return { text: `[fal.ai error: Server timeout approaching — request ${requestId} is still processing on fal.ai, try again shortly]`, files: [] };
+            }
+
             await new Promise((r) => setTimeout(r, pollInterval));
 
             let statusData: any;
@@ -1516,7 +1522,8 @@ function extractReplicateOutput(result: any): StepInput {
 
 async function executeReplicateStep(
   step: StepDefinition,
-  input: StepInput
+  input: StepInput,
+  deadline?: number,
 ): Promise<StepInput> {
   if (!step.aiModel) return input;
 
@@ -1645,6 +1652,11 @@ async function executeReplicateStep(
         let consecutiveErrors = 0;
 
         for (let i = 0; i < maxAttempts; i++) {
+          if (deadline && Date.now() > deadline - 30_000) {
+            console.log(`[replicate] Approaching deadline, stopping poll at ${i + 1}/${maxAttempts} for ${result.id}`);
+            return { text: `[Replicate error: Server timeout approaching — prediction ${result.id} is still processing, try again shortly]`, files: [] };
+          }
+
           await new Promise((r) => setTimeout(r, pollInterval));
 
           let prediction: any;
@@ -2265,7 +2277,8 @@ export function evaluateLogicCondition(
 
 export async function executeStep(
   step: StepDefinition,
-  input: StepInput
+  input: StepInput,
+  deadline?: number,
 ): Promise<StepResult & { _nextInput: StepInput }> {
   const start = Date.now();
 
@@ -2279,10 +2292,10 @@ export async function executeStep(
         stepOutput = await executeOutputStep(step, input);
         break;
       case "FAL_AI":
-        stepOutput = await executeFalStep(step, input);
+        stepOutput = await executeFalStep(step, input, deadline);
         break;
       case "REPLICATE":
-        stepOutput = await executeReplicateStep(step, input);
+        stepOutput = await executeReplicateStep(step, input, deadline);
         break;
       case "CUSTOM_API":
         stepOutput = await executeCustomApiStep(step, input);

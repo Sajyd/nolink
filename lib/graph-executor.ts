@@ -211,7 +211,7 @@ async function executeSubgraph(
     }
 
     try {
-      const result = await executeStep(resolvedStep, nodeInput);
+      const result = await executeStep(resolvedStep, nodeInput, deadline);
       const { _nextInput, ...stepResult } = result;
       allResults.push(stepResult);
       lastOutput = _nextInput;
@@ -267,6 +267,7 @@ export async function executeWorkflowGraph(
   perStepInputMap: Record<string, StepOutput>,
   customParamMap: Record<string, string>,
   callbacks?: GraphExecutorCallbacks,
+  deadline?: number,
 ): Promise<StepResult[]> {
   const allResults: StepResult[] = [];
   const stepMap = new Map<string, StepDefinition>();
@@ -439,7 +440,7 @@ export async function executeWorkflowGraph(
     }
 
     try {
-      const result = await executeStep(resolvedStep, currentInput);
+      const result = await executeStep(resolvedStep, currentInput, deadline);
       const { _nextInput, ...stepResult } = result;
       allResults.push(stepResult);
 

@@ -10,7 +10,7 @@ import { getModelById } from "@/lib/models";
 import { serialize } from "cookie";
 
 export const config = {
-  maxDuration: 300,
+  maxDuration: 900,
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -209,6 +209,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const edgeList = (workflow.edges as { source: string; target: string; sourceHandle?: string; targetHandle?: string }[] | null) || [];
 
+  const deadline = Date.now() + (config.maxDuration - 30) * 1000;
+
   const allResults = await executeWorkflowGraph(
     stepDefs,
     edgeList,
@@ -237,6 +239,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         failed = true;
       },
     },
+    deadline,
   );
 
   if (!aborted) {

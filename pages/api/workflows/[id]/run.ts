@@ -12,6 +12,10 @@ import { executeWorkflowGraph } from "@/lib/graph-executor";
 import { deductCredits, checkBalance } from "@/lib/credits";
 import { estimateWorkflowCost } from "@/lib/ai-engine";
 
+export const config = {
+  maxDuration: 900,
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -193,6 +197,8 @@ async function runWorkflowInBackground(
 
   const edgeList = (workflow.edges as { source: string; target: string; sourceHandle?: string; targetHandle?: string }[] | null) || [];
 
+  const deadline = Date.now() + (config.maxDuration - 30) * 1000;
+
   const allResults = await executeWorkflowGraph(
     stepDefs,
     edgeList,
@@ -210,6 +216,7 @@ async function runWorkflowInBackground(
         failed = true;
       },
     },
+    deadline,
   );
 
   try {
