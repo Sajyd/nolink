@@ -2,15 +2,16 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { type StepDefinition, type StepCustomParam, type FileInput, type StepResult } from "@/lib/ai-engine";
-import { executeWorkflowGraph } from "@/lib/graph-executor";
+import { executeWorkflowGraph, type ResumeState } from "@/lib/graph-executor";
 import { deductCredits, checkBalance } from "@/lib/credits";
 import { estimateWorkflowCost } from "@/lib/ai-engine";
 import { getModelById } from "@/lib/models";
 import { serialize } from "cookie";
 
 export const config = {
-  maxDuration: 800,
+  maxDuration: 900,
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -106,8 +107,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       status: "RUNNING",
       inputs: { text: input || "", files: fileInputs.map((f) => ({ ...f })) } as any,
       creditsUsed: isAnonymous ? 0 : cost,
+      lastHeartbeat: new Date(),
     },
   });
+
+  // Heartbeat: update DB every 10s so the poll endpoint can detect stalls
+  const heartbeatInterval = setInterval(() => {
+    prisma.execution.update({
+      where: { id: execution.id },
+      data: { lastHeartbeat: new Date() },
+    }).catch(() => {});
+  }, 10_000);
 
   const stepDefs: StepDefinition[] = workflow.steps.map((s) => {
     const config = (s.config as Record<string, unknown>) || {};
@@ -184,7 +194,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const initialInput = { text: input || "", files: fileInputs };
   let failed = false;
+  let deadlineSaved = false;
   const customParamMap: Record<string, string> = {};
+  const allResults: (StepResult & { _nextInput?: { text: string; files: FileInput[] } })[] = [];
 
   const inputSteps = sortedSteps.filter((s) => s.stepType === "INPUT");
   inputSteps.forEach((step, idx) => {
@@ -212,7 +224,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const functionTimeout = parseInt(process.env.FUNCTION_TIMEOUT_SECONDS || "300", 10);
   const deadline = Date.now() + (functionTimeout - 30) * 1000;
 
-  const allResults = await executeWorkflowGraph(
+  const graphResults = await executeWorkflowGraph(
     stepDefs,
     edgeList,
     initialInput,
@@ -232,48 +244,96 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           totalSteps: total,
         });
       },
-      onStepComplete: (result, _nextInput, idx, total) => {
+      onStepComplete: (result, nextInput, idx, total) => {
         send("step_complete", { ...result, index: idx, totalSteps: total });
+        allResults.push({ ...result, _nextInput: nextInput });
+        // Persist intermediate results to DB for polling fallback
+        prisma.execution.update({
+          where: { id: execution.id },
+          data: {
+            stepResults: allResults.map((r) => ({ ...r })) as any,
+            lastHeartbeat: new Date(),
+          },
+        }).catch(() => {});
       },
       onStepError: (result, idx, total) => {
         send("step_error", { ...result, index: idx, totalSteps: total });
+        allResults.push(result);
         failed = true;
+        prisma.execution.update({
+          where: { id: execution.id },
+          data: {
+            stepResults: allResults.map((r) => ({ ...r })) as any,
+            lastHeartbeat: new Date(),
+          },
+        }).catch(() => {});
+      },
+      onHeartbeat: async () => {
+        await prisma.execution.update({
+          where: { id: execution.id },
+          data: { lastHeartbeat: new Date() },
+        }).catch(() => {});
+      },
+      onDeadlineSaveState: async (state: ResumeState) => {
+        deadlineSaved = true;
+        console.log(`[execute] Saving resume state for execution ${execution.id}`);
+        await prisma.execution.update({
+          where: { id: execution.id },
+          data: {
+            resumeState: state as any,
+            stepResults: allResults.map((r) => ({ ...r })) as any,
+            lastHeartbeat: new Date(),
+          },
+        }).catch(() => {});
       },
     },
     deadline,
   );
 
+  clearInterval(heartbeatInterval);
+
   if (!aborted) {
-    try {
-      if (!isAnonymous && cost > 0 && !failed) {
-        await deductCredits(session.user.id, workflow.id, cost, baseCost);
-      }
-
-      if (isAnonymous && !failed) {
-        await prisma.workflow.update({
-          where: { id: workflow.id },
-          data: { totalUses: { increment: 1 } },
-        });
-      }
-
-      await prisma.execution.update({
-        where: { id: execution.id },
-        data: {
-          status: failed ? "FAILED" : "COMPLETED",
-          outputs: allResults[allResults.length - 1]
-            ? { final: allResults[allResults.length - 1].output }
-            : undefined,
-          stepResults: allResults as any,
-          completedAt: new Date(),
-        },
+    if (deadlineSaved) {
+      // Execution was paused due to deadline — don't finalize, let continue endpoint resume
+      send("workflow_complete", {
+        creditsUsed: 0,
+        status: "RUNNING",
+        isTrialRun: isAnonymous,
+        needsContinuation: true,
       });
-    } catch {}
+    } else {
+      try {
+        if (!isAnonymous && cost > 0 && !failed) {
+          await deductCredits(session.user.id, workflow.id, cost, baseCost);
+        }
 
-    send("workflow_complete", {
-      creditsUsed: isAnonymous ? 0 : (failed ? 0 : cost),
-      status: failed ? "FAILED" : "COMPLETED",
-      isTrialRun: isAnonymous,
-    });
+        if (isAnonymous && !failed) {
+          await prisma.workflow.update({
+            where: { id: workflow.id },
+            data: { totalUses: { increment: 1 } },
+          });
+        }
+
+        await prisma.execution.update({
+          where: { id: execution.id },
+          data: {
+            status: failed ? "FAILED" : "COMPLETED",
+            outputs: graphResults[graphResults.length - 1]
+              ? { final: graphResults[graphResults.length - 1].output }
+              : undefined,
+            stepResults: allResults.map((r) => ({ ...r })) as any,
+            completedAt: new Date(),
+            resumeState: Prisma.DbNull,
+          },
+        });
+      } catch {}
+
+      send("workflow_complete", {
+        creditsUsed: isAnonymous ? 0 : (failed ? 0 : cost),
+        status: failed ? "FAILED" : "COMPLETED",
+        isTrialRun: isAnonymous,
+      });
+    }
   }
 
   clearInterval(keepAlive);

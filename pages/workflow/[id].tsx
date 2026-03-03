@@ -313,6 +313,51 @@ export default function WorkflowPage() {
     });
   };
 
+  const updateLiveStepsFromPoll = (pollSteps: any[]) => {
+    setLiveSteps((prev) => {
+      if (prev.length === 0) {
+        return pollSteps.map((s: any) => ({
+          stepId: s.stepId,
+          stepName: s.stepName,
+          stepType: s.stepType,
+          outputType: s.outputType,
+          aiModel: s.aiModel,
+          modelName: s.modelName,
+          index: s.index,
+          totalSteps: pollSteps.length,
+          status: s.status as LiveStep["status"],
+          output: s.output ?? undefined,
+          duration: s.duration ?? undefined,
+        }));
+      }
+      return prev.map((existing) => {
+        const poll = pollSteps.find((p: any) => p.stepId === existing.stepId);
+        if (!poll) return existing;
+        if (poll.status === "completed" && existing.status !== "completed") {
+          return {
+            ...existing,
+            status: "completed" as const,
+            output: poll.output,
+            duration: poll.duration,
+            outputType: poll.outputType || existing.outputType,
+          };
+        }
+        if (poll.status === "error" && existing.status !== "error") {
+          return {
+            ...existing,
+            status: "error" as const,
+            output: poll.output,
+            duration: poll.duration,
+          };
+        }
+        if (poll.status === "running" && existing.status === "pending") {
+          return { ...existing, status: "running" as const, startedAt: Date.now() };
+        }
+        return existing;
+      });
+    });
+  };
+
   const handleExecute = async () => {
     const hasAnyInput = inputSteps.some((s) => {
       const si = getStepInput(s.id);
@@ -357,9 +402,17 @@ export default function WorkflowPage() {
       };
     }
 
-    // Backward-compatible: also send legacy `input` and `files` from first input step
     const firstInput = inputSteps.length > 0 ? getStepInput(inputSteps[0].id) : { text: "", files: [] as UploadedFile[] };
 
+    let executionId: string | null = null;
+    let receivedComplete = false;
+    const startTime = Date.now();
+
+    const tier = (session as any)?.user?.subscription || "FREE";
+    const isPro = tier === "PRO" || tier === "ENTERPRISE";
+    const maxTimeout = isPro ? 30 * 60 * 1000 : 15 * 60 * 1000;
+
+    // ── Phase 1: SSE (real-time events until stream ends) ──
     try {
       const res = await fetch(`/api/workflows/${id}/execute`, {
         method: "POST",
@@ -434,16 +487,64 @@ export default function WorkflowPage() {
           try {
             const data = JSON.parse(eventData);
             handleSSE(eventName, data);
+            if (eventName === "workflow_start" && data.executionId) {
+              executionId = data.executionId;
+            }
+            if (eventName === "workflow_complete" && !data.needsContinuation) {
+              receivedComplete = true;
+            }
           } catch {}
         }
       }
     } catch {
-      setError("An error occurred during execution");
-    } finally {
-      setExecuting(false);
-      setFinished(true);
-      if (session) updateSession();
+      // Network error or stream aborted — fall through to polling
     }
+
+    // ── Phase 2: Polling fallback (if SSE died without completing) ──
+    if (!receivedComplete && executionId) {
+      try {
+        while (Date.now() - startTime < maxTimeout) {
+          await new Promise((r) => setTimeout(r, 3000));
+
+          const pollRes = await fetch(`/api/jobs/${executionId}`);
+          if (!pollRes.ok) continue;
+          const data = await pollRes.json();
+
+          updateLiveStepsFromPoll(data.steps);
+
+          if (data.needsContinuation) {
+            await fetch(`/api/workflows/${id}/continue`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ executionId }),
+            }).catch(() => {});
+            continue;
+          }
+
+          if (data.status === "COMPLETED") {
+            setCreditsUsed(data.creditsUsed || 0);
+            receivedComplete = true;
+            break;
+          }
+
+          if (data.status === "FAILED") {
+            setError(data.error || "Execution failed");
+            receivedComplete = true;
+            break;
+          }
+        }
+
+        if (!receivedComplete) {
+          setError("Execution timed out");
+        }
+      } catch {
+        setError("An error occurred while checking execution status");
+      }
+    }
+
+    setExecuting(false);
+    setFinished(true);
+    if (session) updateSession();
   };
 
   const handleSSE = (event: string, data: any) => {

@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
 import { getModelById } from "@/lib/models";
+import { EXECUTION_TIMEOUT_MS } from "@/lib/constants";
+
+const HEARTBEAT_STALE_MS = 30_000;
 
 export default async function handler(
   req: NextApiRequest,
@@ -13,10 +16,6 @@ export default async function handler(
   }
 
   const session = await getServerSession(req, res, authOptions);
-  if (!session) {
-    return res.status(401).json({ error: "Authentication required" });
-  }
-
   const { jobId } = req.query;
 
   const execution = await prisma.execution.findUnique({
@@ -32,8 +31,15 @@ export default async function handler(
     return res.status(404).json({ error: "Job not found" });
   }
 
-  if (execution.userId !== session.user.id) {
-    return res.status(403).json({ error: "Forbidden" });
+  // Allow anonymous access for anonymous executions (userId is null, secured by CUID)
+  // For authenticated executions, require ownership
+  if (execution.userId) {
+    if (!session) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    if (execution.userId !== session.user.id) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
   }
 
   const visibleSteps = execution.workflow.steps.filter(
@@ -71,6 +77,19 @@ export default async function handler(
   const completedSteps = steps.filter((s) => s.status === "completed").length;
   const totalSteps = steps.length;
 
+  // Detect stalled execution: RUNNING but heartbeat is stale
+  const heartbeatStale =
+    execution.status === "RUNNING" &&
+    (!execution.lastHeartbeat ||
+      Date.now() - execution.lastHeartbeat.getTime() > HEARTBEAT_STALE_MS);
+
+  const needsContinuation = heartbeatStale && execution.resumeState != null;
+
+  // Tier timeout
+  const tier = session?.user?.subscription || "FREE";
+  const maxTimeoutMs = EXECUTION_TIMEOUT_MS[tier] || EXECUTION_TIMEOUT_MS.FREE;
+  const elapsedMs = Date.now() - execution.startedAt.getTime();
+
   const response: Record<string, any> = {
     jobId: execution.id,
     status: execution.status,
@@ -85,6 +104,9 @@ export default async function handler(
     creditsUsed: execution.creditsUsed,
     startedAt: execution.startedAt,
     completedAt: execution.completedAt,
+    elapsedMs,
+    maxTimeoutMs,
+    needsContinuation,
   };
 
   if (execution.status === "COMPLETED" || execution.status === "FAILED") {
