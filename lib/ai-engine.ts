@@ -1116,7 +1116,11 @@ async function executeFalStep(
   }
 
   const modelParamKeys = new Set(model?.params?.map((p) => p.key) ?? []);
-  const acceptsParam = (k: string) => isCustom || modelParamKeys.has(k);
+  const customParamKeys = isCustom
+    ? new Set((step.customFalParams || []).map((p) => p.key))
+    : null;
+  const acceptsParam = (k: string) =>
+    customParamKeys ? customParamKeys.has(k) : modelParamKeys.has(k);
 
   const imageFiles = getFilesByType(input.files, "image");
   const audioFiles = getFilesByType(input.files, "audio");
@@ -1356,7 +1360,11 @@ async function executeReplicateStep(
   const videoFiles = getFilesByType(input.files, "video");
 
   const modelParamKeys = new Set(model?.params?.map((p) => p.key) ?? []);
-  const acceptsParam = (k: string) => isCustom || modelParamKeys.has(k);
+  const customRepParamKeys = isCustom
+    ? new Set((step.customReplicateParams || []).map((p) => p.key))
+    : null;
+  const acceptsParam = (k: string) =>
+    customRepParamKeys ? customRepParamKeys.has(k) : modelParamKeys.has(k);
 
   if (imageFiles.length > 0 && !resolvedParams.image && acceptsParam("image")) {
     resolvedParams.image = imageFiles[0].url;
