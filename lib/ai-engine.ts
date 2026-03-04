@@ -84,6 +84,51 @@ export interface StepResult {
   tokensUsed?: number;
   duration: number;
   actualCost?: number;
+  outputDurationSec?: number;
+}
+
+export interface StepPricingInfo {
+  costPerUse: number;
+  costPerSecond: number | null;
+  modelName: string;
+}
+
+export function getStepPricingInfo(step: {
+  aiModel: string | null;
+  stepType: string;
+  config?: Record<string, unknown> | null;
+  params?: Record<string, unknown> | null;
+}): StepPricingInfo | null {
+  if (!step.aiModel) return null;
+
+  if (step.aiModel === "fal-custom") {
+    const cfg = step.config || {};
+    const cps = cfg.customFalCostPerSecond as number | undefined;
+    return {
+      costPerUse: (cfg.customFalPrice as number) || 0,
+      costPerSecond: cps || null,
+      modelName: (cfg.customFalEndpoint as string) || "Custom fal.ai",
+    };
+  }
+
+  if (step.aiModel === "rep-custom") {
+    const cfg = step.config || {};
+    const cps = cfg.customReplicateCostPerSecond as number | undefined;
+    return {
+      costPerUse: (cfg.customReplicatePrice as number) || 0,
+      costPerSecond: cps || null,
+      modelName: (cfg.customReplicateModel as string) || "Custom Replicate",
+    };
+  }
+
+  const model = getModelById(step.aiModel);
+  if (!model) return null;
+
+  return {
+    costPerUse: model.costPerUse,
+    costPerSecond: model.costPerSecond || null,
+    modelName: model.name,
+  };
 }
 
 interface StepInput {
@@ -638,6 +683,27 @@ function parseAudioDuration(buffer: Buffer, contentType: string): number | undef
   return undefined;
 }
 
+function parseVideoDuration(buffer: Buffer): number | undefined {
+  // MP4/M4V: search for 'mvhd' atom and read timescale + duration
+  for (let i = 0; i < buffer.length - 24; i++) {
+    if (buffer[i] === 0x6D && buffer[i + 1] === 0x76 && buffer[i + 2] === 0x68 && buffer[i + 3] === 0x64) {
+      const version = buffer[i + 4];
+      if (version === 0 && i + 24 <= buffer.length) {
+        const timescale = buffer.readUInt32BE(i + 16);
+        const dur = buffer.readUInt32BE(i + 20);
+        if (timescale > 0 && dur > 0) return dur / timescale;
+      } else if (version === 1 && i + 36 <= buffer.length) {
+        const timescale = buffer.readUInt32BE(i + 24);
+        const hi = buffer.readUInt32BE(i + 28);
+        const lo = buffer.readUInt32BE(i + 32);
+        const dur = hi * 0x100000000 + lo;
+        if (timescale > 0 && dur > 0) return dur / timescale;
+      }
+    }
+  }
+  return undefined;
+}
+
 interface PersistMediaResult {
   url: string;
   mediaDurationSec?: number;
@@ -668,6 +734,11 @@ async function persistMediaToS3(
       mediaDurationSec = parseAudioDuration(buffer, responseContentType);
       if (mediaDurationSec) {
         console.log(`[s3] Parsed audio duration: ${mediaDurationSec.toFixed(1)}s (${responseContentType}, ${buffer.length} bytes)`);
+      }
+    } else if (mediaType === "video") {
+      mediaDurationSec = parseVideoDuration(buffer);
+      if (mediaDurationSec) {
+        console.log(`[s3] Parsed video duration: ${mediaDurationSec.toFixed(1)}s (${responseContentType}, ${buffer.length} bytes)`);
       }
     }
 
@@ -2610,6 +2681,9 @@ export async function executeStep(
     outputType: step.outputType,
     duration: Date.now() - start,
     actualCost: actualCost > 0 ? actualCost : undefined,
+    outputDurationSec: outputDurationSec && outputDurationSec > 0
+      ? Math.round(outputDurationSec * 10) / 10
+      : undefined,
     _nextInput: stepOutput,
   };
 }

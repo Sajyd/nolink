@@ -47,6 +47,12 @@ interface InputParameter {
   required: boolean;
 }
 
+interface StepPricing {
+  costPerUse: number;
+  costPerSecond: number;
+  modelName: string;
+}
+
 interface Step {
   id: string;
   order: number;
@@ -61,6 +67,7 @@ interface Step {
     inputParameters?: InputParameter[];
     [key: string]: unknown;
   };
+  _pricingInfo?: StepPricing | null;
 }
 
 interface Workflow {
@@ -76,6 +83,7 @@ interface Workflow {
   creator: { id: string; name: string; image: string | null };
   steps: Step[];
   hasPerSecondPricing?: boolean;
+  perSecondStepCount?: number;
 }
 
 interface LiveStep {
@@ -91,6 +99,10 @@ interface LiveStep {
   output?: string;
   duration?: number;
   startedAt?: number;
+  costPerSecond?: number | null;
+  costPerUse?: number | null;
+  actualCost?: number;
+  outputDurationSec?: number;
 }
 
 interface UploadedFile {
@@ -561,6 +573,8 @@ export default function WorkflowPage() {
           index: s.index,
           totalSteps: data.totalSteps,
           status: "pending" as const,
+          costPerSecond: s.costPerSecond || null,
+          costPerUse: s.costPerUse || null,
         }));
         setLiveSteps(pending);
         break;
@@ -585,6 +599,8 @@ export default function WorkflowPage() {
                   output: data.output,
                   duration: data.duration,
                   outputType: data.outputType,
+                  actualCost: data.actualCost,
+                  outputDurationSec: data.outputDurationSec,
                 }
               : s
           )
@@ -670,9 +686,20 @@ export default function WorkflowPage() {
               <span className="flex items-center gap-1 text-sm font-semibold text-brand-600">
                 <Zap className="w-3.5 h-3.5" />
                 {workflow.hasPerSecondPricing
-                  ? `From ${workflow.priceInNolinks} NL per run`
+                  ? `From ${workflow.priceInNolinks} NL`
                   : `${workflow.priceInNolinks} NL per run`}
               </span>
+              {workflow.hasPerSecondPricing && workflow.perSecondStepCount && (
+                <span className="text-[11px] text-gray-400 font-medium">
+                  + {workflow.perSecondStepCount} {workflow.perSecondStepCount === 1 ? "step" : "steps"} priced per second
+                  {(() => {
+                    const pricedSteps = workflow.steps.filter(s => s._pricingInfo);
+                    if (pricedSteps.length === 0) return null;
+                    const rates = pricedSteps.map(s => `${s._pricingInfo!.costPerSecond} NL/s`);
+                    return ` (${rates.join(", ")})`;
+                  })()}
+                </span>
+              )}
             </div>
             <h1 className="text-3xl font-bold">{workflow.name}</h1>
             <p className="mt-2 text-gray-600 dark:text-gray-400">
@@ -1154,7 +1181,7 @@ export default function WorkflowPage() {
               {!session
                 ? "Try it free — no account needed"
                 : workflow.hasPerSecondPricing
-                  ? `Starting from ${workflow.priceInNolinks} NL — final cost varies with output duration`
+                  ? `Base: ${workflow.priceInNolinks} NL + per-second steps billed by output duration`
                   : `This will cost ${workflow.priceInNolinks} Nolinks`}
             </p>
             <button
@@ -1570,7 +1597,7 @@ while True:
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Cost</p>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
                 {workflow.hasPerSecondPricing
-                  ? `From ${workflow.priceInNolinks} NL / run`
+                  ? `From ${workflow.priceInNolinks} NL`
                   : `${workflow.priceInNolinks} NL / run`}
               </p>
             </div>
@@ -1751,8 +1778,17 @@ function LiveStepCard({ step }: { step: LiveStep }) {
             </span>
           )}
         </h3>
-        <span className="text-[10px] text-gray-400 shrink-0 ml-2">
-          {step.duration != null ? `${step.duration}ms` : ""}
+        <span className="flex items-center gap-2 shrink-0 ml-2">
+          {step.outputDurationSec != null && step.costPerSecond && (
+            <span className="text-[10px] font-medium text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 px-1.5 py-0.5 rounded">
+              {step.outputDurationSec}s &times; {step.costPerSecond} NL/s = {step.actualCost} NL
+            </span>
+          )}
+          {step.duration != null && (
+            <span className="text-[10px] text-gray-400">
+              {step.duration}ms
+            </span>
+          )}
         </span>
       </div>
 

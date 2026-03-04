@@ -2,7 +2,22 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
-import { estimateWorkflowCost, hasPerSecondPricingSteps, type StepDefinition } from "@/lib/ai-engine";
+import { estimateWorkflowCost, hasPerSecondPricingSteps, getStepPricingInfo, type StepDefinition } from "@/lib/ai-engine";
+
+function annotateWorkflow(workflow: any) {
+  const hasPerSecondPricing = hasPerSecondPricingSteps(workflow.steps as unknown as StepDefinition[]);
+  const steps = workflow.steps.map((s: any) => {
+    const pricing = getStepPricingInfo(s);
+    return {
+      ...s,
+      _pricingInfo: pricing?.costPerSecond
+        ? { costPerUse: pricing.costPerUse, costPerSecond: pricing.costPerSecond, modelName: pricing.modelName }
+        : null,
+    };
+  });
+  const perSecondStepCount = steps.filter((s: any) => s._pricingInfo).length;
+  return { ...workflow, steps, hasPerSecondPricing, perSecondStepCount };
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
@@ -35,8 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(403).json({ error: "This workflow is private" });
           }
         }
-        const varPricing = hasPerSecondPricingSteps(byUrl.steps as unknown as StepDefinition[]);
-        return res.json({ ...byUrl, hasPerSecondPricing: varPricing });
+        return res.json(annotateWorkflow(byUrl));
       }
       return res.status(404).json({ error: "Workflow not found" });
     }
@@ -48,8 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    const varPricing = hasPerSecondPricingSteps(workflow.steps as unknown as StepDefinition[]);
-    return res.json({ ...workflow, hasPerSecondPricing: varPricing });
+    return res.json(annotateWorkflow(workflow));
   }
 
   const session = await getServerSession(req, res, authOptions);

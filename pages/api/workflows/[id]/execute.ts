@@ -6,7 +6,7 @@ import { Prisma } from "@prisma/client";
 import { type StepDefinition, type StepCustomParam, type FileInput, type StepResult } from "@/lib/ai-engine";
 import { executeWorkflowGraph, type ResumeState } from "@/lib/graph-executor";
 import { deductCredits, checkBalance } from "@/lib/credits";
-import { estimateWorkflowCost, hasPerSecondPricingSteps } from "@/lib/ai-engine";
+import { estimateWorkflowCost, hasPerSecondPricingSteps, getStepPricingInfo } from "@/lib/ai-engine";
 import { getModelById } from "@/lib/models";
 import { serialize } from "cookie";
 
@@ -178,15 +178,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   send("workflow_start", {
     executionId: execution.id,
     totalSteps: totalVisible,
-    steps: visibleSteps.map((s, i) => ({
-      stepId: s.id,
-      stepName: s.name,
-      stepType: s.stepType,
-      outputType: s.outputType,
-      aiModel: s.aiModel,
-      modelName: s.aiModel ? getModelById(s.aiModel)?.name || s.aiModel : null,
-      index: i + 1,
-    })),
+    steps: visibleSteps.map((s, i) => {
+      const model = s.aiModel ? getModelById(s.aiModel) : null;
+      const dbStep = workflow.steps.find((ws: any) => ws.id === s.id);
+      const pricing = dbStep ? getStepPricingInfo(dbStep as any) : null;
+      return {
+        stepId: s.id,
+        stepName: s.name,
+        stepType: s.stepType,
+        outputType: s.outputType,
+        aiModel: s.aiModel,
+        modelName: model?.name || s.aiModel,
+        index: i + 1,
+        costPerSecond: pricing?.costPerSecond || null,
+        costPerUse: pricing?.costPerUse || null,
+      };
+    }),
   });
 
   const perStepInputMap: Record<string, { text: string; files: FileInput[] }> = {};
