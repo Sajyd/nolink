@@ -83,6 +83,7 @@ export interface StepResult {
   outputType: string;
   tokensUsed?: number;
   duration: number;
+  actualCost?: number;
 }
 
 interface StepInput {
@@ -113,6 +114,77 @@ function computeCustomCost(
   const seconds = entry ? parseFloat(entry.value) : 0;
   if (!seconds || seconds <= 0) return basePrice;
   return Math.max(1, Math.ceil(costPerSecond * seconds));
+}
+
+type StepOutputWithMeta = StepInput & { _outputDurationSec?: number };
+
+function extractOutputDuration(rawResult: any, service: "fal" | "replicate"): number | undefined {
+  if (!rawResult || typeof rawResult !== "object") return undefined;
+
+  if (service === "fal") {
+    if (typeof rawResult.duration === "number" && rawResult.duration > 0) return rawResult.duration;
+    if (typeof rawResult.audio?.duration === "number" && rawResult.audio.duration > 0) return rawResult.audio.duration;
+    if (typeof rawResult.video?.duration === "number" && rawResult.video.duration > 0) return rawResult.video.duration;
+    if (typeof rawResult.duration_sec === "number" && rawResult.duration_sec > 0) return rawResult.duration_sec;
+  }
+
+  if (service === "replicate") {
+    if (typeof rawResult.metrics?.predict_time === "number" && rawResult.metrics.predict_time > 0) {
+      return rawResult.metrics.predict_time;
+    }
+  }
+
+  return undefined;
+}
+
+function computeStepActualCost(step: StepDefinition, outputDurationSec?: number): number {
+  if (step.stepType === "CUSTOM_API") return step.customApiPrice || 0;
+  if (!step.aiModel) return 0;
+
+  if (step.aiModel === "fal-custom") {
+    if (outputDurationSec && outputDurationSec > 0 && step.customFalCostPerSecond) {
+      return Math.max(1, Math.ceil(step.customFalCostPerSecond * outputDurationSec));
+    }
+    return computeCustomCost(
+      step.customFalPrice || 0,
+      step.customFalCostPerSecond,
+      step.customFalDurationParamKey,
+      step.customFalParams,
+    );
+  }
+
+  if (step.aiModel === "rep-custom") {
+    if (outputDurationSec && outputDurationSec > 0 && step.customReplicateCostPerSecond) {
+      return Math.max(1, Math.ceil(step.customReplicateCostPerSecond * outputDurationSec));
+    }
+    return computeCustomCost(
+      step.customReplicatePrice || 0,
+      step.customReplicateCostPerSecond,
+      step.customReplicateDurationParamKey,
+      step.customReplicateParams,
+    );
+  }
+
+  const model = getModelById(step.aiModel);
+  if (!model) return 2;
+
+  if (outputDurationSec && outputDurationSec > 0 && model.costPerSecond) {
+    return Math.max(1, Math.ceil(model.costPerSecond * outputDurationSec));
+  }
+
+  return computeModelCost(model, step.params);
+}
+
+export function hasPerSecondPricingSteps(steps: StepDefinition[]): boolean {
+  for (const step of steps) {
+    if (step.aiModel === "fal-custom" && step.customFalCostPerSecond) return true;
+    if (step.aiModel === "rep-custom" && step.customReplicateCostPerSecond) return true;
+    if (step.aiModel && step.aiModel !== "fal-custom" && step.aiModel !== "rep-custom") {
+      const model = getModelById(step.aiModel);
+      if (model?.costPerSecond) return true;
+    }
+  }
+  return false;
 }
 
 export function estimateWorkflowCost(steps: StepDefinition[]): number {
@@ -1182,7 +1254,7 @@ async function executeFalStep(
   externalJobId?: string,
   savedStatusUrl?: string,
   savedResponseUrl?: string,
-): Promise<StepInput> {
+): Promise<StepOutputWithMeta> {
   if (!step.aiModel) return input;
 
   const isCustom = step.aiModel === "fal-custom";
@@ -1484,8 +1556,10 @@ async function executeFalStep(
         return { text: `[fal.ai error: Processing completed but no result returned — check fal.ai dashboard]`, files: [] };
       }
 
+      const outputDuration = extractOutputDuration(result, "fal");
+      if (outputDuration) console.log(`[fal] Output duration: ${outputDuration}s`);
       console.log(`[fal] Final result keys: ${Object.keys(result || {}).join(", ")}`);
-      return extractFalResult(result);
+      return { ...extractFalResult(result), _outputDurationSec: outputDuration };
     } catch (err) {
       if (err instanceof DeadlineExceededError) throw err;
       console.log(`[fal] executeFalStep error: ${err instanceof Error ? err.stack || err.message : err}`);
@@ -1563,7 +1637,7 @@ async function executeReplicateStep(
   input: StepInput,
   deadline?: number,
   externalJobId?: string,
-): Promise<StepInput> {
+): Promise<StepOutputWithMeta> {
   if (!step.aiModel) return input;
 
   const isCustom = step.aiModel === "rep-custom";
@@ -1764,8 +1838,10 @@ async function executeReplicateStep(
         }
       }
 
+      const outputDuration = extractOutputDuration(result, "replicate");
+      if (outputDuration) console.log(`[replicate] Output duration (predict_time): ${outputDuration}s`);
       console.log(`[replicate] Final status=${result.status}, output type=${typeof result.output}`);
-      return extractReplicateOutput(result);
+      return { ...extractReplicateOutput(result), _outputDurationSec: outputDuration };
     } catch (err) {
       if (err instanceof DeadlineExceededError) throw err;
       console.log(`[replicate] executeReplicateStep error: ${err instanceof Error ? err.stack || err.message : err}`);
@@ -2341,7 +2417,7 @@ export async function executeStep(
 ): Promise<StepResult & { _nextInput: StepInput }> {
   const start = Date.now();
 
-  let stepOutput: StepInput;
+  let stepOutput: StepOutputWithMeta;
   try {
     switch (step.stepType) {
       case "INPUT":
@@ -2394,9 +2470,13 @@ export async function executeStep(
         files: stepOutput.files.length > 0
           ? stepOutput.files.map((f) => f.url === originalUrl ? { ...f, url: s3Url } : f)
           : [{ url: s3Url, type: mediaType, name: `generated.${extMap[mediaType]}` }],
+        _outputDurationSec: stepOutput._outputDurationSec,
       };
     }
   }
+
+  const outputDurationSec = stepOutput._outputDurationSec;
+  const actualCost = computeStepActualCost(step, outputDurationSec);
 
   return {
     stepId: step.id,
@@ -2405,6 +2485,7 @@ export async function executeStep(
     output: stepOutput.text,
     outputType: step.outputType,
     duration: Date.now() - start,
+    actualCost: actualCost > 0 ? actualCost : undefined,
     _nextInput: stepOutput,
   };
 }
@@ -2423,7 +2504,7 @@ export async function executeWorkflow(
   for (const step of sortedSteps) {
     if (step.customParams) {
       for (const cp of step.customParams) {
-        if (cp.name) customParamMap[cp.name] = cp.value;
+        if (cp.name) customParamMap[cp.name] = resolveCustomParams(cp.value, customParamMap);
       }
     }
 

@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
-import { estimateWorkflowCost, type StepDefinition } from "@/lib/ai-engine";
+import { estimateWorkflowCost, hasPerSecondPricingSteps, type StepDefinition } from "@/lib/ai-engine";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
@@ -35,7 +35,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(403).json({ error: "This workflow is private" });
           }
         }
-        return res.json(byUrl);
+        const varPricing = hasPerSecondPricingSteps(byUrl.steps as unknown as StepDefinition[]);
+        return res.json({ ...byUrl, hasPerSecondPricing: varPricing });
       }
       return res.status(404).json({ error: "Workflow not found" });
     }
@@ -47,7 +48,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    return res.json(workflow);
+    const varPricing = hasPerSecondPricingSteps(workflow.steps as unknown as StepDefinition[]);
+    return res.json({ ...workflow, hasPerSecondPricing: varPricing });
   }
 
   const session = await getServerSession(req, res, authOptions);

@@ -104,6 +104,18 @@ async function runContinuation(
   // Build step definitions
   const stepDefs: StepDefinition[] = workflow.steps.map((s: any) => {
     const config = (s.config as Record<string, unknown>) || {};
+
+    let stepCustomParams = (config.customParams as StepCustomParam[] | undefined) || undefined;
+    if (s.stepType === "INPUT" && stepCustomParams) {
+      const inputParamNames = new Set(
+        ((config.inputParameters as { name: string }[]) || []).map((p: { name: string }) => p.name).filter(Boolean)
+      );
+      if (inputParamNames.size > 0) {
+        stepCustomParams = stepCustomParams.filter((cp: StepCustomParam) => !inputParamNames.has(cp.name));
+        if (stepCustomParams.length === 0) stepCustomParams = undefined;
+      }
+    }
+
     return {
       id: s.id,
       order: s.order,
@@ -116,7 +128,7 @@ async function runContinuation(
       systemPrompt: (s as any).systemPrompt || "",
       params: s.params as Record<string, unknown> | null,
       acceptTypes: s.acceptTypes,
-      customParams: (config.customParams as StepCustomParam[] | undefined) || undefined,
+      customParams: stepCustomParams,
       customFalEndpoint: (config.customFalEndpoint as string | undefined) || undefined,
       customFalParams: (config.customFalParams as { key: string; value: string }[] | undefined) || undefined,
       customFalPrice: (config.customFalPrice as number | undefined) ?? undefined,
@@ -234,8 +246,16 @@ async function runContinuation(
     );
 
     if (!deadlineSaved) {
-      if (!isAnonymous && execution.userId && cost > 0 && !failed) {
-        await deductCredits(execution.userId, workflow.id, cost, baseCost);
+      const previousResults = (execution.stepResults as any[]) || [];
+      const mergedResults = [...previousResults, ...allResults.map((r) => ({ ...r }))];
+
+      const actualBaseCost = mergedResults.reduce((sum: number, r: any) => sum + (r.actualCost || 0), 0);
+      const finalCost = actualBaseCost > 0
+        ? Math.max(workflow.priceInNolinks, actualBaseCost)
+        : cost;
+
+      if (!isAnonymous && execution.userId && finalCost > 0 && !failed) {
+        await deductCredits(execution.userId, workflow.id, finalCost, actualBaseCost || baseCost);
       }
 
       if (isAnonymous && !failed) {
@@ -245,10 +265,6 @@ async function runContinuation(
         });
       }
 
-      // Merge with any previously completed step results
-      const previousResults = (execution.stepResults as any[]) || [];
-      const mergedResults = [...previousResults, ...allResults.map((r) => ({ ...r }))];
-
       await prisma.execution.update({
         where: { id: executionId },
         data: {
@@ -257,6 +273,7 @@ async function runContinuation(
             ? { final: graphResults[graphResults.length - 1].output }
             : undefined,
           stepResults: mergedResults as any,
+          creditsUsed: isAnonymous ? 0 : (failed ? 0 : finalCost),
           errorMessage: failed ? graphResults[graphResults.length - 1]?.output : undefined,
           completedAt: new Date(),
           resumeState: Prisma.DbNull,

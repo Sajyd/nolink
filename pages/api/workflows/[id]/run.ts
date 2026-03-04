@@ -10,7 +10,7 @@ import {
 } from "@/lib/ai-engine";
 import { executeWorkflowGraph } from "@/lib/graph-executor";
 import { deductCredits, checkBalance } from "@/lib/credits";
-import { estimateWorkflowCost } from "@/lib/ai-engine";
+import { estimateWorkflowCost, hasPerSecondPricingSteps } from "@/lib/ai-engine";
 
 export const config = {
   maxDuration: 800,
@@ -108,6 +108,18 @@ async function runWorkflowInBackground(
 ) {
   const stepDefs: StepDefinition[] = workflow.steps.map((s: any) => {
     const config = (s.config as Record<string, unknown>) || {};
+
+    let stepCustomParams = (config.customParams as StepCustomParam[] | undefined) || undefined;
+    if (s.stepType === "INPUT" && stepCustomParams) {
+      const inputParamNames = new Set(
+        ((config.inputParameters as { name: string }[]) || []).map((p: { name: string }) => p.name).filter(Boolean)
+      );
+      if (inputParamNames.size > 0) {
+        stepCustomParams = stepCustomParams.filter((cp: StepCustomParam) => !inputParamNames.has(cp.name));
+        if (stepCustomParams.length === 0) stepCustomParams = undefined;
+      }
+    }
+
     return {
       id: s.id,
       order: s.order,
@@ -120,14 +132,27 @@ async function runWorkflowInBackground(
       systemPrompt: s.systemPrompt || "",
       params: s.params as Record<string, unknown> | null,
       acceptTypes: s.acceptTypes,
-      customParams:
-        (config.customParams as StepCustomParam[] | undefined) || undefined,
+      customParams: stepCustomParams,
       customFalEndpoint:
         (config.customFalEndpoint as string | undefined) || undefined,
       customFalParams:
         (config.customFalParams as { key: string; value: string }[] | undefined) || undefined,
       customFalPrice:
         (config.customFalPrice as number | undefined) ?? undefined,
+      customFalCostPerSecond:
+        (config.customFalCostPerSecond as number | undefined) ?? undefined,
+      customFalDurationParamKey:
+        (config.customFalDurationParamKey as string | undefined) || undefined,
+      customReplicateModel:
+        (config.customReplicateModel as string | undefined) || undefined,
+      customReplicateParams:
+        (config.customReplicateParams as { key: string; value: string }[] | undefined) || undefined,
+      customReplicatePrice:
+        (config.customReplicatePrice as number | undefined) ?? undefined,
+      customReplicateCostPerSecond:
+        (config.customReplicateCostPerSecond as number | undefined) ?? undefined,
+      customReplicateDurationParamKey:
+        (config.customReplicateDurationParamKey as string | undefined) || undefined,
       customApiUrl:
         (config.customApiUrl as string | undefined) || undefined,
       customApiMethod:
@@ -220,9 +245,14 @@ async function runWorkflowInBackground(
     deadline,
   );
 
+  const actualBaseCost = allResults.reduce((sum: number, r: StepResult) => sum + (r.actualCost || 0), 0);
+  const finalCost = actualBaseCost > 0
+    ? Math.max(workflow.priceInNolinks, actualBaseCost)
+    : cost;
+
   try {
-    if (cost > 0 && !failed) {
-      await deductCredits(userId, workflow.id, cost, baseCost);
+    if (finalCost > 0 && !failed) {
+      await deductCredits(userId, workflow.id, finalCost, actualBaseCost || baseCost);
     }
 
     if (!failed) {
@@ -240,6 +270,7 @@ async function runWorkflowInBackground(
           ? { final: allResults[allResults.length - 1].output }
           : undefined,
         stepResults: allResults as any,
+        creditsUsed: failed ? 0 : finalCost,
         errorMessage: failed ? allResults[allResults.length - 1]?.output : undefined,
         completedAt: new Date(),
       },

@@ -6,7 +6,7 @@ import { Prisma } from "@prisma/client";
 import { type StepDefinition, type StepCustomParam, type FileInput, type StepResult } from "@/lib/ai-engine";
 import { executeWorkflowGraph, type ResumeState } from "@/lib/graph-executor";
 import { deductCredits, checkBalance } from "@/lib/credits";
-import { estimateWorkflowCost } from "@/lib/ai-engine";
+import { estimateWorkflowCost, hasPerSecondPricingSteps } from "@/lib/ai-engine";
 import { getModelById } from "@/lib/models";
 import { serialize } from "cookie";
 
@@ -121,6 +121,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const stepDefs: StepDefinition[] = workflow.steps.map((s) => {
     const config = (s.config as Record<string, unknown>) || {};
+
+    let stepCustomParams = (config.customParams as StepCustomParam[] | undefined) || undefined;
+    if (s.stepType === "INPUT" && stepCustomParams) {
+      const inputParamNames = new Set(
+        ((config.inputParameters as { name: string }[]) || []).map((p) => p.name).filter(Boolean)
+      );
+      if (inputParamNames.size > 0) {
+        stepCustomParams = stepCustomParams.filter((cp) => !inputParamNames.has(cp.name));
+        if (stepCustomParams.length === 0) stepCustomParams = undefined;
+      }
+    }
+
     return {
       id: s.id,
       order: s.order,
@@ -133,7 +145,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       systemPrompt: (s as any).systemPrompt || "",
       params: s.params as Record<string, unknown> | null,
       acceptTypes: s.acceptTypes,
-      customParams: (config.customParams as StepCustomParam[] | undefined) || undefined,
+      customParams: stepCustomParams,
       customFalEndpoint: (config.customFalEndpoint as string | undefined) || undefined,
       customFalParams: (config.customFalParams as { key: string; value: string }[] | undefined) || undefined,
       customFalPrice: (config.customFalPrice as number | undefined) ?? undefined,
@@ -302,9 +314,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         needsContinuation: true,
       });
     } else {
+      const actualBaseCost = graphResults.reduce((sum, r) => sum + (r.actualCost || 0), 0);
+      const finalCost = actualBaseCost > 0
+        ? Math.max(workflow.priceInNolinks, actualBaseCost)
+        : cost;
+
       try {
-        if (!isAnonymous && cost > 0 && !failed) {
-          await deductCredits(session.user.id, workflow.id, cost, baseCost);
+        if (!isAnonymous && finalCost > 0 && !failed) {
+          await deductCredits(session.user.id, workflow.id, finalCost, actualBaseCost || baseCost);
         }
 
         if (isAnonymous && !failed) {
@@ -322,6 +339,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               ? { final: graphResults[graphResults.length - 1].output }
               : undefined,
             stepResults: allResults.map((r) => ({ ...r })) as any,
+            creditsUsed: isAnonymous ? 0 : (failed ? 0 : finalCost),
             completedAt: new Date(),
             resumeState: Prisma.DbNull,
           },
@@ -329,7 +347,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       } catch {}
 
       send("workflow_complete", {
-        creditsUsed: isAnonymous ? 0 : (failed ? 0 : cost),
+        creditsUsed: isAnonymous ? 0 : (failed ? 0 : finalCost),
         status: failed ? "FAILED" : "COMPLETED",
         isTrialRun: isAnonymous,
       });

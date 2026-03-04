@@ -75,6 +75,7 @@ interface Workflow {
   exampleOutput: string | null;
   creator: { id: string; name: string; image: string | null };
   steps: Step[];
+  hasPerSecondPricing?: boolean;
 }
 
 interface LiveStep {
@@ -668,7 +669,9 @@ export default function WorkflowPage() {
               </span>
               <span className="flex items-center gap-1 text-sm font-semibold text-brand-600">
                 <Zap className="w-3.5 h-3.5" />
-                {workflow.priceInNolinks} NL per run
+                {workflow.hasPerSecondPricing
+                  ? `From ${workflow.priceInNolinks} NL per run`
+                  : `${workflow.priceInNolinks} NL per run`}
               </span>
             </div>
             <h1 className="text-3xl font-bold">{workflow.name}</h1>
@@ -1150,7 +1153,9 @@ export default function WorkflowPage() {
             <p className="text-xs text-gray-400">
               {!session
                 ? "Try it free — no account needed"
-                : `This will cost ${workflow.priceInNolinks} Nolinks`}
+                : workflow.hasPerSecondPricing
+                  ? `Starting from ${workflow.priceInNolinks} NL — final cost varies with output duration`
+                  : `This will cost ${workflow.priceInNolinks} Nolinks`}
             </p>
             <button
               onClick={handleExecute}
@@ -1564,7 +1569,9 @@ while True:
             <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Cost</p>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
-                {`${workflow.priceInNolinks} NL / run`}
+                {workflow.hasPerSecondPricing
+                  ? `From ${workflow.priceInNolinks} NL / run`
+                  : `${workflow.priceInNolinks} NL / run`}
               </p>
             </div>
             <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3">
