@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]";
 import { requestPayout } from "@/lib/credits";
-import { executeWisePayout } from "@/lib/wise";
+import { executeStripePayout, checkConnectStatus } from "@/lib/stripe";
 import prisma from "@/lib/prisma";
 import { PAYOUT_ELIGIBLE_TIERS } from "@/lib/constants";
 
@@ -24,28 +24,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await prisma.user.findUnique({ where: { id: session.user.id } });
   if (!user) return res.status(404).json({ error: "User not found" });
 
-  if (!user.wiseRecipientId || !user.payoutVerified) {
-    return res.status(400).json({ error: "Add your bank details before requesting a payout" });
+  if (!user.stripeConnectId) {
+    return res.status(400).json({ error: "Connect your Stripe account first" });
+  }
+
+  if (!user.stripeConnectOnboarded) {
+    const status = await checkConnectStatus(user.stripeConnectId);
+    if (!status.isOnboarded) {
+      return res.status(400).json({ error: "Complete Stripe onboarding before requesting payouts" });
+    }
   }
 
   try {
     const payout = await requestPayout(session.user.id, Math.floor(amountNL));
 
-    const result = await executeWisePayout(
+    const result = await executeStripePayout(
       payout.id,
-      parseInt(user.wiseRecipientId),
-      payout.amountCents,
-      user.payoutCurrency
+      user.stripeConnectId,
+      payout.amountCents
     );
 
     if (result.success) {
       return res.json({
         success: true,
-        payout: { ...payout, wiseTransferId: String(result.transferId), status: "COMPLETED" },
+        payout: { ...payout, stripeTransferId: result.transferId, status: "COMPLETED" },
       });
     } else {
       return res.status(500).json({
-        error: "Payout transfer failed",
+        error: "Stripe transfer failed",
         message: result.error,
       });
     }

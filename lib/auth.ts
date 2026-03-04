@@ -54,7 +54,7 @@ export const authOptions: NextAuthOptions = {
           purchasedBalance: user.purchasedBalance,
           earnedBalance: user.earnedBalance,
           subscription: user.subscription,
-          payoutVerified: user.payoutVerified,
+          stripeConnectOnboarded: user.stripeConnectOnboarded,
         };
       },
     }),

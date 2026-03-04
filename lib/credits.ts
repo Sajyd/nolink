@@ -183,8 +183,8 @@ export async function requestPayout(userId: string, amountNL: number) {
     throw new Error("Upgrade to Pro or Enterprise to withdraw earnings");
   }
 
-  if (!user.payoutVerified || !user.wiseRecipientId) {
-    throw new Error("Add your bank details before requesting a payout");
+  if (!user.stripeConnectOnboarded || !user.stripeConnectId) {
+    throw new Error("Connect your Stripe account before requesting a payout");
   }
 
   if (amountNL < MINIMUM_PAYOUT_NL) {

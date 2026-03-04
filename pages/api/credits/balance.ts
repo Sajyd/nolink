@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       purchasedBalance: true,
       earnedBalance: true,
       subscription: true,
-      payoutVerified: true,
+      stripeConnectOnboarded: true,
     },
   });
 
@@ -32,7 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     earnedBalance: user?.earnedBalance ?? 0,
     totalBalance: (user?.bonusBalance ?? 0) + (user?.purchasedBalance ?? 0) + (user?.earnedBalance ?? 0),
     subscription: user?.subscription ?? "FREE",
-    payoutVerified: user?.payoutVerified ?? false,
+    stripeConnectOnboarded: user?.stripeConnectOnboarded ?? false,
     transactions,
   });
 }

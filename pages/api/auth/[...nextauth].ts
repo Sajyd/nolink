@@ -37,7 +37,7 @@ export const authOptions: AuthOptions = {
           purchasedBalance: user.purchasedBalance,
           earnedBalance: user.earnedBalance,
           subscription: user.subscription,
-          payoutVerified: user.payoutVerified,
+          stripeConnectOnboarded: user.stripeConnectOnboarded,
         };
       },
     }),
@@ -115,7 +115,7 @@ export const authOptions: AuthOptions = {
             purchasedBalance: true,
             earnedBalance: true,
             subscription: true,
-            payoutVerified: true,
+            stripeConnectOnboarded: true,
           },
         });
         if (dbUser) {
@@ -123,7 +123,7 @@ export const authOptions: AuthOptions = {
           token.purchasedBalance = dbUser.purchasedBalance;
           token.earnedBalance = dbUser.earnedBalance;
           token.subscription = dbUser.subscription;
-          token.payoutVerified = dbUser.payoutVerified;
+          token.stripeConnectOnboarded = dbUser.stripeConnectOnboarded;
         }
       }
 
@@ -135,7 +135,7 @@ export const authOptions: AuthOptions = {
       session.user.purchasedBalance = token.purchasedBalance ?? 0;
       session.user.earnedBalance = token.earnedBalance ?? 0;
       session.user.subscription = token.subscription ?? "FREE";
-      session.user.payoutVerified = token.payoutVerified ?? false;
+      session.user.stripeConnectOnboarded = token.stripeConnectOnboarded ?? false;
       return session;
     },
   },

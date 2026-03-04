@@ -12,7 +12,7 @@ declare module "next-auth" {
       purchasedBalance: number;
       earnedBalance: number;
       subscription: SubscriptionTier;
-      payoutVerified: boolean;
+      stripeConnectOnboarded: boolean;
     };
   }
 
@@ -22,7 +22,7 @@ declare module "next-auth" {
     purchasedBalance: number;
     earnedBalance: number;
     subscription: SubscriptionTier;
-    payoutVerified: boolean;
+    stripeConnectOnboarded: boolean;
   }
 }
 
@@ -33,6 +33,6 @@ declare module "next-auth/jwt" {
     purchasedBalance: number;
     earnedBalance: number;
     subscription: SubscriptionTier;
-    payoutVerified: boolean;
+    stripeConnectOnboarded: boolean;
   }
 }

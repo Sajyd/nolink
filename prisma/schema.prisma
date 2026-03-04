@@ -62,12 +62,8 @@ model User {
   earnedBalance          Int              @default(0)
   subscription           SubscriptionTier @default(FREE)
   stripeCustomerId       String?
-  payoutIban             String?
-  payoutBankCountry      String?
-  payoutAccountHolder    String?
-  payoutCurrency         String           @default("EUR")
-  payoutVerified         Boolean          @default(false)
-  wiseRecipientId        String?
+  stripeConnectId        String?
+  stripeConnectOnboarded Boolean          @default(false)
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
 
@@ -202,7 +198,7 @@ model Payout {
   userId           String
   amountNL         Int
   amountCents      Int
-  wiseTransferId   String?
+  stripeTransferId String?
   status           PayoutStatus @default(PENDING)
   failureReason    String?
   createdAt        DateTime     @default(now())

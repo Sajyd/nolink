@@ -112,5 +112,123 @@ export async function createSubscriptionCheckout(
   });
 }
 
-// Stripe Connect has been replaced by Wise Business API for creator payouts.
-// See lib/wise.ts for the payout implementation.
+// ── Stripe Connect ──────────────────────────────────────────────
+
+export async function createConnectAccount(userId: string, email: string) {
+  const stripe = getStripe();
+
+  const account = await stripe.accounts.create({
+    type: "express",
+    email,
+    capabilities: {
+      transfers: { requested: true },
+    },
+    metadata: { userId },
+  });
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { stripeConnectId: account.id },
+  });
+
+  return account;
+}
+
+export async function createConnectOnboardingLink(
+  accountId: string,
+  refreshUrl: string,
+  returnUrl: string
+) {
+  const stripe = getStripe();
+
+  const link = await stripe.accountLinks.create({
+    account: accountId,
+    refresh_url: refreshUrl,
+    return_url: returnUrl,
+    type: "account_onboarding",
+  });
+
+  return link.url;
+}
+
+export async function checkConnectStatus(accountId: string) {
+  const stripe = getStripe();
+
+  const account = await stripe.accounts.retrieve(accountId);
+
+  const isOnboarded =
+    account.details_submitted === true &&
+    account.charges_enabled === true &&
+    account.payouts_enabled === true;
+
+  return {
+    isOnboarded,
+    detailsSubmitted: account.details_submitted,
+    chargesEnabled: account.charges_enabled,
+    payoutsEnabled: account.payouts_enabled,
+  };
+}
+
+export async function markConnectOnboarded(userId: string) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { stripeConnectOnboarded: true },
+  });
+}
+
+export async function createConnectLoginLink(accountId: string) {
+  const stripe = getStripe();
+  const loginLink = await stripe.accounts.createLoginLink(accountId);
+  return loginLink.url;
+}
+
+// ── Payouts via Stripe Transfer ─────────────────────────────────
+
+export async function executeStripePayout(
+  payoutId: string,
+  connectAccountId: string,
+  amountCents: number
+) {
+  const stripe = getStripe();
+
+  try {
+    const transfer = await stripe.transfers.create({
+      amount: amountCents,
+      currency: "usd",
+      destination: connectAccountId,
+      metadata: { payoutId },
+    });
+
+    await prisma.payout.update({
+      where: { id: payoutId },
+      data: {
+        stripeTransferId: transfer.id,
+        status: "COMPLETED",
+        completedAt: new Date(),
+      },
+    });
+
+    return { success: true, transferId: transfer.id };
+  } catch (error) {
+    await prisma.payout.update({
+      where: { id: payoutId },
+      data: {
+        status: "FAILED",
+        failureReason: error instanceof Error ? error.message : "Unknown error",
+      },
+    });
+
+    const payout = await prisma.payout.findUnique({ where: { id: payoutId } });
+    if (payout) {
+      await prisma.user.update({
+        where: { id: payout.userId },
+        data: { earnedBalance: { increment: payout.amountNL } },
+      });
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}

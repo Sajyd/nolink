@@ -99,10 +99,8 @@ export default function Dashboard() {
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [totalRuns, setTotalRuns] = useState(0);
   const [payouts, setPayouts] = useState<Payout[]>([]);
-  const [bankDetails, setBankDetails] = useState<{ hasDetails: boolean; payoutIban: string | null; payoutAccountHolder: string | null; payoutBankCountry: string | null; payoutCurrency: string; payoutVerified: boolean } | null>(null);
-  const [bankForm, setBankForm] = useState({ iban: "", accountHolder: "", country: "FR", currency: "EUR" });
-  const [bankFormOpen, setBankFormOpen] = useState(false);
-  const [bankSaving, setBankSaving] = useState(false);
+  const [connectStatus, setConnectStatus] = useState<{ connected: boolean; onboarded: boolean } | null>(null);
+  const [connectLoading, setConnectLoading] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState("");
   const [loading, setLoading] = useState(true);
   const [payoutLoading, setPayoutLoading] = useState(false);
@@ -132,8 +130,16 @@ export default function Dashboard() {
   }, [router.query.upgraded]);
 
   useEffect(() => {
-    if (session) fetchBankDetails();
-  }, [session]);
+    const connectParam = router.query.connect as string;
+    if (connectParam === "complete") {
+      fetchConnectStatus();
+      toast.success(t("dashboard.stripeAccountConnected"));
+      router.replace("/dashboard?tab=earnings", undefined, { shallow: true });
+    } else if (connectParam === "refresh") {
+      toast(t("dashboard.onboardingIncompleteToast"), { icon: "⚠️" });
+      router.replace("/dashboard?tab=earnings", undefined, { shallow: true });
+    }
+  }, [router.query.connect]);
 
   useEffect(() => {
     if (session) fetchAll();
@@ -161,13 +167,14 @@ export default function Dashboard() {
     }
     if (payoutsRes) setPayouts(payoutsRes);
 
+    fetchConnectStatus();
     setLoading(false);
   };
 
-  const fetchBankDetails = async () => {
+  const fetchConnectStatus = async () => {
     try {
-      const res = await fetch("/api/payouts/bank-details");
-      if (res.ok) setBankDetails(await res.json());
+      const res = await fetch("/api/connect/status");
+      if (res.ok) setConnectStatus(await res.json());
     } catch { /* ignore */ }
   };
 
@@ -195,29 +202,24 @@ export default function Dashboard() {
     } catch { toast.error(t("common.somethingWentWrong")); }
   };
 
-  const handleSaveBankDetails = async () => {
-    if (!bankForm.iban || !bankForm.accountHolder || !bankForm.country) {
-      toast.error(t("dashboard.fillBankFields"));
-      return;
-    }
-    setBankSaving(true);
+  const handleConnectStripe = async () => {
+    setConnectLoading(true);
     try {
-      const res = await fetch("/api/payouts/bank-details", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bankForm),
-      });
+      const res = await fetch("/api/connect/onboard", { method: "POST" });
       const data = await res.json();
-      if (data.success) {
-        toast.success(t("dashboard.bankDetailsSaved"));
-        setBankDetails(data);
-        setBankFormOpen(false);
-        fetchBankDetails();
-      } else {
-        toast.error(data.error || t("dashboard.bankDetailsSaveFailed"));
-      }
+      if (data.url) window.location.href = data.url;
+      else toast.error(data.error || t("common.somethingWentWrong"));
     } catch { toast.error(t("common.somethingWentWrong")); }
-    setBankSaving(false);
+    setConnectLoading(false);
+  };
+
+  const handleConnectDashboard = async () => {
+    try {
+      const res = await fetch("/api/connect/dashboard", { method: "POST" });
+      const data = await res.json();
+      if (data.url) window.open(data.url, "_blank");
+      else toast.error(data.error || t("common.somethingWentWrong"));
+    } catch { toast.error(t("common.somethingWentWrong")); }
   };
 
   const handlePayout = async () => {
@@ -546,9 +548,9 @@ export default function Dashboard() {
               <p className="mt-2 text-xs text-gray-500">{t("dashboard.earnedExplanation")}</p>
             </div>
 
-            {/* Bank details */}
+            {/* Stripe Connect status */}
             <div className="card p-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2"><Wallet className="w-5 h-5" />{t("dashboard.bankDetails")}</h3>
+              <h3 className="font-semibold mb-4 flex items-center gap-2"><Link2 className="w-5 h-5" />{t("dashboard.stripeConnect")}</h3>
 
               {!isPro ? (
                 <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
@@ -559,101 +561,45 @@ export default function Dashboard() {
                     <button onClick={() => setTab("credits")} className="btn-primary mt-3 text-sm">{t("common.viewPlans")}</button>
                   </div>
                 </div>
-              ) : bankDetails?.hasDetails && !bankFormOpen ? (
+              ) : connectStatus?.onboarded ? (
                 <div className="flex items-center justify-between gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
                   <div className="flex items-center gap-3">
                     <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                     <div>
-                      <p className="font-medium text-emerald-700 dark:text-emerald-300">{t("dashboard.bankAccountConnected")}</p>
-                      <p className="text-sm text-emerald-600 dark:text-emerald-400">
-                        {bankDetails.payoutAccountHolder} &middot; {bankDetails.payoutIban} &middot; {bankDetails.payoutBankCountry}
-                      </p>
+                      <p className="font-medium text-emerald-700 dark:text-emerald-300">{t("dashboard.stripeConnected")}</p>
+                      <p className="text-sm text-emerald-600 dark:text-emerald-400">{t("dashboard.stripeConnectedDesc")}</p>
                     </div>
                   </div>
-                  <button onClick={() => setBankFormOpen(true)} className="btn-ghost text-sm gap-1.5 shrink-0">
-                    <Pencil className="w-3.5 h-3.5" />
-                    {t("common.edit")}
+                  <button onClick={handleConnectDashboard} className="btn-ghost text-sm gap-1.5 shrink-0">
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    {t("dashboard.stripeDashboard")}
                   </button>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <p className="text-sm text-gray-500">{t("dashboard.enterBankDetails")}</p>
+              ) : connectStatus?.connected ? (
+                <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <AlertCircle className="w-5 h-5 text-amber-500" />
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t("dashboard.accountHolderName")}</label>
-                    <input
-                      type="text"
-                      value={bankForm.accountHolder}
-                      onChange={(e) => setBankForm((f) => ({ ...f, accountHolder: e.target.value }))}
-                      className="input-field"
-                      placeholder="John Doe"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t("dashboard.iban")}</label>
-                    <input
-                      type="text"
-                      value={bankForm.iban}
-                      onChange={(e) => setBankForm((f) => ({ ...f, iban: e.target.value }))}
-                      className="input-field font-mono"
-                      placeholder="FR76 3000 6000 0112 3456 7890 189"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t("dashboard.country")}</label>
-                      <select
-                        value={bankForm.country}
-                        onChange={(e) => setBankForm((f) => ({ ...f, country: e.target.value }))}
-                        className="input-field"
-                      >
-                        <option value="FR">{t("dashboard.countryFR")}</option>
-                        <option value="DE">{t("dashboard.countryDE")}</option>
-                        <option value="ES">{t("dashboard.countryES")}</option>
-                        <option value="IT">{t("dashboard.countryIT")}</option>
-                        <option value="NL">{t("dashboard.countryNL")}</option>
-                        <option value="BE">{t("dashboard.countryBE")}</option>
-                        <option value="PT">{t("dashboard.countryPT")}</option>
-                        <option value="AT">{t("dashboard.countryAT")}</option>
-                        <option value="IE">{t("dashboard.countryIE")}</option>
-                        <option value="FI">{t("dashboard.countryFI")}</option>
-                        <option value="LU">{t("dashboard.countryLU")}</option>
-                        <option value="GB">{t("dashboard.countryGB")}</option>
-                        <option value="US">{t("dashboard.countryUS")}</option>
-                        <option value="CA">{t("dashboard.countryCA")}</option>
-                        <option value="AU">{t("dashboard.countryAU")}</option>
-                        <option value="OTHER">{t("dashboard.countryOTHER")}</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t("dashboard.currency")}</label>
-                      <select
-                        value={bankForm.currency}
-                        onChange={(e) => setBankForm((f) => ({ ...f, currency: e.target.value }))}
-                        className="input-field"
-                      >
-                        <option value="EUR">EUR</option>
-                        <option value="USD">USD</option>
-                        <option value="GBP">GBP</option>
-                        <option value="CAD">CAD</option>
-                        <option value="AUD">AUD</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <button onClick={handleSaveBankDetails} disabled={bankSaving} className="btn-primary gap-2">
-                      {bankSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                      {t("dashboard.saveBankDetails")}
+                    <p className="font-medium text-amber-700 dark:text-amber-300">{t("dashboard.onboardingIncomplete")}</p>
+                    <p className="text-sm text-amber-600 dark:text-amber-400">{t("dashboard.onboardingIncompleteDesc")}</p>
+                    <button onClick={handleConnectStripe} disabled={connectLoading} className="btn-primary mt-3 text-sm gap-2">
+                      {connectLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                      {t("dashboard.completeSetup")}
                     </button>
-                    {bankDetails?.hasDetails && (
-                      <button onClick={() => setBankFormOpen(false)} className="btn-ghost">{t("common.cancel")}</button>
-                    )}
                   </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm text-gray-500 mb-3">{t("dashboard.connectStripeDesc")}</p>
+                  <button onClick={handleConnectStripe} disabled={connectLoading} className="btn-primary gap-2">
+                    {connectLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                    {t("dashboard.connectStripeAccount")}
+                  </button>
                 </div>
               )}
             </div>
 
             {/* Payout request */}
-            {isPro && bankDetails?.payoutVerified && (
+            {isPro && connectStatus?.onboarded && (
               <div className="card p-6">
                 <h3 className="font-semibold mb-4 flex items-center gap-2"><DollarSign className="w-5 h-5" />{t("dashboard.requestPayout")}</h3>
                 <div className="flex gap-3">
