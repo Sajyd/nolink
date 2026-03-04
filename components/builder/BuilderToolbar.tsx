@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { useTranslation } from "@/lib/i18n";
 
 const CATEGORIES = [
   "CONTENT", "MARKETING", "DEVELOPMENT", "DESIGN",
@@ -200,6 +201,18 @@ interface BuilderToolbarProps {
 export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: BuilderToolbarProps) {
   const store = useWorkflowStore();
   const [showSettings, setShowSettings] = useState(true);
+  const { t } = useTranslation();
+
+  const nodeLabels: Record<string, { label: string; desc: string }> = {
+    inputNode: { label: t("builder.userInput"), desc: t("builder.userInputDesc") },
+    basicNode: { label: t("builder.basicAiNode"), desc: t("builder.basicAiNodeDesc") },
+    falAiNode: { label: t("builder.falAiNode"), desc: t("builder.falAiNodeDesc") },
+    replicateNode: { label: t("builder.replicateNode"), desc: t("builder.replicateNodeDesc") },
+    logicNode: { label: t("builder.logicGate"), desc: t("builder.logicGateDesc") },
+    utilityNode: { label: t("builder.utility"), desc: t("builder.utilityDesc") },
+    customApiNode: { label: t("builder.customApi"), desc: t("builder.customApiDesc") },
+    outputNode: { label: t("builder.finalOutput"), desc: t("builder.finalOutputDesc") },
+  };
 
   const addNode = (templateIdx: number) => {
     const template = NODE_TEMPLATES[templateIdx];
@@ -275,7 +288,7 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
       {/* Mobile close button */}
       {onClose && (
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 dark:border-gray-800 md:hidden">
-          <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Toolbar</span>
+          <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t("builder.toolbar")}</span>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
             <X className="w-4 h-4" />
           </button>
@@ -284,7 +297,7 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
       {/* Node type picker */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-800">
         <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-          Add Node
+          {t("builder.addNode")}
         </h4>
         <div className="space-y-2">
           {NODE_TEMPLATES.map((tmpl, idx) => (
@@ -295,9 +308,9 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
             >
               <tmpl.icon className="w-4 h-4 mt-0.5 shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm font-semibold">{tmpl.label}</p>
+                <p className="text-sm font-semibold">{nodeLabels[tmpl.type]?.label || tmpl.label}</p>
                 <p className="text-[10px] opacity-70 leading-tight mt-0.5">
-                  {tmpl.description}
+                  {nodeLabels[tmpl.type]?.desc || tmpl.description}
                 </p>
               </div>
             </button>
@@ -313,7 +326,7 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
         >
           <span className="flex items-center gap-2">
             <Settings className="w-4 h-4" />
-            Workflow Settings
+            {t("builder.workflowSettings")}
           </span>
           {showSettings ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
@@ -321,29 +334,29 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
         {showSettings && (
           <div className="mt-3 space-y-3">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t("builder.name")}</label>
               <input
                 type="text"
                 value={store.workflowName}
                 onChange={(e) => store.setWorkflowName(e.target.value)}
                 className="input-field text-sm"
-                placeholder="Untitled Workflow"
+                placeholder={t("builder.untitledWorkflow")}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t("builder.description")}</label>
               <textarea
                 value={store.workflowDescription}
                 onChange={(e) => store.setWorkflowDescription(e.target.value)}
                 className="input-field text-sm"
                 rows={3}
-                placeholder="What does this workflow do?"
+                placeholder={t("builder.whatDoes")}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t("builder.category")}</label>
               <select
                 value={store.workflowCategory}
                 onChange={(e) => store.setWorkflowCategory(e.target.value)}
@@ -356,7 +369,7 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Price (Nolinks)</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t("builder.priceNolinks")}</label>
               <div className="relative">
                 <input
                   type="number"
@@ -372,11 +385,11 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
               </div>
               <div className="mt-1.5 space-y-0.5">
                 <p className="text-[10px] text-gray-400">
-                  Min. price: {estimatedCost || 1} NL (AI model costs)
+                  {t("builder.minPrice", { price: String(estimatedCost || 1) })}
                 </p>
                 {Math.max(store.workflowPrice, estimatedCost || 1) > (estimatedCost || 1) && (
                   <p className="text-[10px] text-emerald-500">
-                    You earn: {Math.max(store.workflowPrice, estimatedCost || 1) - (estimatedCost || 1)} NL per run
+                    {t("builder.youEarn", { amount: String(Math.max(store.workflowPrice, estimatedCost || 1) - (estimatedCost || 1)) })}
                   </p>
                 )}
               </div>
@@ -397,37 +410,37 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
               </button>
               <span className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1">
                 {store.isPublic ? (
-                  <><Eye className="w-3 h-3" /> Public</>
+                  <><Eye className="w-3 h-3" /> {t("common.public")}</>
                 ) : (
-                  <><EyeOff className="w-3 h-3" /> Private</>
+                  <><EyeOff className="w-3 h-3" /> {t("common.private")}</>
                 )}
               </span>
             </label>
 
             <div className="pt-2 border-t border-gray-200 dark:border-gray-800">
-              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-2">Examples</p>
+              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-2">{t("builder.examples")}</p>
               <div className="space-y-2">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Example Input</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t("builder.exampleInput")}</label>
                   <textarea
                     value={store.exampleInput}
                     onChange={(e) => store.setExampleInput(e.target.value)}
                     className="input-field text-xs"
                     rows={2}
-                    placeholder="e.g. Write a poem about the ocean"
+                    placeholder={t("builder.exampleInputPlaceholder")}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Example Output</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t("builder.exampleOutput")}</label>
                   <textarea
                     value={store.exampleOutput}
                     onChange={(e) => store.setExampleOutput(e.target.value)}
                     className="input-field text-xs"
                     rows={2}
-                    placeholder="e.g. The waves crash gently..."
+                    placeholder={t("builder.exampleOutputPlaceholder")}
                   />
                   <p className="mt-1 text-[10px] text-gray-400">
-                    For media, paste a URL. Shown to users before they run the workflow.
+                    {t("builder.mediaUrlHint")}
                   </p>
                 </div>
               </div>
@@ -439,7 +452,7 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
       {/* Steps list */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex-1">
         <h4 className="text-xs font-medium text-gray-500 mb-2">
-          Nodes ({store.nodes.length})
+          {t("builder.nodes", { count: String(store.nodes.length) })}
         </h4>
         <div className="space-y-1.5">
           {topologicalOrder(store.nodes, store.edges)
@@ -475,7 +488,7 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
                   <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${typeColor}`}>
                     {typeLabel}
                   </span>
-                  <span className="truncate">{node.data.label || "Untitled"}</span>
+                  <span className="truncate">{node.data.label || t("builder.untitled")}</span>
                 </button>
               );
             })}
@@ -490,7 +503,7 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
           className="btn-primary w-full gap-2"
         >
           <Save className="w-4 h-4" />
-          {saving ? "Saving..." : store.editingWorkflowId ? "Update Workflow" : "Save Workflow"}
+          {saving ? t("builder.saving") : store.editingWorkflowId ? t("builder.updateWorkflow") : t("builder.saveWorkflow")}
         </button>
         {workflowId && (
           <Link
@@ -498,7 +511,7 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
             className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-xl text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             <ExternalLink className="w-4 h-4" />
-            Visit Workflow
+            {t("builder.visitWorkflow")}
           </Link>
         )}
       </div>

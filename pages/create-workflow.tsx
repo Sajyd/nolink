@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { ArrowLeft, Zap, Crown, Loader2, CloudUpload, Check, Menu, Settings2 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { useTranslation } from "@/lib/i18n";
 import { SUBSCRIPTION_PLANS } from "@/lib/constants";
 import BuilderToolbar from "@/components/builder/BuilderToolbar";
 import StepConfigPanel from "@/components/builder/StepConfigPanel";
@@ -34,6 +35,7 @@ export default function CreateWorkflow() {
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const [mobileToolbarOpen, setMobileToolbarOpen] = useState(false);
   const [mobileConfigOpen, setMobileConfigOpen] = useState(false);
+  const { t } = useTranslation();
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(false);
 
@@ -157,7 +159,7 @@ export default function CreateWorkflow() {
   const performSave = useCallback(async (silent: boolean) => {
     const s = useWorkflowStore.getState();
     if (s.nodes.length === 0) {
-      if (!silent) toast.error("Add at least one step");
+      if (!silent) toast.error(t("builder.addStep"));
       return;
     }
 
@@ -191,13 +193,13 @@ export default function CreateWorkflow() {
         setAutoSaveStatus("saved");
         setTimeout(() => { if (mountedRef.current) setAutoSaveStatus("idle"); }, 2000);
       } else {
-        toast.success("Workflow saved!");
+        toast.success(t("builder.workflowSaved"));
       }
     } catch {
       if (silent) {
         setAutoSaveStatus("idle");
       } else {
-        toast.error("Failed to save workflow");
+        toast.error(t("builder.failedToSave"));
       }
     } finally {
       if (!silent) setSaving(false);
@@ -229,7 +231,7 @@ export default function CreateWorkflow() {
 
   return (
     <>
-      <Head><title>Create Workflow — nolink.ai</title></Head>
+      <Head><title>{t("builder.createTitle")}</title></Head>
       <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
         <header className="flex items-center justify-between px-3 sm:px-4 h-14 border-b border-gray-200 dark:border-gray-800 glass">
           <div className="flex items-center gap-2 sm:gap-3">
@@ -243,24 +245,24 @@ export default function CreateWorkflow() {
               <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center">
                 <Zap className="w-3.5 h-3.5 text-white" />
               </div>
-              <span className="font-semibold text-sm hidden sm:inline">Workflow Builder</span>
+              <span className="font-semibold text-sm hidden sm:inline">{t("builder.workflowBuilder")}</span>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             {autoSaveStatus === "saving" && (
               <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
                 <CloudUpload className="w-3.5 h-3.5 animate-pulse" />
-                Saving…
+                {t("builder.saving")}
               </span>
             )}
             {autoSaveStatus !== "saving" && lastSavedAt && (
               <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
                 <Check className="w-3.5 h-3.5 text-emerald-500" />
-                Last saved {lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {t("builder.lastSaved", { time: lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) })}
               </span>
             )}
             <label className="flex items-center gap-2 cursor-pointer select-none">
-              <span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">Autosave</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">{t("builder.autosave")}</span>
               <button
                 role="switch"
                 aria-checked={autoSave}
@@ -333,6 +335,7 @@ export default function CreateWorkflow() {
 }
 
 function SubscriptionGate() {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState<string | null>(null);
 
   const handleUpgrade = async (tier: string) => {
@@ -350,7 +353,7 @@ function SubscriptionGate() {
         toast.error(data.error || "Failed to start checkout");
       }
     } catch {
-      toast.error("Something went wrong");
+      toast.error(t("common.somethingWentWrong"));
     }
     setLoading(null);
   };
@@ -361,19 +364,19 @@ function SubscriptionGate() {
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center mx-auto mb-5 shadow-lg">
           <Crown className="w-8 h-8 text-white" />
         </div>
-        <h2 className="text-2xl font-bold mb-2">Unlock Workflow Creation</h2>
+        <h2 className="text-2xl font-bold mb-2">{t("builder.unlockCreation")}</h2>
         <p className="text-gray-500 dark:text-gray-400 mb-8">
-          Upgrade to a paid plan to build, publish, and earn from AI workflows.
+          {t("builder.unlockDesc")}
         </p>
         <div className="grid sm:grid-cols-2 gap-4 text-left">
           {SUBSCRIPTION_PLANS.filter((p) => p.priceInCents > 0).slice(0, 2).map((plan) => (
             <div key={plan.tier} className={`card p-5 ${plan.tier === "STARTER" ? "" : "!border-brand-500 ring-2 ring-brand-500/20"}`}>
-              <h3 className="font-semibold">{plan.name}</h3>
-              <p className="text-xl font-bold mt-1">${(plan.priceInCents / 100).toFixed(2)}<span className="text-sm font-normal text-gray-400">/mo</span></p>
-              <p className="text-xs text-brand-500 mt-1">{plan.monthlyNolinks} NL/month</p>
+              <h3 className="font-semibold">{t(plan.nameKey)}</h3>
+              <p className="text-xl font-bold mt-1">${(plan.priceInCents / 100).toFixed(2)}<span className="text-sm font-normal text-gray-400">{t("dashboard.perMonth")}</span></p>
+              <p className="text-xs text-brand-500 mt-1">{plan.monthlyNolinks} {t("dashboard.nlPerMonth")}</p>
               <ul className="mt-3 space-y-1">
-                {plan.features.map((f) => (
-                  <li key={f} className="text-xs text-gray-500 dark:text-gray-400">&#10003; {f}</li>
+                {plan.featureKeys.map((fk) => (
+                  <li key={fk} className="text-xs text-gray-500 dark:text-gray-400">&#10003; {t(fk)}</li>
                 ))}
               </ul>
               <button
@@ -386,13 +389,13 @@ function SubscriptionGate() {
                 ) : (
                   <Zap className="w-4 h-4" />
                 )}
-                Get {plan.name}
+                {t("builder.getPlan", { plan: t(plan.nameKey) })}
               </button>
             </div>
           ))}
         </div>
         <Link href="/dashboard" className="inline-block mt-6 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-          Back to Dashboard
+          {t("builder.backToDashboard")}
         </Link>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { useTranslation } from "@/lib/i18n";
 
 export default function SignUp() {
   const [email, setEmail] = useState("");
@@ -10,6 +11,7 @@ export default function SignUp() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { t } = useTranslation();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,7 +25,7 @@ export default function SignUp() {
     const data = await res.json().catch(() => ({}));
     setLoading(false);
     if (!res.ok) {
-      setError(data.error || "Registration failed");
+      setError(data.error || t("auth.registrationFailed"));
       return;
     }
     router.push("/auth/signin?registered=1");
@@ -31,13 +33,13 @@ export default function SignUp() {
 
   return (
     <>
-      <Head><title>Sign Up — nolink.ai</title></Head>
+      <Head><title>{t("auth.signUpTitle")}</title></Head>
       <div className="mx-auto max-w-sm px-4 py-16">
-      <h1 className="text-2xl font-semibold text-[var(--fg)]">Create account</h1>
+      <h1 className="text-2xl font-semibold text-[var(--fg)]">{t("auth.createAccount")}</h1>
       <p className="mt-1 text-sm text-[var(--muted)]">
-        Already have an account?{" "}
+        {t("auth.alreadyHaveAccount")}{" "}
         <Link href="/auth/signin" className="text-[var(--nolink)] hover:underline">
-          Sign in
+          {t("common.signIn")}
         </Link>
       </p>
       <form onSubmit={handleSubmit} className="mt-8 space-y-4">
@@ -48,7 +50,7 @@ export default function SignUp() {
         )}
         <div>
           <label htmlFor="name" className="block text-sm font-medium text-[var(--fg)]">
-            Name (optional)
+            {t("auth.nameOptional")}
           </label>
           <input
             id="name"
@@ -60,7 +62,7 @@ export default function SignUp() {
         </div>
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-[var(--fg)]">
-            Email
+            {t("auth.email")}
           </label>
           <input
             id="email"
@@ -73,7 +75,7 @@ export default function SignUp() {
         </div>
         <div>
           <label htmlFor="password" className="block text-sm font-medium text-[var(--fg)]">
-            Password
+            {t("auth.password")}
           </label>
           <input
             id="password"
@@ -90,7 +92,7 @@ export default function SignUp() {
           disabled={loading}
           className="w-full rounded-md bg-[var(--nolink)] py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
         >
-          {loading ? "Creating account…" : "Sign up"}
+          {loading ? t("auth.creatingAccount") : t("auth.signUp")}
         </button>
       </form>
     </div>

@@ -8,28 +8,31 @@ declare module "next-auth" {
       name?: string | null;
       email?: string | null;
       image?: string | null;
+      bonusBalance: number;
       purchasedBalance: number;
       earnedBalance: number;
       subscription: SubscriptionTier;
-      stripeConnectOnboarded: boolean;
+      payoutVerified: boolean;
     };
   }
 
   interface User {
     id: string;
+    bonusBalance: number;
     purchasedBalance: number;
     earnedBalance: number;
     subscription: SubscriptionTier;
-    stripeConnectOnboarded: boolean;
+    payoutVerified: boolean;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
     id: string;
+    bonusBalance: number;
     purchasedBalance: number;
     earnedBalance: number;
     subscription: SubscriptionTier;
-    stripeConnectOnboarded: boolean;
+    payoutVerified: boolean;
   }
 }

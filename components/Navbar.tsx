@@ -2,23 +2,25 @@ import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/router";
 import { useState } from "react";
-import { Zap, Menu, X, LogOut, User, LayoutDashboard, Store, Plus } from "lucide-react";
+import { Zap, Menu, X, LogOut, User, LayoutDashboard, Store, Plus, Globe } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
+import { useTranslation, type Locale } from "@/lib/i18n";
 
 export default function Navbar() {
   const { data: session } = useSession();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { t, locale, setLocale } = useTranslation();
 
   const isSubscribed = session?.user?.subscription && session.user.subscription !== "FREE";
 
   const navLinks = [
-    { href: "/marketplace", label: "Marketplace", icon: Store },
+    { href: "/marketplace", label: t("common.marketplace"), icon: Store },
     ...(session
       ? [
-          { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+          { href: "/dashboard", label: t("common.dashboard"), icon: LayoutDashboard },
           ...(isSubscribed
-            ? [{ href: "/create-workflow", label: "Create", icon: Plus }]
+            ? [{ href: "/create-workflow", label: t("common.create"), icon: Plus }]
             : []),
         ]
       : []),
@@ -55,6 +57,15 @@ export default function Navbar() {
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
+            <button
+              onClick={() => setLocale(locale === "en" ? "fr" : "en")}
+              className="btn-ghost p-2 text-xs font-semibold uppercase"
+              title={locale === "en" ? "Passer en français" : "Switch to English"}
+            >
+              <Globe className="w-4 h-4 inline mr-1" />
+              {locale === "en" ? "FR" : "EN"}
+            </button>
+
             <ThemeToggle />
 
             {session ? (
@@ -62,10 +73,10 @@ export default function Navbar() {
                 <Link
                   href="/dashboard?tab=credits"
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 text-sm font-medium"
-                  title={`Purchased: ${session.user.purchasedBalance ?? 0} NL · Earned: ${session.user.earnedBalance ?? 0} NL`}
+                  title={t("nav.bonusTooltip", { bonus: String(session.user.bonusBalance ?? 0), purchased: String(session.user.purchasedBalance ?? 0), earned: String(session.user.earnedBalance ?? 0) })}
                 >
                   <Zap className="w-3.5 h-3.5" />
-                  {(session.user.purchasedBalance ?? 0) + (session.user.earnedBalance ?? 0)} NL
+                  {(session.user.bonusBalance ?? 0) + (session.user.purchasedBalance ?? 0) + (session.user.earnedBalance ?? 0)} NL
                 </Link>
 
                 <div className="relative group">
@@ -73,7 +84,7 @@ export default function Navbar() {
                     <div className="w-7 h-7 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
                       <User className="w-4 h-4 text-brand-600" />
                     </div>
-                    <span className="text-sm">{session.user.name || "User"}</span>
+                    <span className="text-sm">{session.user.name || t("common.user")}</span>
                   </button>
 
                   <div className="absolute right-0 mt-1 w-48 py-2 card opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">
@@ -82,14 +93,14 @@ export default function Navbar() {
                       className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                     >
                       <LayoutDashboard className="w-4 h-4" />
-                      Dashboard
+                      {t("common.dashboard")}
                     </Link>
                     <button
                       onClick={() => signOut()}
                       className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                     >
                       <LogOut className="w-4 h-4" />
-                      Sign Out
+                      {t("common.signOut")}
                     </button>
                   </div>
                 </div>
@@ -97,10 +108,10 @@ export default function Navbar() {
             ) : (
               <div className="flex items-center gap-2">
                 <Link href="/auth/signin" className="btn-ghost text-sm">
-                  Sign In
+                  {t("common.signIn")}
                 </Link>
                 <Link href="/auth/register" className="btn-primary text-sm">
-                  Get Started
+                  {t("common.getStarted")}
                 </Link>
               </div>
             )}
@@ -129,14 +140,21 @@ export default function Navbar() {
             </Link>
           ))}
           <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center gap-2">
+            <button
+              onClick={() => setLocale(locale === "en" ? "fr" : "en")}
+              className="btn-ghost p-2 text-xs font-semibold uppercase"
+            >
+              <Globe className="w-4 h-4 inline mr-1" />
+              {locale === "en" ? "FR" : "EN"}
+            </button>
             <ThemeToggle />
             {!session && (
               <>
                 <Link href="/auth/signin" className="btn-ghost text-sm">
-                  Sign In
+                  {t("common.signIn")}
                 </Link>
                 <Link href="/auth/register" className="btn-primary text-sm">
-                  Get Started
+                  {t("common.getStarted")}
                 </Link>
               </>
             )}

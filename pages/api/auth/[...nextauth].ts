@@ -33,10 +33,11 @@ export const authOptions: AuthOptions = {
           email: user.email,
           name: user.name,
           image: user.image,
+          bonusBalance: user.bonusBalance,
           purchasedBalance: user.purchasedBalance,
           earnedBalance: user.earnedBalance,
           subscription: user.subscription,
-          stripeConnectOnboarded: user.stripeConnectOnboarded,
+          payoutVerified: user.payoutVerified,
         };
       },
     }),
@@ -57,6 +58,7 @@ export const authOptions: AuthOptions = {
               name: profile.name ?? user.name,
               image: googleProfile.picture ?? user.image,
               emailVerified: new Date(),
+              bonusBalance: 50,
             },
           });
         } else if (!dbUser.name || !dbUser.image) {
@@ -109,17 +111,19 @@ export const authOptions: AuthOptions = {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
           select: {
+            bonusBalance: true,
             purchasedBalance: true,
             earnedBalance: true,
             subscription: true,
-            stripeConnectOnboarded: true,
+            payoutVerified: true,
           },
         });
         if (dbUser) {
+          token.bonusBalance = dbUser.bonusBalance;
           token.purchasedBalance = dbUser.purchasedBalance;
           token.earnedBalance = dbUser.earnedBalance;
           token.subscription = dbUser.subscription;
-          token.stripeConnectOnboarded = dbUser.stripeConnectOnboarded;
+          token.payoutVerified = dbUser.payoutVerified;
         }
       }
 
@@ -127,10 +131,11 @@ export const authOptions: AuthOptions = {
     },
     async session({ session, token }) {
       session.user.id = token.id;
+      session.user.bonusBalance = token.bonusBalance ?? 0;
       session.user.purchasedBalance = token.purchasedBalance ?? 0;
       session.user.earnedBalance = token.earnedBalance ?? 0;
       session.user.subscription = token.subscription ?? "FREE";
-      session.user.stripeConnectOnboarded = token.stripeConnectOnboarded ?? false;
+      session.user.payoutVerified = token.payoutVerified ?? false;
       return session;
     },
   },

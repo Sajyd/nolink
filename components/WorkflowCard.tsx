@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Zap, Play, Eye, Tag } from "lucide-react";
+import { useTranslation } from "@/lib/i18n";
 
 interface WorkflowCardProps {
   id: string;
@@ -37,6 +38,7 @@ export default function WorkflowCard({
   tags,
   slug,
 }: WorkflowCardProps) {
+  const { t } = useTranslation();
   return (
     <Link href={`/workflow/${id}`}>
       <div className="card p-5 h-full flex flex-col gap-3 group cursor-pointer hover:border-brand-300 dark:hover:border-brand-700 transition-all">
@@ -75,9 +77,9 @@ export default function WorkflowCard({
         <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
           <span className="flex items-center gap-1">
             <Play className="w-3 h-3" />
-            {totalUses} runs
+            {totalUses} {t("common.runs")}
           </span>
-          <span>{stepsCount} steps</span>
+          <span>{stepsCount} {t("common.steps")}</span>
           {creatorName && (
             <span className="flex items-center gap-1">
               <Eye className="w-3 h-3" />

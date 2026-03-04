@@ -36,6 +36,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useTranslation } from "@/lib/i18n";
 
 interface InputParameter {
   id: string;
@@ -175,6 +176,8 @@ export default function WorkflowPage() {
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const resultsEndRef = useRef<HTMLDivElement>(null);
 
+  const { t } = useTranslation();
+
   useEffect(() => {
     if (id) fetchWorkflow();
   }, [id]);
@@ -192,7 +195,7 @@ export default function WorkflowPage() {
       const data = await res.json();
       setWorkflow(data);
     } catch {
-      toast.error("Workflow not found");
+      toast.error(t("workflow.notFound"));
     }
     setLoading(false);
   };
@@ -243,7 +246,7 @@ export default function WorkflowPage() {
 
       const existing = stepInputs[stepId]?.files || [];
       if (existing.length + fileArray.length > 5) {
-        toast.error("Maximum 5 files allowed");
+        toast.error(t("workflow.maxFiles"));
         return;
       }
 
@@ -263,7 +266,7 @@ export default function WorkflowPage() {
 
         if (!res.ok) {
           const data = await res.json();
-          toast.error(data.error || "Upload failed");
+          toast.error(data.error || t("workflow.uploadFailed"));
           return;
         }
 
@@ -299,11 +302,9 @@ export default function WorkflowPage() {
             files: [...(prev[stepId]?.files || []), ...newFiles],
           },
         }));
-        toast.success(
-          `${newFiles.length} file${newFiles.length > 1 ? "s" : ""} uploaded`
-        );
+        toast.success(t("workflow.filesUploaded", { count: newFiles.length }));
       } catch {
-        toast.error("Upload failed");
+        toast.error(t("workflow.uploadFailed"));
       } finally {
         setUploadingStep(null);
       }
@@ -377,7 +378,7 @@ export default function WorkflowPage() {
       return si.text.trim().length > 0 || si.files.length > 0;
     });
     if (!hasAnyInput && inputParameters.length === 0) {
-      toast.error("Please provide input");
+      toast.error(t("workflow.provideInput"));
       return;
     }
 
@@ -389,7 +390,7 @@ export default function WorkflowPage() {
         return false;
       });
     if (missingRequired.length > 0) {
-      toast.error(`Please fill in: ${missingRequired.map((p) => p.label || p.name).join(", ")}`);
+      toast.error(t("workflow.fillIn", { fields: missingRequired.map((p) => p.label || p.name).join(", ") }));
       return;
     }
 
@@ -451,23 +452,23 @@ export default function WorkflowPage() {
           return;
         }
         if (res.status === 402) {
-          setError(`Insufficient Nolinks. Required: ${data.required} NL`);
+          setError(t("workflow.insufficientNolinks", { required: String(data.required) }));
         } else {
-          setError(data.error || "Execution failed");
+          setError(data.error || t("workflow.executionFailed"));
         }
         setExecuting(false);
         return;
       }
 
       if (!res.ok) {
-        setError("Execution failed");
+        setError(t("workflow.executionFailed"));
         setExecuting(false);
         return;
       }
 
       const reader = res.body?.getReader();
       if (!reader) {
-        setError("Streaming not supported");
+        setError(t("workflow.streamingNotSupported"));
         setExecuting(false);
         return;
       }
@@ -541,17 +542,17 @@ export default function WorkflowPage() {
           }
 
           if (data.status === "FAILED") {
-            setError(data.error || "Execution failed");
+            setError(data.error || t("workflow.executionFailed"));
             receivedComplete = true;
             break;
           }
         }
 
         if (!receivedComplete) {
-          setError("Execution timed out");
+          setError(t("workflow.executionTimedOut"));
         }
       } catch {
-        setError("An error occurred while checking execution status");
+        setError(t("workflow.errorCheckingStatus"));
       }
     }
 
@@ -642,10 +643,10 @@ export default function WorkflowPage() {
     return (
       <div className="text-center py-20">
         <h2 className="text-xl font-semibold text-gray-500">
-          Workflow not found
+          {t("workflow.notFound")}
         </h2>
         <Link href="/marketplace" className="btn-primary mt-4 inline-flex">
-          Browse Marketplace
+          {t("workflow.browseMarketplace")}
         </Link>
       </div>
     );
@@ -686,12 +687,12 @@ export default function WorkflowPage() {
               <span className="flex items-center gap-1 text-sm font-semibold text-brand-600">
                 <Zap className="w-3.5 h-3.5" />
                 {workflow.hasPerSecondPricing
-                  ? `From ${workflow.priceInNolinks} NL`
-                  : `${workflow.priceInNolinks} NL per run`}
+                  ? t("workflow.fromNl", { price: String(workflow.priceInNolinks) })
+                  : t("workflow.nlPerRun", { price: String(workflow.priceInNolinks) })}
               </span>
               {workflow.hasPerSecondPricing && workflow.perSecondStepCount && (
                 <span className="text-[11px] text-gray-400 font-medium">
-                  + {workflow.perSecondStepCount} {workflow.perSecondStepCount === 1 ? "step" : "steps"} priced per second
+                  + {workflow.perSecondStepCount} {workflow.perSecondStepCount === 1 ? t("workflow.step") : t("common.steps")} priced per second
                   {(() => {
                     const pricedSteps = workflow.steps.filter(s => s._pricingInfo);
                     if (pricedSteps.length === 0) return null;
@@ -712,11 +713,11 @@ export default function WorkflowPage() {
               </span>
               <span className="flex items-center gap-1">
                 <Play className="w-3.5 h-3.5" />
-                {workflow.totalUses} runs
+                {workflow.totalUses} {t("common.runs")}
               </span>
               <span className="flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5" />
-                {workflow.steps.length} steps
+                {workflow.steps.length} {t("common.steps")}
               </span>
             </div>
 
@@ -727,7 +728,7 @@ export default function WorkflowPage() {
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-brand-600 bg-gray-100 dark:bg-gray-800 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
                 >
                   <Pencil className="w-3 h-3" />
-                  Edit Workflow
+                  {t("workflow.editWorkflow")}
                 </Link>
               )}
               <button
@@ -735,13 +736,13 @@ export default function WorkflowPage() {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 hover:bg-brand-100 dark:hover:bg-brand-900/40 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
               >
                 <Code2 className="w-3 h-3" />
-                Use it in your app
+                {t("workflow.useInApp")}
               </button>
             </div>
 
             {inputSteps.length === 1 && inputSteps[0].acceptTypes?.some((t) => t !== "text") && (
               <div className="flex items-center gap-2 mt-3">
-                <span className="text-xs text-gray-400">Accepts:</span>
+                <span className="text-xs text-gray-400">{t("workflow.accepts")}</span>
                 {(inputSteps[0].acceptTypes || []).filter((t) => t !== "text").map((t) => {
                   const Icon = TYPE_ICONS[t] || FileText;
                   return (
@@ -758,7 +759,7 @@ export default function WorkflowPage() {
             )}
             {inputSteps.length > 1 && (
               <div className="flex items-center gap-2 mt-3">
-                <span className="text-xs text-gray-400">{inputSteps.length} inputs required</span>
+                <span className="text-xs text-gray-400">{t("workflow.inputsRequired", { count: String(inputSteps.length) })}</span>
               </div>
             )}
           </div>
@@ -770,7 +771,7 @@ export default function WorkflowPage() {
             onClick={() => setShowSteps(!showSteps)}
             className="flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
           >
-            Workflow Steps
+            {t("workflow.workflowSteps")}
             {showSteps ? (
               <ChevronUp className="w-4 h-4" />
             ) : (
@@ -790,7 +791,7 @@ export default function WorkflowPage() {
                   >
                     <div className="card p-3 min-w-[160px]">
                       <p className="text-[10px] text-gray-400 font-medium">
-                        Step {step.order}
+                        {t("workflow.step")} {step.order}
                       </p>
                       <p className="text-sm font-medium mt-0.5 truncate">
                         {step.name}
@@ -825,12 +826,12 @@ export default function WorkflowPage() {
           <div className="card p-6 mb-6 border-amber-200 dark:border-amber-800/50 bg-amber-50/30 dark:bg-amber-900/10">
             <h2 className="font-semibold mb-4 flex items-center gap-2 text-amber-700 dark:text-amber-300">
               <Lightbulb className="w-5 h-5" />
-              Example
+              {t("workflow.example")}
             </h2>
             <div className="grid sm:grid-cols-2 gap-4">
               {workflow.exampleInput && (
                 <div>
-                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Input</p>
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">{t("workflow.input")}</p>
                   <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-amber-100 dark:border-amber-900/30">
                     <pre className="text-sm whitespace-pre-wrap font-mono text-gray-700 dark:text-gray-300 leading-relaxed">
                       {workflow.exampleInput}
@@ -840,7 +841,7 @@ export default function WorkflowPage() {
               )}
               {workflow.exampleOutput && (
                 <div>
-                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Output</p>
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">{t("workflow.output")}</p>
                   <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-amber-100 dark:border-amber-900/30">
                     {isUrl(workflow.exampleOutput.trim()) ? (
                       looksLikeImage(workflow.exampleOutput.trim()) ? (
@@ -865,7 +866,7 @@ export default function WorkflowPage() {
                           className="text-sm text-brand-600 hover:underline flex items-center gap-1"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
-                          View example output
+                          {t("workflow.viewExampleOutput")}
                         </a>
                       )
                     ) : (
@@ -886,13 +887,10 @@ export default function WorkflowPage() {
             <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-                Third-party API disclaimer
+                {t("workflow.thirdPartyDisclaimer")}
               </p>
               <p className="text-xs text-amber-600/80 dark:text-amber-400/80 leading-relaxed mt-0.5">
-                This workflow connects to one or more external APIs that are not
-                verified or endorsed by Nolink. Your data may be processed by
-                third-party services. Do not submit sensitive or personal information
-                unless you trust the workflow creator and the APIs used.
+                {t("workflow.thirdPartyDesc")}
               </p>
             </div>
           </div>
@@ -900,7 +898,7 @@ export default function WorkflowPage() {
 
         {/* Run Workflow */}
         <div className="card p-6 mb-6">
-          <h2 className="font-semibold mb-3">Run this workflow</h2>
+          <h2 className="font-semibold mb-3">{t("workflow.runThisWorkflow")}</h2>
 
           <div className={`space-y-4 ${inputSteps.length > 1 ? "" : ""}`}>
             {inputSteps.map((step, stepIdx) => {
@@ -992,7 +990,7 @@ export default function WorkflowPage() {
                         {isUploading ? (
                           <div className="flex flex-col items-center gap-2">
                             <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
-                            <p className="text-sm text-gray-500">Uploading...</p>
+                            <p className="text-sm text-gray-500">{t("workflow.uploading")}</p>
                           </div>
                         ) : (
                           <div className="flex flex-col items-center gap-2">
@@ -1001,7 +999,7 @@ export default function WorkflowPage() {
                             </div>
                             <div>
                               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Drop files here or click to browse
+                                {t("workflow.dropFiles")}
                               </p>
                               <p className="text-xs text-gray-400 mt-1">
                                 Accepts{" "}
@@ -1073,7 +1071,7 @@ export default function WorkflowPage() {
                     <div className="space-y-3 mb-3">
                       <div className="flex items-center gap-2">
                         <SlidersHorizontal className="w-4 h-4 text-emerald-500" />
-                        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Parameters</h3>
+                        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">{t("common.parameters")}</h3>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         {stepParams.map((param) => (
@@ -1090,7 +1088,7 @@ export default function WorkflowPage() {
                                   setCustomParams((prev) => ({ ...prev, [param.name]: e.target.value }))
                                 }
                                 className="input-field text-sm"
-                                placeholder={`Enter ${param.label || param.name}...`}
+                                placeholder={param.label || param.name}
                                 disabled={executing}
                               />
                             )}
@@ -1126,8 +1124,8 @@ export default function WorkflowPage() {
                                 />
                                 <span className="text-sm text-gray-600 dark:text-gray-400">
                                   {customParams[param.name] === true || (customParams[param.name] === undefined && param.defaultValue === "true")
-                                    ? "Enabled"
-                                    : "Disabled"}
+                                    ? t("common.enabled")
+                                    : t("common.disabled")}
                                 </span>
                               </label>
                             )}
@@ -1140,7 +1138,7 @@ export default function WorkflowPage() {
                                 className="input-field text-sm"
                                 disabled={executing}
                               >
-                                <option value="">Select...</option>
+                                <option value="">{t("workflow.select")}</option>
                                 {(param.options || []).filter(Boolean).map((opt) => (
                                   <option key={opt} value={opt}>
                                     {opt}
@@ -1163,10 +1161,10 @@ export default function WorkflowPage() {
                       className="input-field font-mono text-sm"
                       placeholder={
                         acceptsFiles
-                          ? "Optionally enter a text prompt alongside your files..."
+                          ? t("workflow.optionalText")
                           : inputSteps.length > 1
-                            ? `Enter input for "${step.name || `Input ${stepIdx + 1}`}"...`
-                            : "Enter your input here..."
+                            ? t("workflow.enterInputFor", { name: step.name || `Input ${stepIdx + 1}` })
+                            : t("workflow.enterInput")
                       }
                       disabled={executing}
                     />
@@ -1179,10 +1177,10 @@ export default function WorkflowPage() {
           <div className="flex items-center justify-between mt-4">
             <p className="text-xs text-gray-400">
               {!session
-                ? "Try it free — no account needed"
+                ? t("workflow.tryFreeNoAccount")
                 : workflow.hasPerSecondPricing
-                  ? `Base: ${workflow.priceInNolinks} NL + per-second steps billed by output duration`
-                  : `This will cost ${workflow.priceInNolinks} Nolinks`}
+                  ? t("workflow.baseCost", { price: String(workflow.priceInNolinks) })
+                  : t("workflow.willCost", { price: String(workflow.priceInNolinks) })}
             </p>
             <button
               onClick={handleExecute}
@@ -1192,17 +1190,17 @@ export default function WorkflowPage() {
               {executing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Executing...
+                  {t("workflow.executing")}
                 </>
               ) : !session ? (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  Try it Free
+                  {t("workflow.tryItFree")}
                 </>
               ) : (
                 <>
                   <Play className="w-4 h-4" />
-                  Run Workflow
+                  {t("workflow.runWorkflow")}
                 </>
               )}
             </button>
@@ -1218,10 +1216,10 @@ export default function WorkflowPage() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                  You've used your free run
+                  {t("workflow.freeRunUsed")}
                 </h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-md">
-                  Create a free account to keep running workflows. You'll get <strong>50 free Nolinks</strong> to start — no credit card required.
+                  {t("workflow.freeRunDesc")}
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -1230,13 +1228,13 @@ export default function WorkflowPage() {
                   className="btn-primary gap-2 px-6"
                 >
                   <LogIn className="w-4 h-4" />
-                  Sign Up Free
+                  {t("workflow.signUpFree")}
                 </Link>
                 <Link
                   href="/auth/signin"
                   className="text-sm text-gray-500 hover:text-brand-600 transition-colors"
                 >
-                  Already have an account? Sign in
+                  {t("workflow.alreadyHaveAccount")}
                 </Link>
               </div>
             </div>
@@ -1268,12 +1266,12 @@ export default function WorkflowPage() {
                     <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                   )}
                   {executing
-                    ? `Running — Step ${Math.min(completedCount + 1, totalCount)} of ${totalCount}`
-                    : "Results"}
+                    ? t("workflow.running", { current: String(Math.min(completedCount + 1, totalCount)), total: String(totalCount) })
+                    : t("common.results")}
                 </h2>
                 {creditsUsed > 0 && !executing && (
                   <span className="text-sm text-gray-500">
-                    Used: {creditsUsed} NL
+                    {t("workflow.used", { credits: String(creditsUsed) })}
                   </span>
                 )}
               </div>
@@ -1310,15 +1308,15 @@ export default function WorkflowPage() {
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                      Liked the result? There's more where that came from.
+                      {t("workflow.likedResult")}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      Sign up for free and get 50 Nolinks to run any workflow.
+                      {t("workflow.signUpForFree")}
                     </p>
                   </div>
                   <Link href="/auth/signup" className="btn-primary text-sm gap-1.5 shrink-0">
                     <LogIn className="w-3.5 h-3.5" />
-                    Sign Up Free
+                    {t("workflow.signUpFree")}
                   </Link>
                 </div>
               </div>
@@ -1346,6 +1344,7 @@ function ApiIntegrationModal({
   workflow: Workflow;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"curl" | "javascript" | "python">("curl");
 
@@ -1510,10 +1509,10 @@ while True:
             </div>
             <div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                Use it in your app
+                {t("workflow.useInApp")}
               </h2>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Integrate <span className="font-medium">{workflow.name}</span> via the Nolink API
+                {t("workflow.integrate", { name: workflow.name })}
               </p>
             </div>
           </div>
@@ -1529,7 +1528,7 @@ while True:
           {/* API Endpoints */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-              API Endpoints
+              {t("workflow.apiEndpoints")}
             </label>
             <div className="space-y-2">
               {/* Run endpoint */}
@@ -1597,14 +1596,14 @@ while True:
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Cost</p>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
                 {workflow.hasPerSecondPricing
-                  ? `From ${workflow.priceInNolinks} NL`
-                  : `${workflow.priceInNolinks} NL / run`}
+                  ? t("workflow.fromNl", { price: String(workflow.priceInNolinks) })
+                  : t("workflow.nlPerRun", { price: String(workflow.priceInNolinks) })}
               </p>
             </div>
             <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Steps</p>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-1">
-                {workflow.steps.length} steps
+                {workflow.steps.length} {t("common.steps")}
               </p>
             </div>
           </div>
@@ -1612,27 +1611,27 @@ while True:
           {/* How it works */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-              How it works
+              {t("workflow.howItWorks")}
             </label>
             <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 p-3 space-y-2.5">
               <div className="flex items-start gap-2.5">
                 <span className="shrink-0 w-5 h-5 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-[10px] font-bold text-brand-700 dark:text-brand-400">1</span>
                 <div>
-                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300">POST to start the workflow</p>
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{t("workflow.postToStart")}</p>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Returns <code className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-[10px]">jobId</code> immediately (HTTP 202)</p>
                 </div>
               </div>
               <div className="flex items-start gap-2.5">
                 <span className="shrink-0 w-5 h-5 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-[10px] font-bold text-brand-700 dark:text-brand-400">2</span>
                 <div>
-                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300">GET to poll for progress</p>
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{t("workflow.getToPool")}</p>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Returns <code className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-[10px]">status</code>, <code className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-[10px]">progress</code>, and per-step results</p>
                 </div>
               </div>
               <div className="flex items-start gap-2.5">
                 <span className="shrink-0 w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-[10px] font-bold text-emerald-700 dark:text-emerald-400">3</span>
                 <div>
-                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Collect the result</p>
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{t("workflow.collectResult")}</p>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">When status is <code className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-[10px]">COMPLETED</code>, the <code className="px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-[10px]">result</code> field contains the final output</p>
                 </div>
               </div>
@@ -1642,7 +1641,7 @@ while True:
           {/* Code snippets */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-              Code Example
+              {t("workflow.codeExample")}
             </label>
 
             {/* Tabs */}
@@ -1699,13 +1698,14 @@ while True:
 // ── Live step card ──────────────────────────────────────────────
 
 function LiveStepCard({ step }: { step: LiveStep }) {
+  const { t } = useTranslation();
   if (step.status === "pending") {
     return (
       <div className="card p-4 opacity-40">
         <div className="flex items-center gap-2">
           <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 dark:border-gray-600" />
           <span className="text-sm text-gray-400">
-            Step {step.index}: {step.stepName}
+            {t("workflow.step")} {step.index}: {step.stepName}
           </span>
           {step.modelName && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400">
@@ -1723,7 +1723,7 @@ function LiveStepCard({ step }: { step: LiveStep }) {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium flex items-center gap-2 text-brand-700 dark:text-brand-300">
             <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-            Step {step.index}: {step.stepName}
+            {t("workflow.step")} {step.index}: {step.stepName}
           </h3>
           {step.modelName && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 font-medium">
@@ -1742,7 +1742,7 @@ function LiveStepCard({ step }: { step: LiveStep }) {
         </div>
 
         <p className="text-xs text-brand-600/70 dark:text-brand-400/70 mt-2">
-          Processing with {step.modelName || step.aiModel || "AI"}...
+          {t("workflow.processingWith", { model: step.modelName || step.aiModel || "AI" })}
         </p>
       </div>
     );
@@ -1770,11 +1770,11 @@ function LiveStepCard({ step }: { step: LiveStep }) {
                 : "text-gray-600 dark:text-gray-300"
             }
           >
-            Step {step.index}: {step.stepName}
+            {t("workflow.step")} {step.index}: {step.stepName}
           </span>
           {hasError && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-medium">
-              Error
+              {t("common.error")}
             </span>
           )}
         </h3>
@@ -1887,6 +1887,7 @@ function ResultDisplay({
   stepName: string;
   hasError: boolean;
 }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const outputIsUrl = isUrl(output.trim());
   const trimmedOutput = output.trim();
@@ -1929,7 +1930,7 @@ function ResultDisplay({
           className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600 transition-colors"
         >
           <Download className="w-3 h-3" />
-          Download video
+          {t("workflow.downloadVideo")}
         </a>
       </div>
     );
@@ -1954,7 +1955,7 @@ function ResultDisplay({
             className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600 transition-colors"
           >
             <ExternalLink className="w-3 h-3" />
-            Open full size
+            {t("workflow.openFullSize")}
           </a>
           <a
             href={displayUrl}
@@ -1962,7 +1963,7 @@ function ResultDisplay({
             className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600 transition-colors"
           >
             <Download className="w-3 h-3" />
-            Download
+            {t("workflow.download")}
           </a>
         </div>
       </div>
@@ -1984,7 +1985,7 @@ function ResultDisplay({
           className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600 transition-colors"
         >
           <Download className="w-3 h-3" />
-          Download audio
+          {t("workflow.downloadAudio")}
         </a>
       </div>
     );
@@ -2000,7 +2001,7 @@ function ResultDisplay({
         className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors border border-blue-100 dark:border-blue-800/40"
       >
         <FileText className="w-4 h-4" />
-        Download Document
+        {t("workflow.downloadDocument")}
         <Download className="w-3.5 h-3.5 ml-1 opacity-60" />
       </a>
     );
@@ -2015,7 +2016,7 @@ function ResultDisplay({
         className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 text-sm font-medium hover:bg-brand-100 dark:hover:bg-brand-900/30 transition-colors border border-brand-100 dark:border-brand-800/40"
       >
         <ExternalLink className="w-4 h-4" />
-        Open Link
+        {t("workflow.openLink")}
       </a>
     );
   }
@@ -2038,7 +2039,7 @@ function ResultDisplay({
       <button
         onClick={handleCopy}
         className="absolute top-2 right-2 p-1.5 rounded-md bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-        title="Copy to clipboard"
+        title={t("common.copyToClipboard")}
       >
         {copied ? (
           <Check className="w-3.5 h-3.5 text-emerald-500" />

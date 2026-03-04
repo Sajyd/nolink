@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { ArrowLeft, Zap, Loader2, Check, CloudUpload, Menu, Settings2 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { useTranslation } from "@/lib/i18n";
 import BuilderToolbar from "@/components/builder/BuilderToolbar";
 import StepConfigPanel from "@/components/builder/StepConfigPanel";
 import { useWorkflowStore, topologicalOrder, type StepNodeData, type CustomFalParam, type CustomReplicateParam } from "@/lib/workflow-store";
@@ -47,6 +48,7 @@ export default function EditWorkflow() {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [mobileToolbarOpen, setMobileToolbarOpen] = useState(false);
   const [mobileConfigOpen, setMobileConfigOpen] = useState(false);
+  const { t } = useTranslation();
   const loadedIdRef = useRef<string | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialLoadDoneRef = useRef(false);
@@ -78,7 +80,7 @@ export default function EditWorkflow() {
       const wf = await res.json();
 
       if (wf.creatorId !== session?.user?.id) {
-        setLoadError("You can only edit your own workflows.");
+        setLoadError(t("builder.ownWorkflowsOnly"));
         setLoading(false);
         return;
       }
@@ -196,7 +198,7 @@ export default function EditWorkflow() {
       store.setNodes(nodes);
       store.setEdges(edges);
     } catch {
-      setLoadError("Failed to load workflow");
+      setLoadError(t("builder.failedToLoad"));
     }
     initialLoadDoneRef.current = true;
     setLoading(false);
@@ -294,7 +296,7 @@ export default function EditWorkflow() {
   const performSave = useCallback(async (silent: boolean) => {
     const s = useWorkflowStore.getState();
     if (s.nodes.length === 0) {
-      if (!silent) toast.error("Add at least one step");
+      if (!silent) toast.error(t("builder.addStep"));
       return;
     }
 
@@ -322,13 +324,13 @@ export default function EditWorkflow() {
         setAutoSaveStatus("saved");
         setTimeout(() => setAutoSaveStatus("idle"), 2000);
       } else {
-        toast.success("Workflow saved!");
+        toast.success(t("builder.workflowSaved"));
       }
     } catch (err) {
       if (silent) {
         setAutoSaveStatus("idle");
       } else {
-        toast.error(err instanceof Error ? err.message : "Failed to save workflow");
+        toast.error(err instanceof Error ? err.message : t("builder.failedToSave"));
       }
     } finally {
       if (!silent) setSaving(false);
@@ -368,7 +370,7 @@ export default function EditWorkflow() {
     return (
       <div className="h-screen flex items-center justify-center gap-3">
         <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
-        <span className="text-gray-500">Loading workflow...</span>
+        <span className="text-gray-500">{t("builder.loadingWorkflow")}</span>
       </div>
     );
   }
@@ -377,14 +379,14 @@ export default function EditWorkflow() {
     return (
       <div className="h-screen flex flex-col items-center justify-center gap-4">
         <p className="text-red-500 font-medium">{loadError}</p>
-        <Link href="/dashboard" className="btn-secondary">Back to Dashboard</Link>
+        <Link href="/dashboard" className="btn-secondary">{t("builder.backToDashboard")}</Link>
       </div>
     );
   }
 
   return (
     <>
-      <Head><title>Edit Workflow — nolink.ai</title></Head>
+      <Head><title>{t("builder.editTitle")}</title></Head>
       <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
         <header className="flex items-center justify-between px-3 sm:px-4 h-14 border-b border-gray-200 dark:border-gray-800 glass">
           <div className="flex items-center gap-2 sm:gap-3">
@@ -398,9 +400,9 @@ export default function EditWorkflow() {
               <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center">
                 <Zap className="w-3.5 h-3.5 text-white" />
               </div>
-              <span className="font-semibold text-sm hidden sm:inline">Edit Workflow</span>
+              <span className="font-semibold text-sm hidden sm:inline">{t("builder.editWorkflow")}</span>
               <span className="text-xs text-gray-400 font-mono truncate max-w-[200px] hidden sm:inline">
-                {store.workflowName || "Untitled"}
+                {store.workflowName || t("builder.untitled")}
               </span>
             </div>
           </div>
@@ -408,17 +410,17 @@ export default function EditWorkflow() {
             {autoSaveStatus === "saving" && (
               <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
                 <CloudUpload className="w-3.5 h-3.5 animate-pulse" />
-                Saving…
+                {t("builder.saving")}
               </span>
             )}
             {autoSaveStatus !== "saving" && lastSavedAt && (
               <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400">
                 <Check className="w-3.5 h-3.5 text-emerald-500" />
-                Last saved {lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {t("builder.lastSaved", { time: lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) })}
               </span>
             )}
             <label className="flex items-center gap-2 cursor-pointer select-none">
-              <span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">Autosave</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">{t("builder.autosave")}</span>
               <button
                 role="switch"
                 aria-checked={autoSave}

@@ -1,6 +1,6 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { prisma } from "./prisma";
+import prisma from "./prisma";
 import bcrypt from "bcryptjs";
 
 export const authOptions: NextAuthOptions = {
@@ -12,16 +12,20 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         const u = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { nolinksBalance: true },
+          select: { bonusBalance: true, purchasedBalance: true, earnedBalance: true },
         });
-        token.nolinksBalance = u?.nolinksBalance ?? 0;
+        token.bonusBalance = u?.bonusBalance ?? 0;
+        token.purchasedBalance = u?.purchasedBalance ?? 0;
+        token.earnedBalance = u?.earnedBalance ?? 0;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id!;
-        session.user.nolinksBalance = token.nolinksBalance ?? 0;
+        session.user.bonusBalance = token.bonusBalance ?? 0;
+        session.user.purchasedBalance = token.purchasedBalance ?? 0;
+        session.user.earnedBalance = token.earnedBalance ?? 0;
       }
       return session;
     },
@@ -46,6 +50,11 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
           image: user.image,
+          bonusBalance: user.bonusBalance,
+          purchasedBalance: user.purchasedBalance,
+          earnedBalance: user.earnedBalance,
+          subscription: user.subscription,
+          payoutVerified: user.payoutVerified,
         };
       },
     }),

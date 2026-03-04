@@ -12,10 +12,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: {
+      bonusBalance: true,
       purchasedBalance: true,
       earnedBalance: true,
       subscription: true,
-      stripeConnectOnboarded: true,
+      payoutVerified: true,
     },
   });
 
@@ -26,11 +27,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
 
   return res.json({
+    bonusBalance: user?.bonusBalance ?? 0,
     purchasedBalance: user?.purchasedBalance ?? 0,
     earnedBalance: user?.earnedBalance ?? 0,
-    totalBalance: (user?.purchasedBalance ?? 0) + (user?.earnedBalance ?? 0),
+    totalBalance: (user?.bonusBalance ?? 0) + (user?.purchasedBalance ?? 0) + (user?.earnedBalance ?? 0),
     subscription: user?.subscription ?? "FREE",
-    stripeConnectOnboarded: user?.stripeConnectOnboarded ?? false,
+    payoutVerified: user?.payoutVerified ?? false,
     transactions,
   });
 }

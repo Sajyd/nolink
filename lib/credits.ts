@@ -3,12 +3,14 @@ import {
   NL_TO_USD_CENTS,
   MINIMUM_PAYOUT_NL,
   PAYOUT_ELIGIBLE_TIERS,
+  PLATFORM_FEE_PERCENT,
+  PAYOUT_HOLDING_DAYS,
 } from "./constants";
 
 // ── Balance helpers ─────────────────────────────────────────────
 
-export function totalBalance(purchased: number, earned: number) {
-  return purchased + earned;
+export function totalBalance(bonus: number, purchased: number, earned: number) {
+  return bonus + purchased + earned;
 }
 
 export function nlToUsdCents(nl: number) {
@@ -24,13 +26,13 @@ export function nlToUsdString(nl: number) {
 export async function checkBalance(userId: string, cost: number): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { purchasedBalance: true, earnedBalance: true },
+    select: { bonusBalance: true, purchasedBalance: true, earnedBalance: true },
   });
   if (!user) return false;
-  return totalBalance(user.purchasedBalance, user.earnedBalance) >= cost;
+  return totalBalance(user.bonusBalance, user.purchasedBalance, user.earnedBalance) >= cost;
 }
 
-// ── Deduct credits (purchased-first strategy) ───────────────────
+// ── Deduct credits (bonus-first, then purchased, then earned) ───
 
 export async function deductCredits(
   userId: string,
@@ -39,13 +41,17 @@ export async function deductCredits(
   baseCost: number = 0
 ) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user || totalBalance(user.purchasedBalance, user.earnedBalance) < cost) {
+  if (!user || totalBalance(user.bonusBalance, user.purchasedBalance, user.earnedBalance) < cost) {
     throw new Error("Insufficient Nolinks balance");
   }
 
-  // Purchased-first deduction
-  let fromPurchased = Math.min(user.purchasedBalance, cost);
-  let fromEarned = cost - fromPurchased;
+  // 3-wallet deduction: bonus first (free NL), then purchased (real money), then earned
+  let remaining = cost;
+  const fromBonus = Math.min(user.bonusBalance, remaining);
+  remaining -= fromBonus;
+  const fromPurchased = Math.min(user.purchasedBalance, remaining);
+  remaining -= fromPurchased;
+  const fromEarned = remaining;
 
   const workflow = await prisma.workflow.findUnique({
     where: { id: workflowId },
@@ -53,21 +59,34 @@ export async function deductCredits(
   });
   if (!workflow) throw new Error("Workflow not found");
 
-  const creatorEarnings = Math.max(0, cost - baseCost);
+  // Creator earnings are proportional to the revenue-backed portion only.
+  // Bonus NL are platform-subsidized and generate zero creator earnings.
+  const paidPortion = fromPurchased + fromEarned;
+  const paidRatio = cost > 0 ? paidPortion / cost : 0;
+  const rawCreatorEarnings = Math.max(0, cost - baseCost);
+  const creatorEarnings = Math.floor(
+    rawCreatorEarnings * paidRatio * (1 - PLATFORM_FEE_PERCENT / 100)
+  );
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  await prisma.$transaction([
-    // Deduct from user
+  const walletLabel =
+    [fromBonus > 0 && "bonus", fromPurchased > 0 && "purchased", fromEarned > 0 && "earned"]
+      .filter(Boolean)
+      .join("+");
+
+  const ops = [
+    // Deduct from user's wallets
     prisma.user.update({
       where: { id: userId },
       data: {
+        bonusBalance: { decrement: fromBonus },
         purchasedBalance: { decrement: fromPurchased },
         earnedBalance: { decrement: fromEarned },
       },
     }),
-    // Credit creator's earned balance
+    // Credit creator's earned balance (only revenue-backed portion minus platform fee)
     prisma.user.update({
       where: { id: workflow.creatorId },
       data: { earnedBalance: { increment: creatorEarnings } },
@@ -86,20 +105,24 @@ export async function deductCredits(
         userId,
         amount: -cost,
         type: "WORKFLOW_USE",
-        wallet: fromEarned > 0 ? "both" : "purchased",
+        wallet: walletLabel,
         reason: `Used workflow: ${workflow.name}`,
       },
     }),
-    // Creator transaction log
-    prisma.creditTransaction.create({
-      data: {
-        userId: workflow.creatorId,
-        amount: creatorEarnings,
-        type: "CREATOR_EARNING",
-        wallet: "earned",
-        reason: `Earned from workflow: ${workflow.name}`,
-      },
-    }),
+    // Creator transaction log (only if they earned something)
+    ...(creatorEarnings > 0
+      ? [
+          prisma.creditTransaction.create({
+            data: {
+              userId: workflow.creatorId,
+              amount: creatorEarnings,
+              type: "CREATOR_EARNING",
+              wallet: "earned",
+              reason: `Earned from workflow: ${workflow.name}`,
+            },
+          }),
+        ]
+      : []),
     // Upsert daily analytics
     prisma.workflowAnalytics.upsert({
       where: { workflowId_date: { workflowId, date: today } },
@@ -115,9 +138,11 @@ export async function deductCredits(
         uniqueUsers: 1,
       },
     }),
-  ]);
+  ];
 
-  return { cost, creatorEarnings, fromPurchased, fromEarned };
+  await prisma.$transaction(ops);
+
+  return { cost, creatorEarnings, fromBonus, fromPurchased, fromEarned };
 }
 
 // ── Add purchased credits (top-ups / subscriptions) ─────────────
@@ -134,6 +159,20 @@ export async function addPurchasedCredits(userId: string, amount: number, reason
   ]);
 }
 
+// ── Add bonus credits (signup, promotions) ──────────────────────
+
+export async function addBonusCredits(userId: string, amount: number, reason: string) {
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { bonusBalance: { increment: amount } },
+    }),
+    prisma.creditTransaction.create({
+      data: { userId, amount, type: "BONUS", wallet: "bonus", reason },
+    }),
+  ]);
+}
+
 // ── Request payout (earned NL → real money) ─────────────────────
 
 export async function requestPayout(userId: string, amountNL: number) {
@@ -141,24 +180,43 @@ export async function requestPayout(userId: string, amountNL: number) {
   if (!user) throw new Error("User not found");
 
   if (!PAYOUT_ELIGIBLE_TIERS.includes(user.subscription as any)) {
-    throw new Error("Upgrade to Pro or Power to withdraw earnings");
+    throw new Error("Upgrade to Pro or Enterprise to withdraw earnings");
   }
 
-  if (!user.stripeConnectOnboarded || !user.stripeConnectId) {
-    throw new Error("Connect your Stripe account first");
+  if (!user.payoutVerified || !user.wiseRecipientId) {
+    throw new Error("Add your bank details before requesting a payout");
   }
 
   if (amountNL < MINIMUM_PAYOUT_NL) {
-    throw new Error(`Minimum payout is ${MINIMUM_PAYOUT_NL} NL`);
+    throw new Error(`Minimum payout is ${MINIMUM_PAYOUT_NL} NL (${nlToUsdString(MINIMUM_PAYOUT_NL)})`);
   }
 
   if (user.earnedBalance < amountNL) {
     throw new Error("Insufficient earned balance");
   }
 
+  // Holding period: user must have been earning for at least PAYOUT_HOLDING_DAYS
+  const firstEarning = await prisma.creditTransaction.findFirst({
+    where: { userId, type: "CREATOR_EARNING" },
+    orderBy: { createdAt: "asc" },
+    select: { createdAt: true },
+  });
+
+  if (firstEarning) {
+    const eligibleDate = new Date(firstEarning.createdAt);
+    eligibleDate.setDate(eligibleDate.getDate() + PAYOUT_HOLDING_DAYS);
+    if (new Date() < eligibleDate) {
+      const daysLeft = Math.ceil((eligibleDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      throw new Error(
+        `Payouts are available ${PAYOUT_HOLDING_DAYS} days after your first earning. ${daysLeft} day(s) remaining.`
+      );
+    }
+  } else {
+    throw new Error("No earnings to withdraw");
+  }
+
   const amountCents = nlToUsdCents(amountNL);
 
-  // Deduct from earned balance and create payout record
   const [_, payout] = await prisma.$transaction([
     prisma.user.update({
       where: { id: userId },

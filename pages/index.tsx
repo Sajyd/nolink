@@ -14,44 +14,15 @@ import {
 import { motion } from "framer-motion";
 import type { GetServerSideProps } from "next";
 import prisma from "@/lib/prisma";
+import { useTranslation } from "@/lib/i18n";
 
-const FEATURES = [
-  {
-    icon: Layers,
-    title: "Visual Workflow Builder",
-    description:
-      "Drag-and-drop whiteboard to chain AI models together. Text, image, audio, video, documents — all connected.",
-  },
-  {
-    icon: Sparkles,
-    title: "Multi-Model AI",
-    description:
-      "GPT-4, DALL·E 3, Whisper, Stable Diffusion, Runway, ElevenLabs — pick the right model for each step.",
-  },
-  {
-    icon: CreditCard,
-    title: "Pay-Per-Use Credits",
-    description:
-      "Buy Nolinks credits or subscribe monthly. Run any workflow for a transparent, predictable cost.",
-  },
-  {
-    icon: Globe,
-    title: "Marketplace",
-    description:
-      "Publish your workflows and earn commissions. Discover automation built by the community.",
-  },
-  {
-    icon: Play,
-    title: "One-Click Execution",
-    description:
-      "Submit your input and watch the workflow run step-by-step. Results appear in real time.",
-  },
-  {
-    icon: Shield,
-    title: "Creator Earnings",
-    description:
-      "Creators earn 70% commission on every paid workflow run via Stripe Connect. Automatic payouts.",
-  },
+const FEATURE_KEYS = [
+  { icon: Layers, titleKey: "home.featureVisualBuilder", descKey: "home.featureVisualBuilderDesc" },
+  { icon: Sparkles, titleKey: "home.featureMultiModel", descKey: "home.featureMultiModelDesc" },
+  { icon: CreditCard, titleKey: "home.featureCredits", descKey: "home.featureCreditsDesc" },
+  { icon: Globe, titleKey: "home.featureMarketplace", descKey: "home.featureMarketplaceDesc" },
+  { icon: Play, titleKey: "home.featureOneClick", descKey: "home.featureOneClickDesc" },
+  { icon: Shield, titleKey: "home.featureEarnings", descKey: "home.featureEarningsDesc" },
 ];
 
 const FALLBACK_EXAMPLES: WorkflowExample[] = [
@@ -92,12 +63,13 @@ function formatCategory(cat: string) {
 
 export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowExample[] }) {
   const { data: session } = useSession();
+  const { t } = useTranslation();
   const examples = popularWorkflows.length > 0 ? popularWorkflows : FALLBACK_EXAMPLES;
 
   return (
     <div className="dark:bg-gradient-to-b dark:from-[#0a1628] dark:via-[#060f1f] dark:to-black">
       <Head>
-        <title>nolink.ai — AI Workflow Marketplace</title>
+        <title>{t("home.title")}</title>
       </Head>
 
       <section className="relative overflow-hidden">
@@ -112,40 +84,38 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
           >
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 text-sm font-medium mb-6">
               <Zap className="w-3.5 h-3.5" />
-              AI Workflow Marketplace
+              {t("home.badge")}
             </div>
 
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.1]">
-              Chain AI models.
+              {t("home.headline1")}
               <br />
-              <span className="gradient-text">Ship automations.</span>
+              <span className="gradient-text">{t("home.headline2")}</span>
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto leading-relaxed">
-              Build multi-step AI workflows with a visual editor. Combine text,
-              image, audio, video, and document models — then publish to the
-              marketplace or keep them private.
+              {t("home.subtitle")}
             </p>
 
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
               {session ? (
                 <>
                   <Link href="/create-workflow" className="btn-primary text-base px-8 py-3 gap-2">
-                    Create Workflow
+                    {t("home.createWorkflow")}
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                   <Link href="/marketplace" className="btn-secondary text-base px-8 py-3">
-                    Browse Marketplace
+                    {t("home.browseMarketplace")}
                   </Link>
                 </>
               ) : (
                 <>
                   <Link href="/auth/register" className="btn-primary text-base px-8 py-3 gap-2">
-                    Get Started Free
+                    {t("home.getStartedFree")}
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                   <Link href="/marketplace" className="btn-secondary text-base px-8 py-3">
-                    Explore Workflows
+                    {t("home.exploreWorkflows")}
                   </Link>
                 </>
               )}
@@ -159,10 +129,10 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
             className="mt-20 max-w-5xl mx-auto"
           >
             <h2 className="text-2xl sm:text-3xl font-bold mb-2">
-              Popular <span className="gradient-text">Workflows</span>
+              <span className="gradient-text">{t("home.popularWorkflows")}</span>
             </h2>
             <p className="text-gray-500 dark:text-gray-400 mb-8">
-              Jump in and try the community&apos;s most-used automations
+              {t("home.popularSubtitle")}
             </p>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 text-left">
               {examples.map((w, i) => (
@@ -181,7 +151,7 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
                         {formatCategory(w.category)}
                       </span>
                       {w.price === 0 ? (
-                        <span className="badge-green">Free</span>
+                        <span className="badge-green">{t("common.free")}</span>
                       ) : (
                         <span className="flex items-center gap-1 text-sm font-semibold text-brand-600 dark:text-brand-400">
                           <Zap className="w-3.5 h-3.5" />
@@ -212,10 +182,10 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
                     <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
                       <span className="text-xs text-gray-400 flex items-center gap-1">
                         <Play className="w-3 h-3" />
-                        {w.totalUses > 0 ? `${w.totalUses} runs` : "New"} · {w.steps} steps
+                        {w.totalUses > 0 ? `${w.totalUses} ${t("common.runs")}` : t("common.new")} · {w.steps} {t("common.steps")}
                       </span>
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400 group-hover:translate-x-0.5 transition-transform">
-                        Try it <ArrowRight className="w-3 h-3" />
+                        {t("common.tryIt")} <ArrowRight className="w-3 h-3" />
                       </span>
                     </div>
                   </Link>
@@ -229,18 +199,17 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
       <section className="max-w-6xl mx-auto px-4 py-24">
         <div className="text-center mb-16">
           <h2 className="text-3xl sm:text-4xl font-bold">
-            Everything you need to{" "}
-            <span className="gradient-text">automate with AI</span>
+            {t("home.featuresTitle")}
           </h2>
           <p className="mt-4 text-gray-600 dark:text-gray-400 max-w-xl mx-auto">
-            Build, share, and monetize multi-step AI workflows.
+            {t("home.featuresSubtitle")}
           </p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {FEATURES.map((feature, i) => (
+          {FEATURE_KEYS.map((feature, i) => (
             <motion.div
-              key={feature.title}
+              key={feature.titleKey}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -250,9 +219,9 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
               <div className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center mb-4">
                 <feature.icon className="w-5 h-5 text-brand-600" />
               </div>
-              <h3 className="font-semibold text-lg">{feature.title}</h3>
+              <h3 className="font-semibold text-lg">{t(feature.titleKey)}</h3>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-                {feature.description}
+                {t(feature.descKey)}
               </p>
             </motion.div>
           ))}
@@ -261,16 +230,16 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
 
       <section className="max-w-4xl mx-auto px-4 py-24 text-center">
         <div className="card p-10 sm:p-16 bg-gradient-to-br from-brand-600 to-violet-600 !border-0 text-white">
-          <h2 className="text-3xl sm:text-4xl font-bold">Ready to build?</h2>
+          <h2 className="text-3xl sm:text-4xl font-bold">{t("home.readyToBuild")}</h2>
           <p className="mt-4 text-brand-100 text-lg max-w-lg mx-auto">
-            Start with 50 free Nolinks. Create your first workflow in minutes.
+            {t("home.readyCta")}
           </p>
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href={session ? "/create-workflow" : "/auth/register"}
               className="inline-flex items-center gap-2 px-8 py-3 rounded-xl bg-white text-brand-700 font-semibold hover:bg-brand-50 transition-colors"
             >
-              {session ? "Create Workflow" : "Sign Up Free"}
+              {session ? t("home.createWorkflow") : t("home.signUpFree")}
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
@@ -285,7 +254,7 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
             </div>
             <span>nolink.ai</span>
           </div>
-          <p>&copy; {new Date().getFullYear()} nolink.ai. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} nolink.ai. {t("common.allRightsReserved")}</p>
         </div>
       </footer>
     </div>

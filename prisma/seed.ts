@@ -47,6 +47,7 @@ async function main() {
       name: "Demo User",
       email: "demo@nolink.ai",
       hashedPassword,
+      bonusBalance: 50,
       purchasedBalance: 500,
       earnedBalance: 0,
       subscription: "STARTER",

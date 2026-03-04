@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Head from "next/head";
 import { Search, Filter, SlidersHorizontal } from "lucide-react";
 import WorkflowCard from "@/components/WorkflowCard";
+import { useTranslation } from "@/lib/i18n";
 
 interface Workflow {
   id: string;
@@ -28,12 +29,6 @@ const CATEGORIES = [
   "OTHER",
 ];
 
-const SORT_OPTIONS = [
-  { value: "newest", label: "Newest" },
-  { value: "popular", label: "Most Popular" },
-  { value: "price", label: "Lowest Price" },
-];
-
 export default function Marketplace() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +36,14 @@ export default function Marketplace() {
   const [category, setCategory] = useState("ALL");
   const [sort, setSort] = useState("newest");
   const [freeOnly, setFreeOnly] = useState(false);
+
+  const { t } = useTranslation();
+
+  const SORT_OPTIONS = [
+    { value: "newest", label: t("marketplace.newest") },
+    { value: "popular", label: t("marketplace.mostPopular") },
+    { value: "price", label: t("marketplace.lowestPrice") },
+  ];
 
   useEffect(() => {
     fetchWorkflows();
@@ -72,14 +75,14 @@ export default function Marketplace() {
   return (
     <>
       <Head>
-        <title>Marketplace — nolink.ai</title>
+        <title>{t("marketplace.title")}</title>
       </Head>
 
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold">Marketplace</h1>
+          <h1 className="text-3xl font-bold">{t("marketplace.header")}</h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Discover and run AI workflows built by the community
+            {t("marketplace.subtitle")}
           </p>
         </div>
 
@@ -91,7 +94,7 @@ export default function Marketplace() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="input-field pl-10 pr-4"
-              placeholder="Search workflows..."
+              placeholder={t("marketplace.searchPlaceholder")}
             />
           </form>
 
@@ -115,7 +118,7 @@ export default function Marketplace() {
               }`}
             >
               <Filter className="w-3.5 h-3.5" />
-              Free Only
+              {t("marketplace.freeOnly")}
             </button>
           </div>
         </div>
@@ -131,7 +134,7 @@ export default function Marketplace() {
                   : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
               }`}
             >
-              {cat === "ALL" ? "All" : cat.replace("_", " ")}
+              {cat === "ALL" ? t("marketplace.all") : cat.replace("_", " ")}
             </button>
           ))}
         </div>
@@ -149,10 +152,10 @@ export default function Marketplace() {
           <div className="text-center py-20">
             <SlidersHorizontal className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
             <h3 className="text-lg font-semibold text-gray-500 dark:text-gray-400">
-              No workflows found
+              {t("marketplace.noWorkflows")}
             </h3>
             <p className="text-sm text-gray-400 mt-1">
-              Try adjusting your filters or search terms
+              {t("marketplace.noWorkflowsSubtitle")}
             </p>
           </div>
         ) : (
