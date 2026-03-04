@@ -60,7 +60,7 @@ export const SUBSCRIPTION_PLANS = [
     monthlyNolinks: 2000,
     priceInCents: 2999,
     features: ["2,000 Nolinks/month", "Unlimited workflows", "API access (pay per use)", "Priority execution", "Withdraw earnings to bank", "Priority support"],
-    featureKeys: ["plans.feat2000", "plans.featUnlimited", "plans.featApi", "plans.featPriority", "plans.featStripe", "plans.featPrioritySupport"],
+    featureKeys: ["plans.feat2000", "plans.featUnlimited", "plans.featApi", "plans.featPriority", "plans.featWithdraw", "plans.featPrioritySupport"],
   },
   {
     tier: "ENTERPRISE" as const,

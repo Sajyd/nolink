@@ -214,7 +214,7 @@ export default function Dashboard() {
         setBankFormOpen(false);
         fetchBankDetails();
       } else {
-        toast.error(data.error || "Failed to save bank details");
+        toast.error(data.error || t("dashboard.bankDetailsSaveFailed"));
       }
     } catch { toast.error(t("common.somethingWentWrong")); }
     setBankSaving(false);
@@ -245,7 +245,7 @@ export default function Dashboard() {
         fetchAll();
         update();
       } else {
-        toast.error(data.error || "Payout failed");
+        toast.error(data.error || t("dashboard.payoutFailed"));
       }
     } catch { toast.error(t("common.somethingWentWrong")); }
     setPayoutLoading(false);
@@ -263,7 +263,7 @@ export default function Dashboard() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        toast.error(data.error || "Failed to start checkout");
+        toast.error(data.error || t("dashboard.checkoutFailed"));
       }
     } catch {
       toast.error(t("common.somethingWentWrong"));
@@ -341,7 +341,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold">{t("dashboard.header")}</h1>
-            <p className="mt-1 text-gray-600 dark:text-gray-400">{t("dashboard.welcomeBack", { name: session.user.name || "there" })}</p>
+            <p className="mt-1 text-gray-600 dark:text-gray-400">{t("dashboard.welcomeBack", { name: session.user.name || t("dashboard.there") })}</p>
           </div>
           {session.user.subscription === "FREE" ? (
             <Link href="/dashboard?tab=credits" className="btn-secondary gap-2" title={t("dashboard.upgradeToCreate")}>
@@ -606,22 +606,22 @@ export default function Dashboard() {
                         onChange={(e) => setBankForm((f) => ({ ...f, country: e.target.value }))}
                         className="input-field"
                       >
-                        <option value="FR">France</option>
-                        <option value="DE">Germany</option>
-                        <option value="ES">Spain</option>
-                        <option value="IT">Italy</option>
-                        <option value="NL">Netherlands</option>
-                        <option value="BE">Belgium</option>
-                        <option value="PT">Portugal</option>
-                        <option value="AT">Austria</option>
-                        <option value="IE">Ireland</option>
-                        <option value="FI">Finland</option>
-                        <option value="LU">Luxembourg</option>
-                        <option value="GB">United Kingdom</option>
-                        <option value="US">United States</option>
-                        <option value="CA">Canada</option>
-                        <option value="AU">Australia</option>
-                        <option value="OTHER">Other</option>
+                        <option value="FR">{t("dashboard.countryFR")}</option>
+                        <option value="DE">{t("dashboard.countryDE")}</option>
+                        <option value="ES">{t("dashboard.countryES")}</option>
+                        <option value="IT">{t("dashboard.countryIT")}</option>
+                        <option value="NL">{t("dashboard.countryNL")}</option>
+                        <option value="BE">{t("dashboard.countryBE")}</option>
+                        <option value="PT">{t("dashboard.countryPT")}</option>
+                        <option value="AT">{t("dashboard.countryAT")}</option>
+                        <option value="IE">{t("dashboard.countryIE")}</option>
+                        <option value="FI">{t("dashboard.countryFI")}</option>
+                        <option value="LU">{t("dashboard.countryLU")}</option>
+                        <option value="GB">{t("dashboard.countryGB")}</option>
+                        <option value="US">{t("dashboard.countryUS")}</option>
+                        <option value="CA">{t("dashboard.countryCA")}</option>
+                        <option value="AU">{t("dashboard.countryAU")}</option>
+                        <option value="OTHER">{t("dashboard.countryOTHER")}</option>
                       </select>
                     </div>
                     <div>
@@ -666,7 +666,7 @@ export default function Dashboard() {
                       min={MINIMUM_PAYOUT_NL}
                       max={earnedBalance}
                       className="input-field pl-9"
-                      placeholder={`Min ${MINIMUM_PAYOUT_NL} NL`}
+                      placeholder={t("dashboard.payoutPlaceholder", { min: String(MINIMUM_PAYOUT_NL) })}
                     />
                   </div>
                   <button onClick={handlePayout} disabled={payoutLoading || !payoutAmount} className="btn-primary gap-2">
@@ -679,7 +679,7 @@ export default function Dashboard() {
                     {t("dashboard.youWillReceive", { amount: nlToUsd(parseInt(payoutAmount)) })}
                   </p>
                 )}
-                <p className="mt-2 text-xs text-gray-400">Min {MINIMUM_PAYOUT_NL} NL (${ (MINIMUM_PAYOUT_NL * NL_TO_USD_CENTS / 100).toFixed(2)}) · Rate: 1 NL = ${(NL_TO_USD_CENTS / 100).toFixed(2)}</p>
+                <p className="mt-2 text-xs text-gray-400">{t("dashboard.payoutMinInfo", { min: String(MINIMUM_PAYOUT_NL), minUsd: (MINIMUM_PAYOUT_NL * NL_TO_USD_CENTS / 100).toFixed(2), rate: (NL_TO_USD_CENTS / 100).toFixed(2) })}</p>
                 <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                   <Clock className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                   <p className="text-xs text-blue-600 dark:text-blue-400">
@@ -706,7 +706,7 @@ export default function Dashboard() {
                         <p className="text-xs text-gray-400">{new Date(p.createdAt).toLocaleDateString()}</p>
                       </div>
                       <span className={`badge text-[10px] ${p.status === "COMPLETED" ? "badge-green" : p.status === "FAILED" ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" : "badge-brand"}`}>
-                        {p.status}
+                        {p.status === "COMPLETED" ? t("dashboard.statusCompleted") : p.status === "FAILED" ? t("dashboard.statusFailed") : p.status === "PROCESSING" ? t("dashboard.statusProcessing") : t("dashboard.statusPending")}
                       </span>
                     </div>
                   ))}
@@ -804,10 +804,19 @@ export default function Dashboard() {
                     <div>
                       <p className="text-sm font-medium">{tx.reason}</p>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {new Date(tx.createdAt).toLocaleDateString()} · {tx.type.replace("_", " ")}
+                        {new Date(tx.createdAt).toLocaleDateString()} · {
+                          tx.type === "WORKFLOW_USE" ? t("dashboard.txWorkflowUse") :
+                          tx.type === "CREATOR_EARNING" ? t("dashboard.txCreatorEarning") :
+                          tx.type === "PURCHASE" ? t("dashboard.txPurchase") :
+                          tx.type === "SUBSCRIPTION" ? t("dashboard.txSubscription") :
+                          tx.type === "PAYOUT" ? t("dashboard.txPayout") :
+                          tx.type === "BONUS" ? t("dashboard.txBonus") :
+                          tx.type === "REFUND" ? t("dashboard.txRefund") :
+                          tx.type.replace("_", " ")
+                        }
                         {tx.wallet !== "purchased" && (
                           <span className={`ml-2 ${tx.wallet === "earned" ? "text-emerald-500" : "text-brand-500"}`}>
-                            {tx.wallet} {t("dashboard.wallet")}
+                            {tx.wallet === "bonus" ? t("dashboard.walletBonus") : tx.wallet === "earned" ? t("dashboard.walletEarned") : t("dashboard.walletPurchased")}
                           </span>
                         )}
                       </p>

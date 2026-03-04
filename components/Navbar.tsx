@@ -60,10 +60,10 @@ export default function Navbar() {
             <button
               onClick={() => setLocale(locale === "en" ? "fr" : "en")}
               className="btn-ghost p-2 text-xs font-semibold uppercase"
-              title={locale === "en" ? "Passer en français" : "Switch to English"}
+              title={locale === "en" ? t("nav.switchToFrench") : t("nav.switchToEnglish")}
             >
               <Globe className="w-4 h-4 inline mr-1" />
-              {locale === "en" ? "FR" : "EN"}
+              {locale === "en" ? "EN" : "FR"}
             </button>
 
             <ThemeToggle />
@@ -145,7 +145,7 @@ export default function Navbar() {
               className="btn-ghost p-2 text-xs font-semibold uppercase"
             >
               <Globe className="w-4 h-4 inline mr-1" />
-              {locale === "en" ? "FR" : "EN"}
+              {locale === "en" ? "EN" : "FR"}
             </button>
             <ThemeToggle />
             {!session && (
