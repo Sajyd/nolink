@@ -28,6 +28,8 @@ export interface ResumeState {
     stepId: string;
     externalJobId: string;
     service: "fal" | "replicate";
+    statusUrl?: string;
+    responseUrl?: string;
   };
 }
 
@@ -503,14 +505,13 @@ export async function executeWorkflowGraph(
       callbacks.onStepStart(step, visibleCounter.value, totalVisible);
     }
 
-    // Determine if this step should resume an in-progress external job
-    const externalJobId =
-      resumeFrom?.inProgressStep?.stepId === step.id
-        ? resumeFrom.inProgressStep.externalJobId
-        : undefined;
+    const isResuming = resumeFrom?.inProgressStep?.stepId === step.id;
+    const externalJobId = isResuming ? resumeFrom!.inProgressStep!.externalJobId : undefined;
+    const savedStatusUrl = isResuming ? resumeFrom!.inProgressStep!.statusUrl : undefined;
+    const savedResponseUrl = isResuming ? resumeFrom!.inProgressStep!.responseUrl : undefined;
 
     try {
-      const result = await executeStep(resolvedStep, currentInput, deadline, externalJobId);
+      const result = await executeStep(resolvedStep, currentInput, deadline, externalJobId, savedStatusUrl, savedResponseUrl);
       const { _nextInput, ...stepResult } = result;
       allResults.push(stepResult);
 
@@ -539,7 +540,6 @@ export async function executeWorkflowGraph(
       // Deadline exceeded mid-step — save state with external job ID for resumption
       if (error instanceof DeadlineExceededError) {
         console.log(`[graph] DeadlineExceeded for step ${step.id}, saving state with jobId=${error.externalJobId}`);
-        // Remove from executed so it can be resumed
         executed.delete(step.id);
         if (callbacks?.onDeadlineSaveState) {
           await callbacks.onDeadlineSaveState(
@@ -547,6 +547,8 @@ export async function executeWorkflowGraph(
               stepId: step.id,
               externalJobId: error.externalJobId,
               service: error.service,
+              statusUrl: error.queueStatusUrl,
+              responseUrl: error.queueResponseUrl,
             })
           );
         }

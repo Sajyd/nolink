@@ -94,6 +94,8 @@ export class DeadlineExceededError extends Error {
   constructor(
     public externalJobId: string,
     public service: "fal" | "replicate",
+    public queueStatusUrl?: string,
+    public queueResponseUrl?: string,
   ) {
     super("Deadline exceeded during AI step polling");
     this.name = "DeadlineExceededError";
@@ -1168,11 +1170,18 @@ function coerceFalValue(value: string): unknown {
   return value;
 }
 
+function extractFalModelId(endpoint: string): string {
+  const parts = endpoint.split("/");
+  return parts.length > 2 ? parts.slice(0, 2).join("/") : endpoint;
+}
+
 async function executeFalStep(
   step: StepDefinition,
   input: StepInput,
   deadline?: number,
   externalJobId?: string,
+  savedStatusUrl?: string,
+  savedResponseUrl?: string,
 ): Promise<StepInput> {
   if (!step.aiModel) return input;
 
@@ -1338,8 +1347,14 @@ async function executeFalStep(
       }
 
       if (needsPoll && requestId) {
-          const statusUrl = `https://queue.fal.run/${falEndpoint}/requests/${requestId}/status`;
-          const responseUrl = `https://queue.fal.run/${falEndpoint}/requests/${requestId}`;
+          // fal.ai subpaths must be stripped from status/response URLs.
+          // Prefer URLs from the queue response, then saved URLs from resume state,
+          // then fall back to model_id (first 2 path segments) extraction.
+          const queueStatusUrl = result?.status_url as string | undefined;
+          const queueResponseUrl = result?.response_url as string | undefined;
+          const modelId = extractFalModelId(falEndpoint);
+          const statusUrl = savedStatusUrl || queueStatusUrl || `https://queue.fal.run/${modelId}/requests/${requestId}/status`;
+          const responseUrl = savedResponseUrl || queueResponseUrl || `https://queue.fal.run/${modelId}/requests/${requestId}`;
           console.log(`[fal] Polling statusUrl=${statusUrl}`);
           console.log(`[fal] responseUrl=${responseUrl}`);
 
@@ -1351,7 +1366,7 @@ async function executeFalStep(
           for (let i = 0; i < maxAttempts; i++) {
             if (deadline && Date.now() > deadline - 30_000) {
               console.log(`[fal] Approaching deadline, throwing DeadlineExceededError for ${requestId}`);
-              throw new DeadlineExceededError(requestId!, "fal");
+              throw new DeadlineExceededError(requestId!, "fal", statusUrl, responseUrl);
             }
 
             await new Promise((r) => setTimeout(r, pollInterval));
@@ -2321,6 +2336,8 @@ export async function executeStep(
   input: StepInput,
   deadline?: number,
   externalJobId?: string,
+  savedStatusUrl?: string,
+  savedResponseUrl?: string,
 ): Promise<StepResult & { _nextInput: StepInput }> {
   const start = Date.now();
 
@@ -2334,7 +2351,7 @@ export async function executeStep(
         stepOutput = await executeOutputStep(step, input);
         break;
       case "FAL_AI":
-        stepOutput = await executeFalStep(step, input, deadline, externalJobId);
+        stepOutput = await executeFalStep(step, input, deadline, externalJobId, savedStatusUrl, savedResponseUrl);
         break;
       case "REPLICATE":
         stepOutput = await executeReplicateStep(step, input, deadline, externalJobId);
