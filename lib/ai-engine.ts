@@ -175,6 +175,59 @@ function computeStepActualCost(step: StepDefinition, outputDurationSec?: number)
   return computeModelCost(model, step.params);
 }
 
+function stepHasPerSecondPricing(step: StepDefinition): boolean {
+  if (step.aiModel === "fal-custom") return !!step.customFalCostPerSecond;
+  if (step.aiModel === "rep-custom") return !!step.customReplicateCostPerSecond;
+  if (step.aiModel) {
+    const m = getModelById(step.aiModel);
+    return !!m?.costPerSecond;
+  }
+  return false;
+}
+
+async function probeMediaDuration(url: string): Promise<number | undefined> {
+  try {
+    const headRes = await fetch(url, {
+      method: "HEAD",
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!headRes.ok) return undefined;
+
+    const totalSize = parseInt(headRes.headers.get("content-length") || "0", 10);
+    if (totalSize <= 0) return undefined;
+
+    const ct = (headRes.headers.get("content-type") || "").toLowerCase();
+
+    // WAV: fetch header to get byte rate
+    if (ct.includes("wav") || /\.wav(\?|$)/i.test(url)) {
+      const rangeRes = await fetch(url, {
+        headers: { Range: "bytes=0-127" },
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (rangeRes.ok || rangeRes.status === 206) {
+        const buf = Buffer.from(await rangeRes.arrayBuffer());
+        if (buf.length >= 44 && buf.toString("ascii", 0, 4) === "RIFF") {
+          const byteRate = buf.readUInt32LE(28);
+          if (byteRate > 0) return Math.max(0, (totalSize - 44) / byteRate);
+        }
+      }
+      return Math.max(0, (totalSize - 44) / 48000);
+    }
+
+    if (ct.includes("mp3") || ct.includes("mpeg") || /\.mp3(\?|$)/i.test(url)) {
+      return totalSize / 16000;
+    }
+
+    if (ct.includes("audio") || /\.(m4a|ogg|flac|aac|opus)(\?|$)/i.test(url)) {
+      return totalSize / 16000;
+    }
+
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function hasPerSecondPricingSteps(steps: StepDefinition[]): boolean {
   for (const step of steps) {
     if (step.aiModel === "fal-custom" && step.customFalCostPerSecond) return true;
@@ -549,10 +602,51 @@ function isTemporaryMediaUrl(url: string): boolean {
   return true;
 }
 
+function parseAudioDuration(buffer: Buffer, contentType: string): number | undefined {
+  if (buffer.length < 44) return undefined;
+
+  // WAV: RIFF header contains byte rate at offset 28
+  if (buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WAVE") {
+    const byteRate = buffer.readUInt32LE(28);
+    if (byteRate > 0) {
+      let dataSize = buffer.length - 44;
+      for (let i = 12; i < Math.min(buffer.length - 8, 500); i++) {
+        if (buffer.toString("ascii", i, i + 4) === "data") {
+          dataSize = buffer.readUInt32LE(i + 4);
+          break;
+        }
+      }
+      return dataSize / byteRate;
+    }
+  }
+
+  // MP3: estimate from file size assuming ~128kbps
+  if (contentType.includes("mp3") || contentType.includes("mpeg")) {
+    return (buffer.length * 8) / 128000;
+  }
+
+  // Ogg/Opus: ~96kbps typical
+  if (contentType.includes("ogg") || contentType.includes("opus")) {
+    return (buffer.length * 8) / 96000;
+  }
+
+  // Other compressed audio: ~128kbps estimate
+  if (contentType.includes("audio")) {
+    return (buffer.length * 8) / 128000;
+  }
+
+  return undefined;
+}
+
+interface PersistMediaResult {
+  url: string;
+  mediaDurationSec?: number;
+}
+
 async function persistMediaToS3(
   mediaUrl: string,
   mediaType: "image" | "video" | "audio"
-): Promise<string | null> {
+): Promise<PersistMediaResult | null> {
   const bucket = process.env.S3_BUCKET;
   const accessKey = process.env.AWS_ACCESS_KEY_ID;
   const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
@@ -568,6 +662,14 @@ async function persistMediaToS3(
 
     const buffer = Buffer.from(await response.arrayBuffer());
     const responseContentType = response.headers.get("content-type")?.split(";")[0]?.trim() || "";
+
+    let mediaDurationSec: number | undefined;
+    if (mediaType === "audio") {
+      mediaDurationSec = parseAudioDuration(buffer, responseContentType);
+      if (mediaDurationSec) {
+        console.log(`[s3] Parsed audio duration: ${mediaDurationSec.toFixed(1)}s (${responseContentType}, ${buffer.length} bytes)`);
+      }
+    }
 
     let ext = CONTENT_TYPE_EXT_MAP[responseContentType] || guessExtFromUrl(mediaUrl);
     if (!ext) {
@@ -593,7 +695,10 @@ async function persistMediaToS3(
       })
     );
 
-    return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+    return {
+      url: `https://${bucket}.s3.${region}.amazonaws.com/${key}`,
+      mediaDurationSec,
+    };
   } catch (err) {
     console.error("Failed to persist media to S3:", err);
     return null;
@@ -2460,22 +2565,41 @@ export async function executeStep(
     stepOutput.text &&
     isTemporaryMediaUrl(stepOutput.text.trim());
 
+  let parsedMediaDuration: number | undefined;
+
   if (shouldPersist && mediaType) {
     const originalUrl = stepOutput.text.trim();
-    const s3Url = await persistMediaToS3(originalUrl, mediaType);
-    if (s3Url) {
+    const persistResult = await persistMediaToS3(originalUrl, mediaType);
+    if (persistResult) {
+      parsedMediaDuration = persistResult.mediaDurationSec;
       const extMap: Record<string, string> = { image: "png", video: "mp4", audio: "mp3" };
       stepOutput = {
-        text: s3Url,
+        text: persistResult.url,
         files: stepOutput.files.length > 0
-          ? stepOutput.files.map((f) => f.url === originalUrl ? { ...f, url: s3Url } : f)
-          : [{ url: s3Url, type: mediaType, name: `generated.${extMap[mediaType]}` }],
+          ? stepOutput.files.map((f) => f.url === originalUrl ? { ...f, url: persistResult.url } : f)
+          : [{ url: persistResult.url, type: mediaType, name: `generated.${extMap[mediaType]}` }],
         _outputDurationSec: stepOutput._outputDurationSec,
       };
     }
   }
 
-  const outputDurationSec = stepOutput._outputDurationSec;
+  // Resolve output duration: API response → S3 buffer parse → probe URL
+  let outputDurationSec = stepOutput._outputDurationSec || parsedMediaDuration;
+
+  if (!outputDurationSec && stepHasPerSecondPricing(step)) {
+    const mediaFile = stepOutput.files.find(f => f.type === "audio" || f.type === "video");
+    if (mediaFile?.url?.startsWith("http")) {
+      outputDurationSec = await probeMediaDuration(mediaFile.url);
+      if (outputDurationSec) {
+        console.log(`[pricing] Probed media duration: ${outputDurationSec.toFixed(1)}s from ${mediaFile.url.slice(0, 80)}`);
+      }
+    }
+  }
+
+  if (outputDurationSec && stepHasPerSecondPricing(step)) {
+    console.log(`[pricing] Step "${step.name}" (${step.id}): output duration ${outputDurationSec.toFixed(1)}s, per-second pricing applied`);
+  }
+
   const actualCost = computeStepActualCost(step, outputDurationSec);
 
   return {
