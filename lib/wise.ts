@@ -21,6 +21,29 @@ function getProfileId(): number {
   return parsed;
 }
 
+// ── Fetch account requirements for a currency ───────────────────
+
+export async function getAccountRequirements(
+  sourceCurrency: string = "EUR",
+  targetCurrency: string = "EUR",
+  sourceAmount: number = 100
+) {
+  const url = `${WISE_API_URL}/v1/account-requirements?source=${sourceCurrency}&target=${targetCurrency}&sourceAmount=${sourceAmount}`;
+  console.log("[wise] Fetching account requirements:", url);
+
+  const res = await fetch(url, { headers: getHeaders() });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error("[wise] Account requirements failed:", res.status, JSON.stringify(err));
+    return null;
+  }
+
+  const result = await res.json();
+  console.log("[wise] Account requirements:", JSON.stringify(result).slice(0, 2000));
+  return result;
+}
+
 // ── Create a recipient (bank account) on Wise ───────────────────
 
 export async function createWiseRecipient(
@@ -31,19 +54,30 @@ export async function createWiseRecipient(
 ) {
   const profileId = getProfileId();
 
+  // Fetch requirements first to log what Wise expects
+  const requirements = await getAccountRequirements("EUR", currency);
+  if (requirements) {
+    const ibanType = requirements.find?.((r: any) => r.type === "iban");
+    if (ibanType) {
+      console.log("[wise] IBAN type requirements fields:", JSON.stringify(ibanType.fields?.map((f: any) => f.group?.map((g: any) => g.key))));
+    } else {
+      console.log("[wise] Available account types:", JSON.stringify(requirements.map?.((r: any) => r.type)));
+    }
+  }
+
   const payload = {
     profile: profileId,
     accountHolderName: accountHolder,
     currency,
     type: "iban",
-    ownedByCustomer: false,
     details: {
       legalType,
       IBAN: iban,
     },
   };
 
-  console.log("[wise] Creating recipient:", JSON.stringify({ ...payload, details: { ...payload.details, IBAN: iban.slice(0, 4) + "***" } }));
+  console.log("[wise] Creating recipient — URL:", `${WISE_API_URL}/v1/accounts`);
+  console.log("[wise] Creating recipient — payload:", JSON.stringify({ ...payload, details: { ...payload.details, IBAN: iban.slice(0, 4) + "***" } }));
 
   const res = await fetch(`${WISE_API_URL}/v1/accounts`, {
     method: "POST",
@@ -51,13 +85,14 @@ export async function createWiseRecipient(
     body: JSON.stringify(payload),
   });
 
+  const responseText = await res.text();
+  console.log("[wise] Recipient response:", res.status, responseText.slice(0, 1000));
+
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    console.error("[wise] Recipient creation failed:", res.status, JSON.stringify(err));
-    throw new Error(`Wise recipient creation failed (${res.status}): ${JSON.stringify(err)}`);
+    throw new Error(`Wise recipient creation failed (${res.status}): ${responseText}`);
   }
 
-  const result = (await res.json()) as { id: number };
+  const result = JSON.parse(responseText) as { id: number };
   console.log("[wise] Recipient created:", result.id);
   return result;
 }
