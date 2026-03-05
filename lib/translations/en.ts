@@ -231,6 +231,8 @@ export const en = {
     runWorkflow: "Run Workflow",
     executing: "Executing...",
     tryFreeNoAccount: "Try it free — no account needed",
+    signUpToRun: "Sign up to run this workflow ({price} NL per run)",
+    signUpToUse: "Sign Up to Run",
     baseCost: "Base: {price} NL + per-second steps billed by output duration",
     willCost: "This will cost {price} Nolinks",
     freeRunUsed: "You've used your free run",

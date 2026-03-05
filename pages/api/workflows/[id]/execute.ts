@@ -7,6 +7,7 @@ import { type StepDefinition, type StepCustomParam, type FileInput, type StepRes
 import { executeWorkflowGraph, type ResumeState } from "@/lib/graph-executor";
 import { deductCredits, checkBalance } from "@/lib/credits";
 import { estimateWorkflowCost, hasPerSecondPricingSteps, getStepPricingInfo } from "@/lib/ai-engine";
+import { FREE_TRIAL_MAX_COST } from "@/lib/constants";
 import { getModelById } from "@/lib/models";
 import { serialize } from "cookie";
 
@@ -56,6 +57,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const baseCost = estimateWorkflowCost(workflow.steps as unknown as StepDefinition[]);
   const cost = Math.max(workflow.priceInNolinks, baseCost);
+
+  if (isAnonymous && cost > FREE_TRIAL_MAX_COST) {
+    return res.status(401).json({
+      error: "signup_required",
+      message: "This workflow requires an account. Sign up to get free credits and run it.",
+      reason: "cost_too_high",
+    });
+  }
 
   if (!isAnonymous) {
     const canAfford = await checkBalance(session.user.id, cost);

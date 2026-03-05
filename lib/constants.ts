@@ -5,6 +5,7 @@ export const MINIMUM_PAYOUT_NL = 500; // minimum 500 NL ($10.00) to request payo
 export const PLATFORM_FEE_PERCENT = 30; // 30% platform fee on creator earnings
 export const PAYOUT_HOLDING_DAYS = 30; // days after first earning before payout is allowed
 export const SIGNUP_BONUS_NL = 50; // free NL granted on signup (goes to bonusBalance)
+export const FREE_TRIAL_MAX_COST = 10; // max NL cost for anonymous free trial runs
 
 // fal.ai USD → Nolinks conversion rate (includes platform margin)
 export const FAL_USD_TO_NL = 80;

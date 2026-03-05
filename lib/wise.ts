@@ -13,10 +13,12 @@ function getHeaders() {
   };
 }
 
-function getProfileId(): string {
+function getProfileId(): number {
   const id = process.env.WISE_PROFILE_ID;
   if (!id) throw new Error("WISE_PROFILE_ID is not set");
-  return id;
+  const parsed = parseInt(id, 10);
+  if (isNaN(parsed)) throw new Error(`WISE_PROFILE_ID is not a valid number: ${id}`);
+  return parsed;
 }
 
 // ── Create a recipient (bank account) on Wise ───────────────────
@@ -24,28 +26,40 @@ function getProfileId(): string {
 export async function createWiseRecipient(
   accountHolder: string,
   iban: string,
-  currency: string = "EUR"
+  currency: string = "EUR",
+  legalType: "PRIVATE" | "BUSINESS" = "PRIVATE"
 ) {
   const profileId = getProfileId();
+
+  const payload = {
+    profile: profileId,
+    accountHolderName: accountHolder,
+    currency,
+    type: "iban",
+    ownedByCustomer: false,
+    details: {
+      legalType,
+      IBAN: iban,
+    },
+  };
+
+  console.log("[wise] Creating recipient:", JSON.stringify({ ...payload, details: { ...payload.details, IBAN: iban.slice(0, 4) + "***" } }));
 
   const res = await fetch(`${WISE_API_URL}/v1/accounts`, {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify({
-      profile: profileId,
-      accountHolderName: accountHolder,
-      currency,
-      type: "iban",
-      details: { IBAN: iban },
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(`Wise recipient creation failed: ${JSON.stringify(err)}`);
+    console.error("[wise] Recipient creation failed:", res.status, JSON.stringify(err));
+    throw new Error(`Wise recipient creation failed (${res.status}): ${JSON.stringify(err)}`);
   }
 
-  return (await res.json()) as { id: number };
+  const result = (await res.json()) as { id: number };
+  console.log("[wise] Recipient created:", result.id);
+  return result;
 }
 
 // ── Create a quote ──────────────────────────────────────────────
@@ -56,6 +70,8 @@ export async function createWiseQuote(
 ) {
   const profileId = getProfileId();
   const amountInUnits = amountCents / 100;
+
+  console.log(`[wise] Creating quote: ${amountInUnits} EUR → ${targetCurrency}`);
 
   const res = await fetch(`${WISE_API_URL}/v3/profiles/${profileId}/quotes`, {
     method: "POST",
@@ -70,10 +86,13 @@ export async function createWiseQuote(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(`Wise quote creation failed: ${JSON.stringify(err)}`);
+    console.error("[wise] Quote creation failed:", res.status, JSON.stringify(err));
+    throw new Error(`Wise quote creation failed (${res.status}): ${JSON.stringify(err)}`);
   }
 
-  return (await res.json()) as { id: string; sourceAmount: number; targetAmount: number };
+  const result = (await res.json()) as { id: string; sourceAmount: number; targetAmount: number };
+  console.log(`[wise] Quote created: ${result.id}, source: ${result.sourceAmount}, target: ${result.targetAmount}`);
+  return result;
 }
 
 // ── Create a transfer ───────────────────────────────────────────
@@ -83,6 +102,8 @@ export async function createWiseTransfer(
   recipientId: number,
   reference: string
 ) {
+  console.log(`[wise] Creating transfer: quote=${quoteId}, recipient=${recipientId}, ref=${reference}`);
+
   const res = await fetch(`${WISE_API_URL}/v1/transfers`, {
     method: "POST",
     headers: getHeaders(),
@@ -98,16 +119,21 @@ export async function createWiseTransfer(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(`Wise transfer creation failed: ${JSON.stringify(err)}`);
+    console.error("[wise] Transfer creation failed:", res.status, JSON.stringify(err));
+    throw new Error(`Wise transfer creation failed (${res.status}): ${JSON.stringify(err)}`);
   }
 
-  return (await res.json()) as { id: number; status: string };
+  const result = (await res.json()) as { id: number; status: string };
+  console.log(`[wise] Transfer created: ${result.id}, status: ${result.status}`);
+  return result;
 }
 
 // ── Fund a transfer ─────────────────────────────────────────────
 
 export async function fundWiseTransfer(transferId: number) {
   const profileId = getProfileId();
+
+  console.log(`[wise] Funding transfer: ${transferId}`);
 
   const res = await fetch(
     `${WISE_API_URL}/v3/profiles/${profileId}/transfers/${transferId}/payments`,
@@ -120,10 +146,13 @@ export async function fundWiseTransfer(transferId: number) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(`Wise transfer funding failed: ${JSON.stringify(err)}`);
+    console.error("[wise] Transfer funding failed:", res.status, JSON.stringify(err));
+    throw new Error(`Wise transfer funding failed (${res.status}): ${JSON.stringify(err)}`);
   }
 
-  return (await res.json()) as { status: string; errorCode: string | null };
+  const result = (await res.json()) as { status: string; errorCode: string | null };
+  console.log(`[wise] Transfer funded: status=${result.status}, errorCode=${result.errorCode}`);
+  return result;
 }
 
 // ── Check transfer status ───────────────────────────────────────

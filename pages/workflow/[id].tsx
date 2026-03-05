@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "@/lib/i18n";
+import { FREE_TRIAL_MAX_COST } from "@/lib/constants";
 
 interface InputParameter {
   id: string;
@@ -1177,33 +1178,42 @@ export default function WorkflowPage() {
           <div className="flex items-center justify-between mt-4">
             <p className="text-xs text-gray-400">
               {!session
-                ? t("workflow.tryFreeNoAccount")
+                ? workflow.priceInNolinks > FREE_TRIAL_MAX_COST
+                  ? t("workflow.signUpToRun", { price: String(workflow.priceInNolinks) })
+                  : t("workflow.tryFreeNoAccount")
                 : workflow.hasPerSecondPricing
                   ? t("workflow.baseCost", { price: String(workflow.priceInNolinks) })
                   : t("workflow.willCost", { price: String(workflow.priceInNolinks) })}
             </p>
-            <button
-              onClick={handleExecute}
-              disabled={!canExecute}
-              className="btn-primary gap-2"
-            >
-              {executing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  {t("workflow.executing")}
-                </>
-              ) : !session ? (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  {t("workflow.tryItFree")}
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4" />
-                  {t("workflow.runWorkflow")}
-                </>
-              )}
-            </button>
+            {!session && workflow.priceInNolinks > FREE_TRIAL_MAX_COST ? (
+              <Link href="/auth/signup" className="btn-primary gap-2">
+                <LogIn className="w-4 h-4" />
+                {t("workflow.signUpToUse")}
+              </Link>
+            ) : (
+              <button
+                onClick={handleExecute}
+                disabled={!canExecute}
+                className="btn-primary gap-2"
+              >
+                {executing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {t("workflow.executing")}
+                  </>
+                ) : !session ? (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    {t("workflow.tryItFree")}
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4" />
+                    {t("workflow.runWorkflow")}
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
 
