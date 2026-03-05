@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "react-hot-toast";
 import Layout from "@/components/Layout";
 import { I18nProvider } from "@/lib/i18n";
+import { Analytics } from "@vercel/analytics/next";
 
 export default function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
   return (
@@ -20,6 +21,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } }:
               className: "!bg-white dark:!bg-gray-800 !text-gray-900 dark:!text-gray-100 !shadow-lg !rounded-xl",
             }}
           />
+          <Analytics />
         </I18nProvider>
       </ThemeProvider>
     </SessionProvider>
