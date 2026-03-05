@@ -39,6 +39,7 @@ import {
   CREDIT_PACKAGES,
   SUBSCRIPTION_PLANS,
   NL_TO_USD_CENTS,
+  NL_TO_EUR_CENTS,
   MINIMUM_PAYOUT_NL,
   PAYOUT_ELIGIBLE_TIERS,
   WORKFLOW_LIMITS,
@@ -67,8 +68,11 @@ interface Payout {
   id: string;
   amountNL: number;
   amountCents: number;
+  payoutMethod: "STRIPE" | "WISE";
+  currency: string;
   status: string;
   stripeTransferId: string | null;
+  wiseTransferId: string | null;
   createdAt: string;
   completedAt: string | null;
 }
@@ -83,6 +87,10 @@ type TabId = "workflows" | "analytics" | "earnings" | "credits" | "history";
 
 function nlToUsd(nl: number) {
   return (nl * NL_TO_USD_CENTS / 100).toFixed(2);
+}
+
+function nlToEur(nl: number) {
+  return (nl * NL_TO_EUR_CENTS / 100).toFixed(2);
 }
 
 export default function Dashboard() {
@@ -106,6 +114,11 @@ export default function Dashboard() {
   const [payoutLoading, setPayoutLoading] = useState(false);
   const [upgradeLoading, setUpgradeLoading] = useState<string | null>(null);
   const [upgradeBanner, setUpgradeBanner] = useState<string | null>(null);
+  const [payoutMethodTab, setPayoutMethodTab] = useState<"STRIPE" | "WISE">("STRIPE");
+  const [wiseStatus, setWiseStatus] = useState<{ iban: string | null; ibanAccountHolder: string | null; wiseReady: boolean } | null>(null);
+  const [ibanInput, setIbanInput] = useState("");
+  const [ibanHolderInput, setIbanHolderInput] = useState("");
+  const [wiseSetupLoading, setWiseSetupLoading] = useState(false);
 
   const { t } = useTranslation();
 
@@ -168,6 +181,7 @@ export default function Dashboard() {
     if (payoutsRes) setPayouts(payoutsRes);
 
     fetchConnectStatus();
+    fetchWiseStatus();
     setLoading(false);
   };
 
@@ -176,6 +190,43 @@ export default function Dashboard() {
       const res = await fetch("/api/connect/status");
       if (res.ok) setConnectStatus(await res.json());
     } catch { /* ignore */ }
+  };
+
+  const fetchWiseStatus = async () => {
+    try {
+      const res = await fetch("/api/wise/setup");
+      if (res.ok) {
+        const data = await res.json();
+        setWiseStatus(data);
+        if (data.payoutMethod === "WISE") setPayoutMethodTab("WISE");
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleWiseSetup = async () => {
+    if (!ibanInput.trim() || !ibanHolderInput.trim()) {
+      toast.error("Please enter both IBAN and account holder name");
+      return;
+    }
+    setWiseSetupLoading(true);
+    try {
+      const res = await fetch("/api/wise/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ iban: ibanInput.trim(), accountHolder: ibanHolderInput.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("IBAN saved and Wise recipient created");
+        setWiseStatus({ iban: data.iban, ibanAccountHolder: data.ibanAccountHolder, wiseReady: true });
+        setIbanInput("");
+        setIbanHolderInput("");
+        update();
+      } else {
+        toast.error(data.error || data.message || "Failed to set up Wise");
+      }
+    } catch { toast.error("Something went wrong"); }
+    setWiseSetupLoading(false);
   };
 
   const handleDelete = async (workflowId: string) => {
@@ -237,11 +288,12 @@ export default function Dashboard() {
       const res = await fetch("/api/payouts/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amountNL: amount }),
+        body: JSON.stringify({ amountNL: amount, payoutMethod: payoutMethodTab }),
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(t("dashboard.payoutInitiated", { amount: nlToUsd(amount) }));
+        const displayAmount = payoutMethodTab === "WISE" ? `€${nlToEur(amount)}` : `$${nlToUsd(amount)}`;
+        toast.success(t("dashboard.payoutInitiated", { amount: displayAmount }));
         setPayoutAmount("");
         setEarnedBalance((b) => b - amount);
         fetchAll();
@@ -544,15 +596,13 @@ export default function Dashboard() {
               <div className="flex items-baseline gap-3">
                 <p className="text-4xl font-bold text-emerald-600">{earnedBalance} NL</p>
                 <p className="text-xl text-gray-500">${nlToUsd(earnedBalance)} USD</p>
+                <p className="text-lg text-gray-400">{"\u2248"} {"\u20AC"}{nlToEur(earnedBalance)} EUR</p>
               </div>
               <p className="mt-2 text-xs text-gray-500">{t("dashboard.earnedExplanation")}</p>
             </div>
 
-            {/* Stripe Connect status */}
-            <div className="card p-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2"><Link2 className="w-5 h-5" />{t("dashboard.stripeConnect")}</h3>
-
-              {!isPro ? (
+            {!isPro ? (
+              <div className="card p-6">
                 <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                   <Crown className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                   <div>
@@ -561,78 +611,167 @@ export default function Dashboard() {
                     <button onClick={() => setTab("credits")} className="btn-primary mt-3 text-sm">{t("common.viewPlans")}</button>
                   </div>
                 </div>
-              ) : connectStatus?.onboarded ? (
-                <div className="flex items-center justify-between gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-                    <div>
-                      <p className="font-medium text-emerald-700 dark:text-emerald-300">{t("dashboard.stripeConnected")}</p>
-                      <p className="text-sm text-emerald-600 dark:text-emerald-400">{t("dashboard.stripeConnectedDesc")}</p>
-                    </div>
-                  </div>
-                  <button onClick={handleConnectDashboard} className="btn-ghost text-sm gap-1.5 shrink-0">
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    {t("dashboard.stripeDashboard")}
-                  </button>
-                </div>
-              ) : connectStatus?.connected ? (
-                <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-                  <AlertCircle className="w-5 h-5 text-amber-500" />
-                  <div>
-                    <p className="font-medium text-amber-700 dark:text-amber-300">{t("dashboard.onboardingIncomplete")}</p>
-                    <p className="text-sm text-amber-600 dark:text-amber-400">{t("dashboard.onboardingIncompleteDesc")}</p>
-                    <button onClick={handleConnectStripe} disabled={connectLoading} className="btn-primary mt-3 text-sm gap-2">
-                      {connectLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-                      {t("dashboard.completeSetup")}
+              </div>
+            ) : (
+              <>
+                {/* Payout method selector */}
+                <div className="card p-6">
+                  <h3 className="font-semibold mb-4 flex items-center gap-2"><Link2 className="w-5 h-5" />Payout Method</h3>
+                  <div className="flex gap-2 mb-4">
+                    <button
+                      onClick={() => setPayoutMethodTab("STRIPE")}
+                      className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-medium transition-all ${payoutMethodTab === "STRIPE" ? "border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300" : "border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300"}`}
+                    >
+                      <DollarSign className="w-4 h-4 inline mr-1.5" />
+                      Stripe Connect (USD)
+                    </button>
+                    <button
+                      onClick={() => setPayoutMethodTab("WISE")}
+                      className={`flex-1 py-3 px-4 rounded-xl border-2 text-sm font-medium transition-all ${payoutMethodTab === "WISE" ? "border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300" : "border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300"}`}
+                    >
+                      <ArrowUpRight className="w-4 h-4 inline mr-1.5" />
+                      Wise IBAN (EUR)
                     </button>
                   </div>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-sm text-gray-500 mb-3">{t("dashboard.connectStripeDesc")}</p>
-                  <button onClick={handleConnectStripe} disabled={connectLoading} className="btn-primary gap-2">
-                    {connectLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-                    {t("dashboard.connectStripeAccount")}
-                  </button>
-                </div>
-              )}
-            </div>
 
-            {/* Payout request */}
-            {isPro && connectStatus?.onboarded && (
-              <div className="card p-6">
-                <h3 className="font-semibold mb-4 flex items-center gap-2"><DollarSign className="w-5 h-5" />{t("dashboard.requestPayout")}</h3>
-                <div className="flex gap-3">
-                  <div className="flex-1 relative">
-                    <Zap className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
-                    <input
-                      type="number"
-                      value={payoutAmount}
-                      onChange={(e) => setPayoutAmount(e.target.value)}
-                      min={MINIMUM_PAYOUT_NL}
-                      max={earnedBalance}
-                      className="input-field pl-9"
-                      placeholder={t("dashboard.payoutPlaceholder", { min: String(MINIMUM_PAYOUT_NL) })}
-                    />
+                  {/* Stripe Connect setup */}
+                  {payoutMethodTab === "STRIPE" && (
+                    <>
+                      {connectStatus?.onboarded ? (
+                        <div className="flex items-center justify-between gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                          <div className="flex items-center gap-3">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                            <div>
+                              <p className="font-medium text-emerald-700 dark:text-emerald-300">{t("dashboard.stripeConnected")}</p>
+                              <p className="text-sm text-emerald-600 dark:text-emerald-400">{t("dashboard.stripeConnectedDesc")}</p>
+                            </div>
+                          </div>
+                          <button onClick={handleConnectDashboard} className="btn-ghost text-sm gap-1.5 shrink-0">
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            {t("dashboard.stripeDashboard")}
+                          </button>
+                        </div>
+                      ) : connectStatus?.connected ? (
+                        <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                          <AlertCircle className="w-5 h-5 text-amber-500" />
+                          <div>
+                            <p className="font-medium text-amber-700 dark:text-amber-300">{t("dashboard.onboardingIncomplete")}</p>
+                            <p className="text-sm text-amber-600 dark:text-amber-400">{t("dashboard.onboardingIncompleteDesc")}</p>
+                            <button onClick={handleConnectStripe} disabled={connectLoading} className="btn-primary mt-3 text-sm gap-2">
+                              {connectLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                              {t("dashboard.completeSetup")}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-sm text-gray-500 mb-3">{t("dashboard.connectStripeDesc")}</p>
+                          <button onClick={handleConnectStripe} disabled={connectLoading} className="btn-primary gap-2">
+                            {connectLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                            {t("dashboard.connectStripeAccount")}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Wise IBAN setup */}
+                  {payoutMethodTab === "WISE" && (
+                    <>
+                      {wiseStatus?.wiseReady ? (
+                        <div className="flex items-center justify-between gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                          <div className="flex items-center gap-3">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                            <div>
+                              <p className="font-medium text-emerald-700 dark:text-emerald-300">Wise IBAN connected</p>
+                              <p className="text-sm text-emerald-600 dark:text-emerald-400">
+                                {wiseStatus.ibanAccountHolder} &middot; {wiseStatus.iban?.replace(/(.{4})/g, "$1 ").trim()}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setWiseStatus({ ...wiseStatus, wiseReady: false })}
+                            className="btn-ghost text-sm shrink-0"
+                          >
+                            Change
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-500">Enter your IBAN bank details to receive payouts via Wise in EUR.</p>
+                          <div>
+                            <label className="text-xs font-medium text-gray-500 mb-1 block">Account Holder Name</label>
+                            <input
+                              type="text"
+                              value={ibanHolderInput}
+                              onChange={(e) => setIbanHolderInput(e.target.value)}
+                              className="input-field"
+                              placeholder="John Doe"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-gray-500 mb-1 block">IBAN</label>
+                            <input
+                              type="text"
+                              value={ibanInput}
+                              onChange={(e) => setIbanInput(e.target.value.toUpperCase())}
+                              className="input-field font-mono"
+                              placeholder="FR76 3000 6000 0112 3456 7890 189"
+                            />
+                          </div>
+                          <button
+                            onClick={handleWiseSetup}
+                            disabled={wiseSetupLoading || !ibanInput || !ibanHolderInput}
+                            className="btn-primary gap-2"
+                          >
+                            {wiseSetupLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                            Save IBAN
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Payout request */}
+                {((payoutMethodTab === "STRIPE" && connectStatus?.onboarded) || (payoutMethodTab === "WISE" && wiseStatus?.wiseReady)) && (
+                  <div className="card p-6">
+                    <h3 className="font-semibold mb-4 flex items-center gap-2"><DollarSign className="w-5 h-5" />{t("dashboard.requestPayout")}</h3>
+                    <div className="flex gap-3">
+                      <div className="flex-1 relative">
+                        <Zap className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+                        <input
+                          type="number"
+                          value={payoutAmount}
+                          onChange={(e) => setPayoutAmount(e.target.value)}
+                          min={MINIMUM_PAYOUT_NL}
+                          max={earnedBalance}
+                          className="input-field pl-9"
+                          placeholder={t("dashboard.payoutPlaceholder", { min: String(MINIMUM_PAYOUT_NL) })}
+                        />
+                      </div>
+                      <button onClick={handlePayout} disabled={payoutLoading || !payoutAmount} className="btn-primary gap-2">
+                        {payoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUpRight className="w-4 h-4" />}
+                        {t("dashboard.withdraw")} ({payoutMethodTab === "WISE" ? "EUR" : "USD"})
+                      </button>
+                    </div>
+                    {payoutAmount && parseInt(payoutAmount) > 0 && (
+                      <p className="mt-2 text-sm text-gray-500">
+                        You will receive {payoutMethodTab === "WISE" ? `€${nlToEur(parseInt(payoutAmount))} EUR` : `$${nlToUsd(parseInt(payoutAmount))} USD`} via {payoutMethodTab === "WISE" ? "Wise" : "Stripe"}
+                      </p>
+                    )}
+                    <p className="mt-2 text-xs text-gray-400">
+                      Min {MINIMUM_PAYOUT_NL} NL ({payoutMethodTab === "WISE" ? `€${(MINIMUM_PAYOUT_NL * NL_TO_EUR_CENTS / 100).toFixed(2)}` : `$${(MINIMUM_PAYOUT_NL * NL_TO_USD_CENTS / 100).toFixed(2)}`}) &middot; Rate: 1 NL = {payoutMethodTab === "WISE" ? `€${(NL_TO_EUR_CENTS / 100).toFixed(2)}` : `$${(NL_TO_USD_CENTS / 100).toFixed(2)}`}
+                    </p>
+                    <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                      <Clock className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                      <p className="text-xs text-blue-600 dark:text-blue-400">
+                        {t("dashboard.withdrawalInfo")}
+                      </p>
+                    </div>
                   </div>
-                  <button onClick={handlePayout} disabled={payoutLoading || !payoutAmount} className="btn-primary gap-2">
-                    {payoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUpRight className="w-4 h-4" />}
-                    {t("dashboard.withdraw")}
-                  </button>
-                </div>
-                {payoutAmount && parseInt(payoutAmount) > 0 && (
-                  <p className="mt-2 text-sm text-gray-500">
-                    {t("dashboard.youWillReceive", { amount: nlToUsd(parseInt(payoutAmount)) })}
-                  </p>
                 )}
-                <p className="mt-2 text-xs text-gray-400">{t("dashboard.payoutMinInfo", { min: String(MINIMUM_PAYOUT_NL), minUsd: (MINIMUM_PAYOUT_NL * NL_TO_USD_CENTS / 100).toFixed(2), rate: (NL_TO_USD_CENTS / 100).toFixed(2) })}</p>
-                <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                  <Clock className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-blue-600 dark:text-blue-400">
-                    {t("dashboard.withdrawalInfo")}
-                  </p>
-                </div>
-              </div>
+              </>
             )}
 
             {/* Payout history */}
@@ -645,17 +784,21 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {payouts.map((p) => (
-                    <div key={p.id} className="card px-4 py-3 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium">{p.amountNL} NL → ${(p.amountCents / 100).toFixed(2)}</p>
-                        <p className="text-xs text-gray-400">{new Date(p.createdAt).toLocaleDateString()}</p>
+                  {payouts.map((p) => {
+                    const sym = p.currency === "EUR" ? "\u20AC" : "$";
+                    const method = p.payoutMethod === "WISE" ? "Wise" : "Stripe";
+                    return (
+                      <div key={p.id} className="card px-4 py-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{p.amountNL} NL {"\u2192"} {sym}{(p.amountCents / 100).toFixed(2)} {p.currency}</p>
+                          <p className="text-xs text-gray-400">{new Date(p.createdAt).toLocaleDateString()} &middot; {method}</p>
+                        </div>
+                        <span className={`badge text-[10px] ${p.status === "COMPLETED" ? "badge-green" : p.status === "FAILED" ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" : "badge-brand"}`}>
+                          {p.status === "COMPLETED" ? t("dashboard.statusCompleted") : p.status === "FAILED" ? t("dashboard.statusFailed") : p.status === "PROCESSING" ? t("dashboard.statusProcessing") : t("dashboard.statusPending")}
+                        </span>
                       </div>
-                      <span className={`badge text-[10px] ${p.status === "COMPLETED" ? "badge-green" : p.status === "FAILED" ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" : "badge-brand"}`}>
-                        {p.status === "COMPLETED" ? t("dashboard.statusCompleted") : p.status === "FAILED" ? t("dashboard.statusFailed") : p.status === "PROCESSING" ? t("dashboard.statusProcessing") : t("dashboard.statusPending")}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

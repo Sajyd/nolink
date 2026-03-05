@@ -50,6 +50,11 @@ enum SubscriptionTier {
   ENTERPRISE
 }
 
+enum PayoutMethod {
+  STRIPE
+  WISE
+}
+
 model User {
   id                     String           @id @default(cuid())
   name                   String?
@@ -64,6 +69,10 @@ model User {
   stripeCustomerId       String?
   stripeConnectId        String?
   stripeConnectOnboarded Boolean          @default(false)
+  payoutMethod           PayoutMethod?
+  iban                   String?
+  ibanAccountHolder      String?
+  wiseRecipientId        Int?
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
 
@@ -198,7 +207,10 @@ model Payout {
   userId           String
   amountNL         Int
   amountCents      Int
+  payoutMethod     PayoutMethod @default(STRIPE)
+  currency         String       @default("USD")
   stripeTransferId String?
+  wiseTransferId   String?
   status           PayoutStatus @default(PENDING)
   failureReason    String?
   createdAt        DateTime     @default(now())

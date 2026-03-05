@@ -179,28 +179,35 @@ export async function executeWisePayout(
       },
     });
 
-    return { success: true, transferId: transfer.id };
+    return { success: true, transferId: String(transfer.id) };
   } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+
     await prisma.payout.update({
       where: { id: payoutId },
-      data: {
-        status: "FAILED",
-        failureReason: error instanceof Error ? error.message : "Unknown error",
-      },
+      data: { status: "FAILED", failureReason: msg },
     });
 
     const payout = await prisma.payout.findUnique({ where: { id: payoutId } });
     if (payout) {
-      await prisma.user.update({
-        where: { id: payout.userId },
-        data: { earnedBalance: { increment: payout.amountNL } },
-      });
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: payout.userId },
+          data: { earnedBalance: { increment: payout.amountNL } },
+        }),
+        prisma.creditTransaction.create({
+          data: {
+            userId: payout.userId,
+            amount: payout.amountNL,
+            type: "PAYOUT_REVERSAL",
+            wallet: "earned",
+            reason: `Wise payout failed — ${payout.amountNL} NL refunded`,
+          },
+        }),
+      ]);
     }
 
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    };
+    return { success: false, error: msg };
   }
 }
 

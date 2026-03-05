@@ -38,6 +38,9 @@ export const authOptions: AuthOptions = {
           earnedBalance: user.earnedBalance,
           subscription: user.subscription,
           stripeConnectOnboarded: user.stripeConnectOnboarded,
+          payoutMethod: user.payoutMethod,
+          iban: user.iban,
+          ibanAccountHolder: user.ibanAccountHolder,
         };
       },
     }),
@@ -116,6 +119,9 @@ export const authOptions: AuthOptions = {
             earnedBalance: true,
             subscription: true,
             stripeConnectOnboarded: true,
+            payoutMethod: true,
+            iban: true,
+            ibanAccountHolder: true,
           },
         });
         if (dbUser) {
@@ -124,6 +130,9 @@ export const authOptions: AuthOptions = {
           token.earnedBalance = dbUser.earnedBalance;
           token.subscription = dbUser.subscription;
           token.stripeConnectOnboarded = dbUser.stripeConnectOnboarded;
+          token.payoutMethod = dbUser.payoutMethod;
+          token.iban = dbUser.iban;
+          token.ibanAccountHolder = dbUser.ibanAccountHolder;
         }
       }
 
@@ -136,6 +145,9 @@ export const authOptions: AuthOptions = {
       session.user.earnedBalance = token.earnedBalance ?? 0;
       session.user.subscription = token.subscription ?? "FREE";
       session.user.stripeConnectOnboarded = token.stripeConnectOnboarded ?? false;
+      session.user.payoutMethod = token.payoutMethod ?? null;
+      session.user.iban = token.iban ?? null;
+      session.user.ibanAccountHolder = token.ibanAccountHolder ?? null;
       return session;
     },
   },

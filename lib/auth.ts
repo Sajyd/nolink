@@ -12,11 +12,21 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         const u = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { bonusBalance: true, purchasedBalance: true, earnedBalance: true },
+          select: {
+            bonusBalance: true,
+            purchasedBalance: true,
+            earnedBalance: true,
+            payoutMethod: true,
+            iban: true,
+            ibanAccountHolder: true,
+          },
         });
         token.bonusBalance = u?.bonusBalance ?? 0;
         token.purchasedBalance = u?.purchasedBalance ?? 0;
         token.earnedBalance = u?.earnedBalance ?? 0;
+        token.payoutMethod = u?.payoutMethod ?? null;
+        token.iban = u?.iban ?? null;
+        token.ibanAccountHolder = u?.ibanAccountHolder ?? null;
       }
       return token;
     },
@@ -26,6 +36,9 @@ export const authOptions: NextAuthOptions = {
         session.user.bonusBalance = token.bonusBalance ?? 0;
         session.user.purchasedBalance = token.purchasedBalance ?? 0;
         session.user.earnedBalance = token.earnedBalance ?? 0;
+        session.user.payoutMethod = token.payoutMethod ?? null;
+        session.user.iban = token.iban ?? null;
+        session.user.ibanAccountHolder = token.ibanAccountHolder ?? null;
       }
       return session;
     },
@@ -55,6 +68,9 @@ export const authOptions: NextAuthOptions = {
           earnedBalance: user.earnedBalance,
           subscription: user.subscription,
           stripeConnectOnboarded: user.stripeConnectOnboarded,
+          payoutMethod: user.payoutMethod,
+          iban: user.iban,
+          ibanAccountHolder: user.ibanAccountHolder,
         };
       },
     }),

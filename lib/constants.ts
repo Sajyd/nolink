@@ -1,5 +1,6 @@
 // Monetization
 export const NL_TO_USD_CENTS = 2; // 1 NL = $0.02
+export const NL_TO_EUR_CENTS = 2; // 1 NL = €0.02
 export const MINIMUM_PAYOUT_NL = 500; // minimum 500 NL ($10.00) to request payout
 export const PLATFORM_FEE_PERCENT = 30; // 30% platform fee on creator earnings
 export const PAYOUT_HOLDING_DAYS = 30; // days after first earning before payout is allowed

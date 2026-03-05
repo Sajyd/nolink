@@ -1,4 +1,4 @@
-import type { SubscriptionTier } from "@prisma/client";
+import type { SubscriptionTier, PayoutMethod } from "@prisma/client";
 import "next-auth";
 
 declare module "next-auth" {
@@ -13,6 +13,9 @@ declare module "next-auth" {
       earnedBalance: number;
       subscription: SubscriptionTier;
       stripeConnectOnboarded: boolean;
+      payoutMethod: PayoutMethod | null;
+      iban: string | null;
+      ibanAccountHolder: string | null;
     };
   }
 
@@ -23,6 +26,9 @@ declare module "next-auth" {
     earnedBalance: number;
     subscription: SubscriptionTier;
     stripeConnectOnboarded: boolean;
+    payoutMethod: PayoutMethod | null;
+    iban: string | null;
+    ibanAccountHolder: string | null;
   }
 }
 
@@ -34,5 +40,8 @@ declare module "next-auth/jwt" {
     earnedBalance: number;
     subscription: SubscriptionTier;
     stripeConnectOnboarded: boolean;
+    payoutMethod: PayoutMethod | null;
+    iban: string | null;
+    ibanAccountHolder: string | null;
   }
 }

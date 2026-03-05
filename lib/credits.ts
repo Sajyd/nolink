@@ -1,6 +1,8 @@
 import prisma from "./prisma";
+import type { PayoutMethod } from "@prisma/client";
 import {
   NL_TO_USD_CENTS,
+  NL_TO_EUR_CENTS,
   MINIMUM_PAYOUT_NL,
   PAYOUT_ELIGIBLE_TIERS,
   PLATFORM_FEE_PERCENT,
@@ -19,6 +21,14 @@ export function nlToUsdCents(nl: number) {
 
 export function nlToUsdString(nl: number) {
   return `$${(nlToUsdCents(nl) / 100).toFixed(2)}`;
+}
+
+export function nlToEurCents(nl: number) {
+  return nl * NL_TO_EUR_CENTS;
+}
+
+export function nlToEurString(nl: number) {
+  return `€${(nlToEurCents(nl) / 100).toFixed(2)}`;
 }
 
 // ── Check balance ───────────────────────────────────────────────
@@ -175,7 +185,11 @@ export async function addBonusCredits(userId: string, amount: number, reason: st
 
 // ── Request payout (earned NL → real money) ─────────────────────
 
-export async function requestPayout(userId: string, amountNL: number) {
+export async function requestPayout(
+  userId: string,
+  amountNL: number,
+  payoutMethod: PayoutMethod = "STRIPE"
+) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new Error("User not found");
 
@@ -183,19 +197,25 @@ export async function requestPayout(userId: string, amountNL: number) {
     throw new Error("Upgrade to Pro or Enterprise to withdraw earnings");
   }
 
-  if (!user.stripeConnectOnboarded || !user.stripeConnectId) {
-    throw new Error("Connect your Stripe account before requesting a payout");
+  if (payoutMethod === "STRIPE") {
+    if (!user.stripeConnectOnboarded || !user.stripeConnectId) {
+      throw new Error("Connect your Stripe account before requesting a payout");
+    }
+  } else if (payoutMethod === "WISE") {
+    if (!user.iban || !user.ibanAccountHolder) {
+      throw new Error("Set up your IBAN before requesting a Wise payout");
+    }
   }
 
   if (amountNL < MINIMUM_PAYOUT_NL) {
-    throw new Error(`Minimum payout is ${MINIMUM_PAYOUT_NL} NL (${nlToUsdString(MINIMUM_PAYOUT_NL)})`);
+    const minStr = payoutMethod === "WISE" ? nlToEurString(MINIMUM_PAYOUT_NL) : nlToUsdString(MINIMUM_PAYOUT_NL);
+    throw new Error(`Minimum payout is ${MINIMUM_PAYOUT_NL} NL (${minStr})`);
   }
 
   if (user.earnedBalance < amountNL) {
     throw new Error("Insufficient earned balance");
   }
 
-  // Holding period: user must have been earning for at least PAYOUT_HOLDING_DAYS
   const firstEarning = await prisma.creditTransaction.findFirst({
     where: { userId, type: "CREATOR_EARNING" },
     orderBy: { createdAt: "asc" },
@@ -215,7 +235,10 @@ export async function requestPayout(userId: string, amountNL: number) {
     throw new Error("No earnings to withdraw");
   }
 
-  const amountCents = nlToUsdCents(amountNL);
+  const isWise = payoutMethod === "WISE";
+  const amountCents = isWise ? nlToEurCents(amountNL) : nlToUsdCents(amountNL);
+  const currency = isWise ? "EUR" : "USD";
+  const symbol = isWise ? "€" : "$";
 
   const [_, payout] = await prisma.$transaction([
     prisma.user.update({
@@ -227,6 +250,8 @@ export async function requestPayout(userId: string, amountNL: number) {
         userId,
         amountNL,
         amountCents,
+        payoutMethod,
+        currency,
         status: "PENDING",
       },
     }),
@@ -236,7 +261,7 @@ export async function requestPayout(userId: string, amountNL: number) {
         amount: -amountNL,
         type: "PAYOUT",
         wallet: "earned",
-        reason: `Payout requested: ${amountNL} NL ($${(amountCents / 100).toFixed(2)})`,
+        reason: `Payout requested: ${amountNL} NL (${symbol}${(amountCents / 100).toFixed(2)})`,
       },
     }),
   ]);

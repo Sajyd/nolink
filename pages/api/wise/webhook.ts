@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { buffer } from "micro";
 import prisma from "@/lib/prisma";
+import { verifyWiseWebhook } from "@/lib/wise";
 
 export const config = { api: { bodyParser: false } };
 
@@ -13,9 +14,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const buf = await buffer(req);
-  const event = JSON.parse(buf.toString());
+  const payload = buf.toString();
 
-  // Wise sends transfer_state_change events when transfer status changes
+  if (!verifyWiseWebhook(signature, payload)) {
+    return res.status(401).json({ error: "Invalid signature" });
+  }
+
+  const event = JSON.parse(payload);
+
   if (event.event_type === "transfers#state-change") {
     const { resource } = event.data;
     const wiseTransferId = String(resource?.id);
