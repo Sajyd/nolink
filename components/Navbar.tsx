@@ -4,6 +4,7 @@ import { useRouter } from "next/router";
 import { useState } from "react";
 import { Zap, Menu, X, LogOut, User, LayoutDashboard, Store, Plus, Globe } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
+import NotificationBell from "./NotificationBell";
 import { useTranslation, type Locale } from "@/lib/i18n";
 
 export default function Navbar() {
@@ -79,6 +80,8 @@ export default function Navbar() {
                   {(session.user.bonusBalance ?? 0) + (session.user.purchasedBalance ?? 0) + (session.user.earnedBalance ?? 0)} NL
                 </Link>
 
+                <NotificationBell />
+
                 <div className="relative group">
                   <button className="flex items-center gap-2 btn-ghost">
                     <div className="w-7 h-7 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
@@ -148,6 +151,7 @@ export default function Navbar() {
               {locale === "en" ? "EN" : "FR"}
             </button>
             <ThemeToggle />
+            {session && <NotificationBell />}
             {!session && (
               <>
                 <Link href="/auth/signin" className="btn-ghost text-sm">

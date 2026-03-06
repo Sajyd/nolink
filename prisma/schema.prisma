@@ -73,14 +73,21 @@ model User {
   iban                   String?
   ibanAccountHolder      String?
   wiseRecipientId        Int?
+  brandName              String?
+  brandLogoUrl           String?
+  emailNotifications     Boolean          @default(true)
+  emailMarketing         Boolean          @default(true)
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
 
-  accounts   Account[]
-  sessions   Session[]
-  workflows  Workflow[]
-  executions Execution[]
-  payouts    Payout[]
+  accounts       Account[]
+  sessions       Session[]
+  workflows      Workflow[]
+  executions     Execution[]
+  payouts        Payout[]
+  tickets        SupportTicket[]
+  ticketMessages TicketMessage[]
+  notifications  Notification[]
 }
 
 enum IOType {
@@ -217,6 +224,72 @@ model Payout {
   completedAt      DateTime?
 
   user User @relation(fields: [userId], references: [id])
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model SupportTicket {
+  id        String         @id @default(cuid())
+  userId    String
+  subject   String
+  status    TicketStatus   @default(OPEN)
+  priority  TicketPriority @default(MEDIUM)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  user     User            @relation(fields: [userId], references: [id])
+  messages TicketMessage[]
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  userId    String
+  body      String   @db.Text
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [userId], references: [id])
+}
+
+enum NotificationType {
+  WORKFLOW_USED
+  CREDITS_EARNED
+  EXECUTION_COMPLETED
+  EXECUTION_FAILED
+  PAYOUT_COMPLETED
+  PAYOUT_FAILED
+  SUPPORT_REPLY
+  WELCOME
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  read      Boolean          @default(false)
+  link      String?
+  meta      Json?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }
 
 model WorkflowAnalytics {

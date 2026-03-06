@@ -21,9 +21,11 @@ import {
   ChevronUp,
   ExternalLink,
   X,
+  Lock,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import { useTranslation } from "@/lib/i18n";
 
 const CATEGORIES = [
@@ -157,7 +159,7 @@ const NODE_TEMPLATES: {
     label: "Custom API",
     icon: Globe,
     color: "text-rose-500 bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800",
-    description: "Connect any external REST API (Pro only)",
+    description: "Connect any external REST API (Enterprise only)",
     defaults: {
       label: "",
       stepType: "customApiNode",
@@ -201,7 +203,9 @@ interface BuilderToolbarProps {
 export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: BuilderToolbarProps) {
   const store = useWorkflowStore();
   const [showSettings, setShowSettings] = useState(true);
+  const { data: session } = useSession();
   const { t } = useTranslation();
+  const isEnterprise = session?.user?.subscription === "ENTERPRISE";
 
   const nodeLabels: Record<string, { label: string; desc: string }> = {
     inputNode: { label: t("builder.userInput"), desc: t("builder.userInputDesc") },
@@ -300,21 +304,34 @@ export default function BuilderToolbar({ onSave, saving, workflowId, onClose }: 
           {t("builder.addNode")}
         </h4>
         <div className="space-y-2">
-          {NODE_TEMPLATES.map((tmpl, idx) => (
-            <button
-              key={tmpl.type}
-              onClick={() => addNode(idx)}
-              className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-xl border text-left transition-all hover:scale-[1.02] active:scale-[0.98] ${tmpl.color}`}
-            >
-              <tmpl.icon className="w-4 h-4 mt-0.5 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold">{nodeLabels[tmpl.type]?.label || tmpl.label}</p>
-                <p className="text-[10px] opacity-70 leading-tight mt-0.5">
-                  {nodeLabels[tmpl.type]?.desc || tmpl.description}
-                </p>
-              </div>
-            </button>
-          ))}
+          {NODE_TEMPLATES.map((tmpl, idx) => {
+            const locked = tmpl.type === "customApiNode" && !isEnterprise;
+            return (
+              <button
+                key={tmpl.type}
+                onClick={() => !locked && addNode(idx)}
+                className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-xl border text-left transition-all ${
+                  locked ? "opacity-60 cursor-not-allowed" : "hover:scale-[1.02] active:scale-[0.98]"
+                } ${tmpl.color}`}
+              >
+                <tmpl.icon className="w-4 h-4 mt-0.5 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold">{nodeLabels[tmpl.type]?.label || tmpl.label}</p>
+                    {locked && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/30 text-[9px] font-bold text-rose-600 dark:text-rose-400">
+                        <Lock className="w-2.5 h-2.5" />
+                        Enterprise
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] opacity-70 leading-tight mt-0.5">
+                    {nodeLabels[tmpl.type]?.desc || tmpl.description}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 

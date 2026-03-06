@@ -21,6 +21,7 @@ import { useReactFlow } from "@xyflow/react";
 import { v4 as uuid } from "uuid";
 import { useWorkflowStore, type StepNodeData, type StepNodeType } from "@/lib/workflow-store";
 import { playAddNode, playRemoveNode } from "@/lib/sounds";
+import { useSession } from "next-auth/react";
 import type { Node } from "@xyflow/react";
 
 /* ------------------------------------------------------------------ */
@@ -222,6 +223,7 @@ function MenuItem({
   label,
   shortcut,
   danger,
+  disabled,
   onClick,
 }: {
   icon: typeof Cpu;
@@ -229,15 +231,19 @@ function MenuItem({
   label: string;
   shortcut?: string;
   danger?: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] rounded-lg transition-colors ${
-        danger
-          ? "text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-          : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60"
+        disabled
+          ? "text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-60"
+          : danger
+            ? "text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+            : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60"
       }`}
     >
       <Icon className={`w-4 h-4 shrink-0 ${iconColor ?? (danger ? "text-red-400" : "text-gray-400 dark:text-gray-500")}`} />
@@ -285,6 +291,8 @@ export default function CanvasContextMenu({
   const ref = useRef<HTMLDivElement>(null);
   const store = useWorkflowStore();
   const { fitView, setCenter, getNode } = useReactFlow();
+  const { data: session } = useSession();
+  const isEnterprise = session?.user?.subscription === "ENTERPRISE";
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -398,15 +406,19 @@ export default function CanvasContextMenu({
       {menu.kind === "pane" && (
         <>
           <SubMenu icon={Cpu} label="Add Node">
-            {NODE_TEMPLATES.map((tmpl, idx) => (
-              <MenuItem
-                key={tmpl.type}
-                icon={tmpl.icon}
-                iconColor={tmpl.iconColor}
-                label={tmpl.label}
-                onClick={() => addNodeAtPosition(idx)}
-              />
-            ))}
+            {NODE_TEMPLATES.map((tmpl, idx) => {
+              const locked = tmpl.type === "customApiNode" && !isEnterprise;
+              return (
+                <MenuItem
+                  key={tmpl.type}
+                  icon={tmpl.icon}
+                  iconColor={locked ? "text-gray-300 dark:text-gray-600" : tmpl.iconColor}
+                  label={locked ? `${tmpl.label} (Enterprise)` : tmpl.label}
+                  onClick={() => !locked && addNodeAtPosition(idx)}
+                  disabled={locked}
+                />
+              );
+            })}
           </SubMenu>
           <Separator />
           <MenuItem

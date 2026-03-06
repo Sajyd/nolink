@@ -2692,20 +2692,20 @@ function CustomApiNodeConfig({
 }) {
   const { data: session } = useSession();
   const { updateNodeData } = useWorkflowStore();
-  const isPro = session?.user?.subscription === "PRO" || session?.user?.subscription === "ENTERPRISE";
+  const isEnterprise = session?.user?.subscription === "ENTERPRISE";
   const apiParams: CustomApiParam[] = data.customApiParams || [];
   const apiHeaders: CustomApiParam[] = data.customApiHeaders || [];
   const resultFields: CustomApiResultField[] = data.customApiResultFields || [];
 
-  if (!isPro) {
+  if (!isEnterprise) {
     return (
       <div className="space-y-3">
         <div className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
           <Lock className="w-4 h-4 text-rose-500" />
           <div>
-            <p className="text-xs font-medium text-rose-600 dark:text-rose-400">Pro Feature</p>
+            <p className="text-xs font-medium text-rose-600 dark:text-rose-400">Enterprise Feature</p>
             <p className="text-[10px] text-rose-500/80">
-              Upgrade to Pro to connect custom APIs to your workflows.
+              Upgrade to Enterprise to connect custom APIs to your workflows.
             </p>
           </div>
         </div>
@@ -2759,11 +2759,11 @@ function CustomApiNodeConfig({
         </div>
       </div>
 
-      {/* Pro badge */}
+      {/* Enterprise badge */}
       <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800">
         <Globe className="w-3.5 h-3.5 text-rose-500" />
         <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400">
-          Pro Feature — Custom API Connection
+          Enterprise Feature — Custom API Connection
         </span>
       </div>
 

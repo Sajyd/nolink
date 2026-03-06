@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { hash } from "bcryptjs";
 import prisma from "@/lib/prisma";
+import { sendWelcomeEmail } from "@/lib/email";
+import { notifyWelcome } from "@/lib/notifications";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -26,6 +28,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       bonusBalance: 50,
     },
   });
+
+  sendWelcomeEmail(user.email, user.name).catch(() => {});
+  notifyWelcome(user.id).catch(() => {});
 
   return res.status(201).json({
     id: user.id,

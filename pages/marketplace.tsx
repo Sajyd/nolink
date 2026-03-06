@@ -13,7 +13,13 @@ interface Workflow {
   totalUses: number;
   slug: string;
   tags: string[];
-  creator: { name: string; image: string | null };
+  creator: {
+    name: string;
+    image: string | null;
+    brandName?: string | null;
+    brandLogoUrl?: string | null;
+    subscription?: string;
+  };
   steps: { id: string }[];
 }
 
@@ -171,6 +177,9 @@ export default function Marketplace() {
                 totalUses={wf.totalUses}
                 stepsCount={wf.steps.length}
                 creatorName={wf.creator.name || undefined}
+                creatorBrandName={wf.creator.brandName}
+                creatorBrandLogoUrl={wf.creator.brandLogoUrl}
+                creatorSubscription={wf.creator.subscription}
                 tags={wf.tags}
                 slug={wf.slug}
               />

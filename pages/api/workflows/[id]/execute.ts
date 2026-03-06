@@ -10,6 +10,7 @@ import { estimateWorkflowCost, hasPerSecondPricingSteps, getStepPricingInfo } fr
 import { FREE_TRIAL_MAX_COST } from "@/lib/constants";
 import { getModelById } from "@/lib/models";
 import { serialize } from "cookie";
+import { notifyWorkflowUsed, notifyExecutionCompleted, notifyExecutionFailed } from "@/lib/notifications";
 
 export const config = {
   maxDuration: 800,
@@ -47,12 +48,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const workflow = await prisma.workflow.findUnique({
     where: { id: id as string },
-    include: { steps: { orderBy: { order: "asc" } } },
+    include: {
+      steps: { orderBy: { order: "asc" } },
+      creator: { select: { subscription: true } },
+    },
   });
 
   if (!workflow) return res.status(404).json({ error: "Workflow not found" });
   if (!workflow.isPublic && isAnonymous) {
     return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const hasCustomApiStep = workflow.steps.some((s) => s.stepType === "CUSTOM_API");
+  if (hasCustomApiStep && workflow.creator.subscription !== "ENTERPRISE") {
+    return res.status(403).json({
+      error: "This workflow uses Custom API nodes which require the creator to have an Enterprise subscription.",
+    });
   }
 
   const baseCost = estimateWorkflowCost(workflow.steps as unknown as StepDefinition[]);
@@ -367,6 +378,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         status: failed ? "FAILED" : "COMPLETED",
         isTrialRun: isAnonymous,
       });
+
+      try {
+        const isOwnWorkflow = !isAnonymous && session.user.id === workflow.creatorId;
+        if (!isOwnWorkflow) {
+          notifyWorkflowUsed(workflow.creatorId, workflow.name, workflow.id, 0).catch(() => {});
+        }
+        if (!isAnonymous) {
+          if (failed) {
+            notifyExecutionFailed(session.user.id, workflow.name, workflow.slug).catch(() => {});
+          } else {
+            notifyExecutionCompleted(session.user.id, workflow.name, workflow.slug, finalCost).catch(() => {});
+          }
+        }
+      } catch {}
     }
   }
 

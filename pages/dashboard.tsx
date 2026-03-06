@@ -32,6 +32,19 @@ import {
   X,
   Rocket,
   Store,
+  Palette,
+  Upload,
+  Image as ImageIcon,
+  LifeBuoy,
+  Mail,
+  MessageSquare,
+  ArrowLeft,
+  Send,
+  ChevronRight,
+  CircleDot,
+  Settings,
+  Bell,
+  Megaphone,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "@/lib/i18n";
@@ -43,6 +56,9 @@ import {
   MINIMUM_PAYOUT_NL,
   PAYOUT_ELIGIBLE_TIERS,
   WORKFLOW_LIMITS,
+  SUPPORT_EMAIL,
+  SUPPORT_ADMIN_EMAILS,
+  TICKET_ELIGIBLE_TIERS,
 } from "@/lib/constants";
 
 interface Workflow {
@@ -83,7 +99,27 @@ interface ChartPoint {
   revenueNL: number;
 }
 
-type TabId = "workflows" | "analytics" | "earnings" | "credits" | "history";
+type TabId = "workflows" | "analytics" | "earnings" | "credits" | "history" | "branding" | "support" | "settings";
+
+interface SupportTicket {
+  id: string;
+  subject: string;
+  status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+  priority: "LOW" | "MEDIUM" | "HIGH";
+  createdAt: string;
+  updatedAt: string;
+  user: { name: string | null; email: string; image: string | null; subscription: string };
+  messages: TicketMessage[];
+  _count?: { messages: number };
+}
+
+interface TicketMessage {
+  id: string;
+  body: string;
+  isAdmin: boolean;
+  createdAt: string;
+  user: { name: string | null; email: string; image: string | null };
+}
 
 function nlToUsd(nl: number) {
   return (nl * NL_TO_USD_CENTS / 100).toFixed(2);
@@ -119,6 +155,29 @@ export default function Dashboard() {
   const [ibanInput, setIbanInput] = useState("");
   const [ibanHolderInput, setIbanHolderInput] = useState("");
   const [wiseSetupLoading, setWiseSetupLoading] = useState(false);
+
+  const [brandName, setBrandName] = useState("");
+  const [brandLogoUrl, setBrandLogoUrl] = useState("");
+  const [brandLogoPreview, setBrandLogoPreview] = useState<string | null>(null);
+  const [brandingLoading, setBrandingLoading] = useState(false);
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const [brandingUploading, setBrandingUploading] = useState(false);
+
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [ticketView, setTicketView] = useState<"list" | "new" | "detail">("list");
+  const [newTicketSubject, setNewTicketSubject] = useState("");
+  const [newTicketBody, setNewTicketBody] = useState("");
+  const [newTicketPriority, setNewTicketPriority] = useState<"LOW" | "MEDIUM" | "HIGH">("MEDIUM");
+  const [ticketReply, setTicketReply] = useState("");
+  const [ticketsLoading, setTicketsLoading] = useState(false);
+  const [ticketSubmitting, setTicketSubmitting] = useState(false);
+  const [replySubmitting, setReplySubmitting] = useState(false);
+
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [emailMarketing, setEmailMarketing] = useState(true);
+  const [emailPrefLoading, setEmailPrefLoading] = useState(false);
+  const [emailPrefSaving, setEmailPrefSaving] = useState(false);
 
   const { t } = useTranslation();
 
@@ -157,6 +216,12 @@ export default function Dashboard() {
   useEffect(() => {
     if (session) fetchAll();
   }, [session]);
+
+  useEffect(() => {
+    if (tab === "branding" && session?.user?.subscription === "ENTERPRISE") {
+      fetchBranding();
+    }
+  }, [tab, session]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -325,6 +390,212 @@ export default function Dashboard() {
     setUpgradeLoading(null);
   };
 
+  const fetchBranding = async () => {
+    setBrandingLoading(true);
+    try {
+      const res = await fetch("/api/branding");
+      if (res.ok) {
+        const data = await res.json();
+        setBrandName(data.brandName || "");
+        setBrandLogoUrl(data.brandLogoUrl || "");
+        if (data.brandLogoUrl) setBrandLogoPreview(data.brandLogoUrl);
+      }
+    } catch { /* ignore */ }
+    setBrandingLoading(false);
+  };
+
+  const handleBrandLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error(t("branding.logoImageOnly"));
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error(t("branding.logoTooLarge"));
+      return;
+    }
+
+    setBrandingUploading(true);
+    try {
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          files: [{ name: file.name, mimeType: file.type, size: file.size }],
+        }),
+      });
+      if (!res.ok) {
+        toast.error(t("workflow.uploadFailed"));
+        setBrandingUploading(false);
+        return;
+      }
+      const data = await res.json();
+      const upload = data.files[0];
+
+      await fetch(upload.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": upload.mimeType },
+        body: file,
+      });
+
+      setBrandLogoUrl(upload.url);
+      setBrandLogoPreview(URL.createObjectURL(file));
+      toast.success(t("branding.logoUploaded"));
+    } catch {
+      toast.error(t("common.somethingWentWrong"));
+    }
+    setBrandingUploading(false);
+  };
+
+  const handleSaveBranding = async () => {
+    setBrandingSaving(true);
+    try {
+      const res = await fetch("/api/branding", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brandName: brandName.trim(),
+          brandLogoUrl: brandLogoUrl || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(t("branding.saved"));
+        update();
+      } else {
+        toast.error(data.error || t("common.somethingWentWrong"));
+      }
+    } catch {
+      toast.error(t("common.somethingWentWrong"));
+    }
+    setBrandingSaving(false);
+  };
+
+  const isAdmin = SUPPORT_ADMIN_EMAILS.includes(session?.user?.email as any);
+  const canUseTickets = isAdmin || TICKET_ELIGIBLE_TIERS.includes(session?.user?.subscription as any);
+
+  const fetchTickets = async () => {
+    if (!canUseTickets) return;
+    setTicketsLoading(true);
+    try {
+      const res = await fetch("/api/support/tickets");
+      if (res.ok) setTickets(await res.json());
+    } catch { /* ignore */ }
+    setTicketsLoading(false);
+  };
+
+  const fetchTicketDetail = async (ticketId: string) => {
+    try {
+      const res = await fetch(`/api/support/tickets/${ticketId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedTicket(data);
+        setTicketView("detail");
+      }
+    } catch { toast.error(t("common.somethingWentWrong")); }
+  };
+
+  const handleCreateTicket = async () => {
+    if (!newTicketSubject.trim() || !newTicketBody.trim()) return;
+    setTicketSubmitting(true);
+    try {
+      const res = await fetch("/api/support/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: newTicketSubject, body: newTicketBody, priority: newTicketPriority }),
+      });
+      if (res.ok) {
+        toast.success(t("support.ticketCreated"));
+        setNewTicketSubject("");
+        setNewTicketBody("");
+        setNewTicketPriority("MEDIUM");
+        setTicketView("list");
+        fetchTickets();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || t("common.somethingWentWrong"));
+      }
+    } catch { toast.error(t("common.somethingWentWrong")); }
+    setTicketSubmitting(false);
+  };
+
+  const handleTicketReply = async () => {
+    if (!ticketReply.trim() || !selectedTicket) return;
+    setReplySubmitting(true);
+    try {
+      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: ticketReply }),
+      });
+      if (res.ok) {
+        toast.success(t("support.replySent"));
+        setTicketReply("");
+        fetchTicketDetail(selectedTicket.id);
+      } else {
+        const data = await res.json();
+        toast.error(data.error || t("common.somethingWentWrong"));
+      }
+    } catch { toast.error(t("common.somethingWentWrong")); }
+    setReplySubmitting(false);
+  };
+
+  const handleTicketStatus = async (ticketId: string, newStatus: string) => {
+    try {
+      const res = await fetch(`/api/support/tickets/${ticketId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        const msg = newStatus === "CLOSED" ? t("support.ticketClosed") : t("support.ticketReopened");
+        toast.success(msg);
+        fetchTicketDetail(ticketId);
+        fetchTickets();
+      }
+    } catch { toast.error(t("common.somethingWentWrong")); }
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (session && canUseTickets && tab === "support") fetchTickets(); }, [session, tab]);
+
+  const fetchEmailPreferences = async () => {
+    setEmailPrefLoading(true);
+    try {
+      const res = await fetch("/api/user/email-preferences");
+      if (res.ok) {
+        const data = await res.json();
+        setEmailNotifications(data.emailNotifications);
+        setEmailMarketing(data.emailMarketing);
+      }
+    } catch { /* ignore */ }
+    setEmailPrefLoading(false);
+  };
+
+  const saveEmailPreferences = async (notifications: boolean, marketing: boolean) => {
+    setEmailPrefSaving(true);
+    try {
+      const res = await fetch("/api/user/email-preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailNotifications: notifications, emailMarketing: marketing }),
+      });
+      if (res.ok) {
+        toast.success(t("settings.saved"));
+      } else {
+        toast.error(t("settings.saveFailed"));
+      }
+    } catch {
+      toast.error(t("common.somethingWentWrong"));
+    }
+    setEmailPrefSaving(false);
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (session && tab === "settings") fetchEmailPreferences(); }, [session, tab]);
+
   if (status === "loading" || !session) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -338,12 +609,17 @@ export default function Dashboard() {
   const isPro = PAYOUT_ELIGIBLE_TIERS.includes(session.user.subscription as any);
   const maxBarRevenue = Math.max(...chartData.map((d) => d.revenueNL), 1);
 
+  const isEnterprise = session.user.subscription === "ENTERPRISE";
+
   const TABS: { id: TabId; label: string }[] = [
     { id: "workflows", label: t("dashboard.tabWorkflows") },
     { id: "analytics", label: t("dashboard.tabAnalytics") },
     { id: "earnings", label: t("dashboard.tabEarnings") },
     { id: "credits", label: t("dashboard.tabCredits") },
     { id: "history", label: t("dashboard.tabHistory") },
+    ...(isEnterprise ? [{ id: "branding" as const, label: t("dashboard.tabBranding") }] : []),
+    { id: "support", label: t("support.tabSupport") },
+    { id: "settings", label: t("settings.tabSettings") },
   ];
 
   return (
@@ -919,7 +1195,549 @@ export default function Dashboard() {
             )}
           </div>
         )}
+
+        {/* ─── BRANDING (Enterprise only) ────────────────── */}
+        {tab === "branding" && isEnterprise && (
+          <div className="space-y-6">
+            <div className="card p-6 bg-gradient-to-br from-purple-50 to-brand-50 dark:from-purple-900/20 dark:to-brand-900/20 !border-purple-200 dark:!border-purple-800">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center">
+                  <Palette className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">{t("branding.title")}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{t("branding.desc")}</p>
+                </div>
+              </div>
+            </div>
+
+            {brandingLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
+              </div>
+            ) : (
+              <div className="card p-6 space-y-6">
+                {/* Brand Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t("branding.nameLabel")}
+                  </label>
+                  <input
+                    type="text"
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    className="input-field"
+                    placeholder={t("branding.namePlaceholder")}
+                    maxLength={50}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">{t("branding.nameHint")}</p>
+                </div>
+
+                {/* Brand Logo */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t("branding.logoLabel")}
+                  </label>
+
+                  {brandLogoPreview ? (
+                    <div className="flex items-center gap-4 mb-3">
+                      <div className="w-16 h-16 rounded-xl border-2 border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800 flex items-center justify-center">
+                        <img
+                          src={brandLogoPreview}
+                          alt="Brand logo"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{t("branding.logoCurrently")}</p>
+                        <button
+                          onClick={() => {
+                            setBrandLogoUrl("");
+                            setBrandLogoPreview(null);
+                          }}
+                          className="text-xs text-red-500 hover:text-red-600 mt-1 transition-colors"
+                        >
+                          {t("branding.logoRemove")}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-6 cursor-pointer hover:border-brand-300 dark:hover:border-brand-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      onChange={handleBrandLogoUpload}
+                      className="hidden"
+                      disabled={brandingUploading}
+                    />
+                    {brandingUploading ? (
+                      <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+                    ) : (
+                      <Upload className="w-5 h-5 text-gray-400" />
+                    )}
+                    <span className="text-sm text-gray-500">
+                      {brandLogoPreview
+                        ? t("branding.logoReplace")
+                        : t("branding.logoUpload")}
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-400 mt-1">{t("branding.logoHint")}</p>
+                </div>
+
+                {/* Preview */}
+                {(brandName || brandLogoPreview) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      {t("branding.preview")}
+                    </label>
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4">
+                      <div className="flex items-center gap-3">
+                        {brandLogoPreview && (
+                          <img
+                            src={brandLogoPreview}
+                            alt="Brand logo preview"
+                            className="w-8 h-8 rounded-lg object-contain"
+                          />
+                        )}
+                        {brandName && (
+                          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            {brandName}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-2">{t("branding.previewHint")}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Save */}
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    onClick={handleSaveBranding}
+                    disabled={brandingSaving}
+                    className="btn-primary gap-2"
+                  >
+                    {brandingSaving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4" />
+                    )}
+                    {t("branding.save")}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── SETTINGS ────────────────────────────────── */}
+        {tab === "settings" && (
+          <div className="space-y-6">
+            <div className="card p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center">
+                  <Mail className="w-5 h-5 text-brand-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">{t("settings.emailPreferences")}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{t("settings.emailPreferencesDesc")}</p>
+                </div>
+              </div>
+
+              {emailPrefLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-start gap-3">
+                      <Bell className="w-5 h-5 text-brand-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-sm">{t("settings.notificationEmails")}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t("settings.notificationEmailsDesc")}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const next = !emailNotifications;
+                        setEmailNotifications(next);
+                        saveEmailPreferences(next, emailMarketing);
+                      }}
+                      disabled={emailPrefSaving}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${emailNotifications ? "bg-brand-500" : "bg-gray-300 dark:bg-gray-600"}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${emailNotifications ? "translate-x-6" : "translate-x-1"}`} />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-start gap-3">
+                      <Megaphone className="w-5 h-5 text-purple-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-sm">{t("settings.marketingEmails")}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t("settings.marketingEmailsDesc")}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const next = !emailMarketing;
+                        setEmailMarketing(next);
+                        saveEmailPreferences(emailNotifications, next);
+                      }}
+                      disabled={emailPrefSaving}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${emailMarketing ? "bg-brand-500" : "bg-gray-300 dark:bg-gray-600"}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${emailMarketing ? "translate-x-6" : "translate-x-1"}`} />
+                    </button>
+                  </div>
+
+                  {emailPrefSaving && (
+                    <p className="text-xs text-gray-400 flex items-center gap-1.5">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      {t("settings.saving")}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ─── SUPPORT ─────────────────────────────────── */}
+        {tab === "support" && (
+          <div className="space-y-6">
+            {!canUseTickets ? (
+              <>
+                {/* Email support for Free/Starter */}
+                <div className="card p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center shrink-0">
+                      <Mail className="w-6 h-6 text-brand-500" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg">{t("support.emailSupportTitle")}</h3>
+                      <p className="text-sm text-gray-500 mt-1">{t("support.emailSupportDesc")}</p>
+                      <a
+                        href={`mailto:${SUPPORT_EMAIL}`}
+                        className="btn-primary mt-4 inline-flex items-center gap-2"
+                      >
+                        <Mail className="w-4 h-4" />
+                        {t("support.sendEmail")}
+                      </a>
+                      <p className="text-xs text-gray-400 mt-2">{SUPPORT_EMAIL}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card p-6">
+                  <div className="flex items-start gap-3 p-4 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+                    <Crown className="w-5 h-5 text-purple-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-purple-700 dark:text-purple-300">{t("support.upgradeForTickets")}</p>
+                      <p className="text-sm text-purple-600 dark:text-purple-400 mt-1">{t("support.upgradeForTicketsDesc")}</p>
+                      <button
+                        onClick={() => { setTab("credits"); router.replace({ query: { tab: "credits" } }, undefined, { shallow: true }); }}
+                        className="btn-primary mt-3 text-sm"
+                      >
+                        {t("common.viewPlans")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : ticketView === "new" ? (
+              /* ── New Ticket Form ─────────────────────────── */
+              <div className="card p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <button onClick={() => setTicketView("list")} className="btn-ghost p-2">
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <h3 className="font-semibold text-lg">{t("support.newTicket")}</h3>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">{t("support.subject")}</label>
+                    <input
+                      type="text"
+                      value={newTicketSubject}
+                      onChange={(e) => setNewTicketSubject(e.target.value)}
+                      className="input-field"
+                      placeholder={t("support.subjectPlaceholder")}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">{t("support.priority")}</label>
+                    <div className="flex gap-2">
+                      {(["LOW", "MEDIUM", "HIGH"] as const).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setNewTicketPriority(p)}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+                            newTicketPriority === p
+                              ? p === "HIGH"
+                                ? "border-red-400 bg-red-50 dark:bg-red-900/20 text-red-600"
+                                : p === "LOW"
+                                  ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600"
+                                  : "border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-600"
+                              : "border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300"
+                          }`}
+                        >
+                          {t(`support.priority${p.charAt(0) + p.slice(1).toLowerCase()}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">{t("support.message")}</label>
+                    <textarea
+                      value={newTicketBody}
+                      onChange={(e) => setNewTicketBody(e.target.value)}
+                      rows={6}
+                      className="input-field resize-none"
+                      placeholder={t("support.messagePlaceholder")}
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleCreateTicket}
+                      disabled={ticketSubmitting || !newTicketSubject.trim() || !newTicketBody.trim()}
+                      className="btn-primary gap-2"
+                    >
+                      {ticketSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      {ticketSubmitting ? t("support.creating") : t("support.createTicket")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : ticketView === "detail" && selectedTicket ? (
+              /* ── Ticket Detail ───────────────────────────── */
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <button onClick={() => { setTicketView("list"); setSelectedTicket(null); }} className="btn-ghost p-2">
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-lg truncate">{selectedTicket.subject}</h3>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <TicketStatusBadge status={selectedTicket.status} t={t} />
+                      <span className="text-xs text-gray-400">
+                        {new Date(selectedTicket.createdAt).toLocaleDateString()}
+                      </span>
+                      {isAdmin && (
+                        <span className="text-xs text-gray-400">
+                          · {selectedTicket.user.email} ({selectedTicket.user.subscription})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    {isAdmin && selectedTicket.status !== "RESOLVED" && selectedTicket.status !== "CLOSED" && (
+                      <button
+                        onClick={() => handleTicketStatus(selectedTicket.id, "RESOLVED")}
+                        className="btn-secondary text-sm gap-1.5"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {t("support.markResolved")}
+                      </button>
+                    )}
+                    {selectedTicket.status !== "CLOSED" ? (
+                      <button
+                        onClick={() => handleTicketStatus(selectedTicket.id, "CLOSED")}
+                        className="btn-ghost text-sm gap-1.5 text-red-500 hover:!bg-red-50 dark:hover:!bg-red-900/20"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        {t("support.closeTicket")}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleTicketStatus(selectedTicket.id, "OPEN")}
+                        className="btn-secondary text-sm gap-1.5"
+                      >
+                        {t("support.reopenTicket")}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Messages */}
+                <div className="card overflow-hidden">
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {selectedTicket.messages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={`p-4 ${msg.isAdmin ? "bg-brand-50/50 dark:bg-brand-900/10" : ""}`}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          {msg.user.image ? (
+                            <img src={msg.user.image} alt="" className="w-6 h-6 rounded-full" />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-[10px] font-bold text-gray-500">
+                              {(msg.user.name || msg.user.email)?.[0]?.toUpperCase()}
+                            </div>
+                          )}
+                          <span className="text-sm font-medium">{msg.user.name || msg.user.email}</span>
+                          {msg.isAdmin && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400">
+                              {t("support.adminBadge")}
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400 ml-auto">
+                            {new Date(msg.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap pl-8">{msg.body}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {selectedTicket.status !== "CLOSED" && (
+                    <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30">
+                      <div className="flex gap-3">
+                        <textarea
+                          value={ticketReply}
+                          onChange={(e) => setTicketReply(e.target.value)}
+                          rows={2}
+                          className="input-field flex-1 resize-none"
+                          placeholder={t("support.replyPlaceholder")}
+                        />
+                        <button
+                          onClick={handleTicketReply}
+                          disabled={replySubmitting || !ticketReply.trim()}
+                          className="btn-primary self-end gap-2 shrink-0"
+                        >
+                          {replySubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                          {t("support.sendReply")}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* ── Ticket List ──────────────────────────────── */
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-lg flex items-center gap-2">
+                    <LifeBuoy className="w-5 h-5" />
+                    {isAdmin ? t("support.allTickets") : t("support.myTickets")}
+                  </h3>
+                  {!isAdmin && (
+                    <button onClick={() => setTicketView("new")} className="btn-primary gap-2">
+                      <Plus className="w-4 h-4" />
+                      {t("support.newTicket")}
+                    </button>
+                  )}
+                </div>
+
+                {/* Email support also available */}
+                <div className="mb-4 flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                  <Mail className="w-4 h-4 text-blue-500 shrink-0" />
+                  <p className="text-xs text-blue-600 dark:text-blue-400">
+                    {t("support.emailSupportDesc")} — <a href={`mailto:${SUPPORT_EMAIL}`} className="underline font-medium">{SUPPORT_EMAIL}</a>
+                  </p>
+                </div>
+
+                {ticketsLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="card h-20 animate-pulse bg-gray-100 dark:bg-gray-800" />
+                    ))}
+                  </div>
+                ) : tickets.length === 0 ? (
+                  <div className="text-center py-16">
+                    <MessageSquare className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-500">{t("support.noTickets")}</h3>
+                    <p className="text-sm text-gray-400 mt-1 mb-5">{t("support.noTicketsDesc")}</p>
+                    {!isAdmin && (
+                      <button onClick={() => setTicketView("new")} className="btn-primary gap-2 inline-flex">
+                        <Plus className="w-4 h-4" />
+                        {t("support.newTicket")}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {tickets.map((ticket) => {
+                      const lastMsg = ticket.messages?.[0];
+                      return (
+                        <button
+                          key={ticket.id}
+                          onClick={() => fetchTicketDetail(ticket.id)}
+                          className="card px-4 py-3 w-full text-left flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                        >
+                          <CircleDot className={`w-4 h-4 shrink-0 ${
+                            ticket.status === "OPEN" ? "text-blue-500" :
+                            ticket.status === "IN_PROGRESS" ? "text-amber-500" :
+                            ticket.status === "RESOLVED" ? "text-emerald-500" :
+                            "text-gray-400"
+                          }`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium truncate text-sm">{ticket.subject}</p>
+                              <TicketStatusBadge status={ticket.status} t={t} />
+                              <PriorityDot priority={ticket.priority} />
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {isAdmin && (
+                                <span className="text-xs text-gray-500">{ticket.user.email}</span>
+                              )}
+                              <span className="text-xs text-gray-400">
+                                {t("support.lastUpdated", { date: new Date(ticket.updatedAt).toLocaleDateString() })}
+                              </span>
+                              {ticket._count && (
+                                <span className="text-xs text-gray-400">
+                                  · {t("support.messages", { count: String(ticket._count.messages) })}
+                                </span>
+                              )}
+                              {lastMsg && (
+                                <span className="text-xs text-gray-400 truncate max-w-[200px]">
+                                  · {lastMsg.body.slice(0, 60)}{lastMsg.body.length > 60 ? "…" : ""}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </>
   );
+}
+
+function TicketStatusBadge({ status, t }: { status: string; t: (key: string) => string }) {
+  const config: Record<string, string> = {
+    OPEN: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
+    IN_PROGRESS: "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400",
+    RESOLVED: "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400",
+    CLOSED: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
+  };
+  const labels: Record<string, string> = {
+    OPEN: t("support.statusOpen"),
+    IN_PROGRESS: t("support.statusInProgress"),
+    RESOLVED: t("support.statusResolved"),
+    CLOSED: t("support.statusClosed"),
+  };
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${config[status] || config.OPEN}`}>
+      {labels[status] || status}
+    </span>
+  );
+}
+
+function PriorityDot({ priority }: { priority: string }) {
+  const color = priority === "HIGH" ? "bg-red-500" : priority === "LOW" ? "bg-emerald-500" : "bg-amber-500";
+  return <span className={`w-2 h-2 rounded-full ${color} shrink-0`} title={priority} />;
 }

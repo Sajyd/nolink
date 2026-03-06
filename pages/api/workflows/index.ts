@@ -40,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const workflows = await prisma.workflow.findMany({
       where: where as any,
       include: {
-        creator: { select: { name: true, image: true } },
+        creator: { select: { name: true, image: true, brandName: true, brandLogoUrl: true, subscription: true } },
         steps: { select: { id: true } },
       },
       orderBy,
@@ -58,6 +58,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!steps || steps.length === 0) {
       return res.status(400).json({ error: "At least one step is required" });
+    }
+
+    const hasCustomApiStep = steps.some((s: any) => s.stepType === "CUSTOM_API");
+    if (hasCustomApiStep && session.user.subscription !== "ENTERPRISE") {
+      return res.status(403).json({
+        error: "Custom API nodes require an Enterprise subscription. Please upgrade your plan.",
+      });
     }
 
     if (session.user.subscription === "FREE") {

@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { compare } from "bcryptjs";
 import prisma from "@/lib/prisma";
+import { sendWelcomeEmail } from "@/lib/email";
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -41,6 +42,8 @@ export const authOptions: AuthOptions = {
           payoutMethod: user.payoutMethod,
           iban: user.iban,
           ibanAccountHolder: user.ibanAccountHolder,
+          brandName: user.brandName,
+          brandLogoUrl: user.brandLogoUrl,
         };
       },
     }),
@@ -64,6 +67,7 @@ export const authOptions: AuthOptions = {
               bonusBalance: 50,
             },
           });
+          sendWelcomeEmail(profile.email, profile.name ?? user.name ?? null).catch(() => {});
         } else if (!dbUser.name || !dbUser.image) {
           await prisma.user.update({
             where: { id: dbUser.id },
@@ -122,6 +126,8 @@ export const authOptions: AuthOptions = {
             payoutMethod: true,
             iban: true,
             ibanAccountHolder: true,
+            brandName: true,
+            brandLogoUrl: true,
           },
         });
         if (dbUser) {
@@ -133,6 +139,8 @@ export const authOptions: AuthOptions = {
           token.payoutMethod = dbUser.payoutMethod;
           token.iban = dbUser.iban;
           token.ibanAccountHolder = dbUser.ibanAccountHolder;
+          token.brandName = dbUser.brandName;
+          token.brandLogoUrl = dbUser.brandLogoUrl;
         }
       }
 
@@ -148,6 +156,8 @@ export const authOptions: AuthOptions = {
       session.user.payoutMethod = token.payoutMethod ?? null;
       session.user.iban = token.iban ?? null;
       session.user.ibanAccountHolder = token.ibanAccountHolder ?? null;
+      session.user.brandName = token.brandName ?? null;
+      session.user.brandLogoUrl = token.brandLogoUrl ?? null;
       return session;
     },
   },

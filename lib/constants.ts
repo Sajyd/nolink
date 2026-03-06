@@ -1,3 +1,8 @@
+// Support
+export const SUPPORT_EMAIL = "support@nolink.ai";
+export const SUPPORT_ADMIN_EMAILS = ["support@nolink.ai"] as const;
+export const TICKET_ELIGIBLE_TIERS = ["PRO", "ENTERPRISE"] as const;
+
 // Monetization
 export const NL_TO_USD_CENTS = 2; // 1 NL = $0.02
 export const NL_TO_EUR_CENTS = 2; // 1 NL = €0.02

@@ -8,6 +8,7 @@ import {
   PLATFORM_FEE_PERCENT,
   PAYOUT_HOLDING_DAYS,
 } from "./constants";
+import { createNotification } from "./notifications";
 
 // ── Balance helpers ─────────────────────────────────────────────
 
@@ -151,6 +152,17 @@ export async function deductCredits(
   ];
 
   await prisma.$transaction(ops);
+
+  if (creatorEarnings > 0 && workflow.creatorId !== userId) {
+    createNotification({
+      userId: workflow.creatorId,
+      type: "CREDITS_EARNED",
+      title: "Credits earned",
+      body: `You earned ${creatorEarnings} NL from "${workflow.name}"`,
+      link: "/dashboard?tab=earnings",
+      meta: { workflowId, creatorEarnings },
+    }).catch(() => {});
+  }
 
   return { cost, creatorEarnings, fromBonus, fromPurchased, fromEarned };
 }

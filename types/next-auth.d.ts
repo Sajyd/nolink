@@ -16,6 +16,8 @@ declare module "next-auth" {
       payoutMethod: PayoutMethod | null;
       iban: string | null;
       ibanAccountHolder: string | null;
+      brandName: string | null;
+      brandLogoUrl: string | null;
     };
   }
 
@@ -29,6 +31,8 @@ declare module "next-auth" {
     payoutMethod: PayoutMethod | null;
     iban: string | null;
     ibanAccountHolder: string | null;
+    brandName: string | null;
+    brandLogoUrl: string | null;
   }
 }
 
@@ -43,5 +47,7 @@ declare module "next-auth/jwt" {
     payoutMethod: PayoutMethod | null;
     iban: string | null;
     ibanAccountHolder: string | null;
+    brandName: string | null;
+    brandLogoUrl: string | null;
   }
 }

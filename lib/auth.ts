@@ -71,6 +71,8 @@ export const authOptions: NextAuthOptions = {
           payoutMethod: user.payoutMethod,
           iban: user.iban,
           ibanAccountHolder: user.ibanAccountHolder,
+          brandName: user.brandName,
+          brandLogoUrl: user.brandLogoUrl,
         };
       },
     }),

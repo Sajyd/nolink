@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const workflow = await prisma.workflow.findUnique({
       where: { id },
       include: {
-        creator: { select: { id: true, name: true, image: true } },
+        creator: { select: { id: true, name: true, image: true, brandName: true, brandLogoUrl: true, subscription: true } },
         steps: { orderBy: { order: "asc" } },
         _count: { select: { executions: true } },
       },
@@ -38,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const byUrl = await prisma.workflow.findUnique({
         where: { publicUrl: id },
         include: {
-          creator: { select: { id: true, name: true, image: true } },
+          creator: { select: { id: true, name: true, image: true, brandName: true, brandLogoUrl: true, subscription: true } },
           steps: { orderBy: { order: "asc" } },
           _count: { select: { executions: true } },
         },
@@ -78,6 +78,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { name, description, category, priceInNolinks, isPublic, exampleInput, exampleOutput, steps, edges } = req.body;
 
     if (steps && Array.isArray(steps)) {
+      const hasCustomApiStep = steps.some((s: any) => s.stepType === "CUSTOM_API");
+      if (hasCustomApiStep && session.user.subscription !== "ENTERPRISE") {
+        return res.status(403).json({
+          error: "Custom API nodes require an Enterprise subscription. Please upgrade your plan.",
+        });
+      }
       const stepsData = steps.map((step: any) => {
         const config: Record<string, unknown> = { ...(step.config || {}) };
         if (step.customParams) config.customParams = step.customParams;

@@ -11,6 +11,7 @@ import {
 import { executeWorkflowGraph } from "@/lib/graph-executor";
 import { deductCredits, checkBalance } from "@/lib/credits";
 import { estimateWorkflowCost, hasPerSecondPricingSteps } from "@/lib/ai-engine";
+import { notifyWorkflowUsed, notifyExecutionCompleted, notifyExecutionFailed } from "@/lib/notifications";
 
 export const config = {
   maxDuration: 800,
@@ -41,10 +42,20 @@ export default async function handler(
 
   const workflow = await prisma.workflow.findUnique({
     where: { id: id as string },
-    include: { steps: { orderBy: { order: "asc" } } },
+    include: {
+      steps: { orderBy: { order: "asc" } },
+      creator: { select: { subscription: true } },
+    },
   });
 
   if (!workflow) return res.status(404).json({ error: "Workflow not found" });
+
+  const hasCustomApiStep = workflow.steps.some((s: any) => s.stepType === "CUSTOM_API");
+  if (hasCustomApiStep && workflow.creator.subscription !== "ENTERPRISE") {
+    return res.status(403).json({
+      error: "This workflow uses Custom API nodes which require the creator to have an Enterprise subscription.",
+    });
+  }
 
   const baseCost = estimateWorkflowCost(workflow.steps as unknown as StepDefinition[]);
   const cost = Math.max(workflow.priceInNolinks, baseCost);
@@ -275,5 +286,15 @@ async function runWorkflowInBackground(
         completedAt: new Date(),
       },
     });
+
+    const isOwnWorkflow = userId === workflow.creatorId;
+    if (!isOwnWorkflow) {
+      notifyWorkflowUsed(workflow.creatorId, workflow.name, workflow.id, 0).catch(() => {});
+    }
+    if (failed) {
+      notifyExecutionFailed(userId, workflow.name, workflow.slug).catch(() => {});
+    } else {
+      notifyExecutionCompleted(userId, workflow.name, workflow.slug, finalCost).catch(() => {});
+    }
   } catch {}
 }

@@ -11,6 +11,9 @@ interface WorkflowCardProps {
   totalUses: number;
   stepsCount: number;
   creatorName?: string;
+  creatorBrandName?: string | null;
+  creatorBrandLogoUrl?: string | null;
+  creatorSubscription?: string;
   tags?: string[];
   slug: string;
 }
@@ -35,6 +38,9 @@ export default function WorkflowCard({
   totalUses,
   stepsCount,
   creatorName,
+  creatorBrandName,
+  creatorBrandLogoUrl,
+  creatorSubscription,
   tags,
   slug,
 }: WorkflowCardProps) {
@@ -80,10 +86,16 @@ export default function WorkflowCard({
             {totalUses} {t("common.runs")}
           </span>
           <span>{stepsCount} {t("common.steps")}</span>
-          {creatorName && (
+          {(creatorName || creatorBrandName) && (
             <span className="flex items-center gap-1">
-              <Eye className="w-3 h-3" />
-              {creatorName}
+              {creatorSubscription === "ENTERPRISE" && creatorBrandLogoUrl ? (
+                <img src={creatorBrandLogoUrl} alt="" className="w-3.5 h-3.5 rounded object-contain" />
+              ) : (
+                <Eye className="w-3 h-3" />
+              )}
+              {creatorSubscription === "ENTERPRISE" && creatorBrandName
+                ? creatorBrandName
+                : creatorName}
             </span>
           )}
         </div>

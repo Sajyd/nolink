@@ -82,7 +82,14 @@ interface Workflow {
   slug: string;
   exampleInput: string | null;
   exampleOutput: string | null;
-  creator: { id: string; name: string; image: string | null };
+  creator: {
+    id: string;
+    name: string;
+    image: string | null;
+    brandName?: string | null;
+    brandLogoUrl?: string | null;
+    subscription?: string;
+  };
   steps: Step[];
   hasPerSecondPricing?: boolean;
   perSecondStepCount?: number;
@@ -679,6 +686,25 @@ export default function WorkflowPage() {
       </Head>
 
       <div className="max-w-4xl mx-auto px-4 py-8">
+        {/* Custom Branding Banner */}
+        {workflow.creator.subscription === "ENTERPRISE" &&
+          (workflow.creator.brandName || workflow.creator.brandLogoUrl) && (
+          <div className="flex items-center gap-3 mb-6 px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800">
+            {workflow.creator.brandLogoUrl && (
+              <img
+                src={workflow.creator.brandLogoUrl}
+                alt={workflow.creator.brandName || workflow.creator.name}
+                className="w-8 h-8 rounded-lg object-contain"
+              />
+            )}
+            {workflow.creator.brandName && (
+              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                {workflow.creator.brandName}
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -709,8 +735,18 @@ export default function WorkflowPage() {
             </p>
             <div className="flex items-center gap-4 mt-3 text-sm text-gray-500">
               <span className="flex items-center gap-1">
-                <User className="w-3.5 h-3.5" />
-                {workflow.creator.name}
+                {workflow.creator.subscription === "ENTERPRISE" && workflow.creator.brandLogoUrl ? (
+                  <img
+                    src={workflow.creator.brandLogoUrl}
+                    alt=""
+                    className="w-4 h-4 rounded object-contain"
+                  />
+                ) : (
+                  <User className="w-3.5 h-3.5" />
+                )}
+                {workflow.creator.subscription === "ENTERPRISE" && workflow.creator.brandName
+                  ? workflow.creator.brandName
+                  : workflow.creator.name}
               </span>
               <span className="flex items-center gap-1">
                 <Play className="w-3.5 h-3.5" />

@@ -5,7 +5,8 @@ import { requestPayout } from "@/lib/credits";
 import { executeStripePayout, checkConnectStatus } from "@/lib/stripe";
 import { executeWisePayout } from "@/lib/wise";
 import prisma from "@/lib/prisma";
-import { PAYOUT_ELIGIBLE_TIERS } from "@/lib/constants";
+import { PAYOUT_ELIGIBLE_TIERS, NL_TO_USD_CENTS, NL_TO_EUR_CENTS } from "@/lib/constants";
+import { sendPayoutEmail } from "@/lib/email";
 import type { PayoutMethod } from "@prisma/client";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -55,6 +56,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
 
       if (result.success) {
+        if (user.emailNotifications) {
+          const amountDisplay = `$${(Math.floor(amountNL) * NL_TO_USD_CENTS / 100).toFixed(2)}`;
+          sendPayoutEmail(user.email, user.name, {
+            amountNL: Math.floor(amountNL),
+            amountDisplay,
+            method: "Stripe Connect",
+            currency: "USD",
+          }).catch(() => {});
+        }
         return res.json({
           success: true,
           payout: { ...payout, stripeTransferId: result.transferId, status: "COMPLETED" },
@@ -70,6 +80,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
 
       if (result.success) {
+        if (user.emailNotifications) {
+          const amountDisplay = `€${(Math.floor(amountNL) * NL_TO_EUR_CENTS / 100).toFixed(2)}`;
+          sendPayoutEmail(user.email, user.name, {
+            amountNL: Math.floor(amountNL),
+            amountDisplay,
+            method: "Wise (IBAN)",
+            currency: "EUR",
+          }).catch(() => {});
+        }
         return res.json({
           success: true,
           payout: { ...payout, wiseTransferId: result.transferId, status: "COMPLETED" },
