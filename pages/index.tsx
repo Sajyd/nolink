@@ -265,6 +265,14 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
             </div>
             <span>nolink.ai</span>
           </div>
+          <div className="flex items-center gap-4">
+            <Link href="/privacy" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+              {t("common.privacy")}
+            </Link>
+            <Link href="/terms" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+              {t("common.terms")}
+            </Link>
+          </div>
           <p>&copy; {new Date().getFullYear()} nolink.ai. {t("common.allRightsReserved")}</p>
         </div>
       </footer>

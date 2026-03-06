@@ -27,6 +27,8 @@ export const en = {
     yourPlan: "Your Plan",
     viewPlans: "View Plans",
     allRightsReserved: "All rights reserved.",
+    privacy: "Privacy",
+    terms: "Terms",
     somethingWentWrong: "Something went wrong",
     copyToClipboard: "Copy to clipboard",
     enabled: "Enabled",
