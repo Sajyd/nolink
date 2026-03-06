@@ -339,6 +339,13 @@ export const fr = {
     finalOutputDesc: "Livrer le résultat final à l'utilisateur",
   },
 
+  phBanner: {
+    launch: "Lancement Product Hunt",
+    offer: "votre premier mois — 100 premiers utilisateurs",
+    discount: "-50 %",
+    claimOffer: "Profiter de l'offre",
+  },
+
   plans: {
     free: "Gratuit",
     starter: "Starter",
