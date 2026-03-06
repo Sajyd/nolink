@@ -81,6 +81,8 @@ export default function Register() {
     <>
       <Head>
         <title>{t("auth.signUpTitle")}</title>
+        <meta name="description" content={t("auth.signUpMetaDescription")} />
+        <link rel="canonical" href="https://nolink.ai/auth/register" />
       </Head>
 
       <div className="min-h-[80vh] flex items-center justify-center px-4">

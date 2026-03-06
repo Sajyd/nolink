@@ -45,6 +45,8 @@ import {
   Settings,
   Bell,
   Megaphone,
+  Shield,
+  UserCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "@/lib/i18n";
@@ -173,6 +175,7 @@ export default function Dashboard() {
   const [ticketsLoading, setTicketsLoading] = useState(false);
   const [ticketSubmitting, setTicketSubmitting] = useState(false);
   const [replySubmitting, setReplySubmitting] = useState(false);
+  const [adminStatusFilter, setAdminStatusFilter] = useState<"ALL" | "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED">("ALL");
 
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [emailMarketing, setEmailMarketing] = useState(true);
@@ -473,11 +476,7 @@ export default function Dashboard() {
     setBrandingSaving(false);
   };
 
-  const isAdmin = SUPPORT_ADMIN_EMAILS.includes(session?.user?.email as any);
-  const canUseTickets = isAdmin || TICKET_ELIGIBLE_TIERS.includes(session?.user?.subscription as any);
-
   const fetchTickets = async () => {
-    if (!canUseTickets) return;
     setTicketsLoading(true);
     try {
       const res = await fetch("/api/support/tickets");
@@ -559,7 +558,12 @@ export default function Dashboard() {
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (session && canUseTickets && tab === "support") fetchTickets(); }, [session, tab]);
+  useEffect(() => {
+    if (!session) return;
+    const eligible = SUPPORT_ADMIN_EMAILS.includes(session.user.email as any) ||
+      TICKET_ELIGIBLE_TIERS.includes(session.user.subscription as any);
+    if (eligible && tab === "support") fetchTickets();
+  }, [session, tab]);
 
   const fetchEmailPreferences = async () => {
     setEmailPrefLoading(true);
@@ -610,6 +614,8 @@ export default function Dashboard() {
   const maxBarRevenue = Math.max(...chartData.map((d) => d.revenueNL), 1);
 
   const isEnterprise = session.user.subscription === "ENTERPRISE";
+  const isAdmin = SUPPORT_ADMIN_EMAILS.includes(session.user.email as any);
+  const canUseTickets = isAdmin || TICKET_ELIGIBLE_TIERS.includes(session.user.subscription as any);
 
   const TABS: { id: TabId; label: string }[] = [
     { id: "workflows", label: t("dashboard.tabWorkflows") },
@@ -624,7 +630,11 @@ export default function Dashboard() {
 
   return (
     <>
-      <Head><title>{t("dashboard.title")}</title></Head>
+      <Head>
+        <title>{t("dashboard.title")}</title>
+        <meta name="description" content={t("dashboard.metaDescription")} />
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
 
       <div className="max-w-6xl mx-auto px-4 py-8">
         {upgradeBanner && (
@@ -1408,9 +1418,262 @@ export default function Dashboard() {
         {/* ─── SUPPORT ─────────────────────────────────── */}
         {tab === "support" && (
           <div className="space-y-6">
-            {!canUseTickets ? (
+            {isAdmin ? (
+              /* ═══════════════════════════════════════════════
+                 ADMIN SUPPORT PANEL
+                 ═══════════════════════════════════════════════ */
+              ticketView === "detail" && selectedTicket ? (
+                /* ── Admin Ticket Detail ─────────────────────── */
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => { setTicketView("list"); setSelectedTicket(null); }} className="btn-ghost p-2">
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-lg truncate">{selectedTicket.subject}</h3>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <TicketStatusBadge status={selectedTicket.status} t={t} />
+                        <PriorityDot priority={selectedTicket.priority} />
+                        <span className="text-xs text-gray-400">
+                          {new Date(selectedTicket.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Admin: user info card */}
+                  <div className="card px-4 py-3 flex items-center gap-3 bg-gray-50 dark:bg-gray-800/40">
+                    {selectedTicket.user.image ? (
+                      <img src={selectedTicket.user.image} alt="" className="w-9 h-9 rounded-full" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-500">
+                        {(selectedTicket.user.name || selectedTicket.user.email)?.[0]?.toUpperCase()}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{selectedTicket.user.name || selectedTicket.user.email}</p>
+                      <p className="text-xs text-gray-400">{selectedTicket.user.email}</p>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      selectedTicket.user.subscription === "ENTERPRISE" ? "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" :
+                      selectedTicket.user.subscription === "PRO" ? "bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400" :
+                      "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                    }`}>
+                      {selectedTicket.user.subscription}
+                    </span>
+                  </div>
+
+                  {/* Admin: status action bar */}
+                  <div className="flex gap-2 flex-wrap">
+                    {selectedTicket.status !== "IN_PROGRESS" && selectedTicket.status !== "CLOSED" && (
+                      <button onClick={() => handleTicketStatus(selectedTicket.id, "IN_PROGRESS")} className="btn-secondary text-sm gap-1.5">
+                        <Clock className="w-3.5 h-3.5" />
+                        {t("support.markInProgress")}
+                      </button>
+                    )}
+                    {selectedTicket.status !== "RESOLVED" && selectedTicket.status !== "CLOSED" && (
+                      <button onClick={() => handleTicketStatus(selectedTicket.id, "RESOLVED")} className="btn-secondary text-sm gap-1.5 !border-emerald-300 !text-emerald-600 hover:!bg-emerald-50 dark:hover:!bg-emerald-900/20">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {t("support.markResolved")}
+                      </button>
+                    )}
+                    {selectedTicket.status !== "CLOSED" ? (
+                      <button onClick={() => handleTicketStatus(selectedTicket.id, "CLOSED")} className="btn-ghost text-sm gap-1.5 text-red-500 hover:!bg-red-50 dark:hover:!bg-red-900/20">
+                        <X className="w-3.5 h-3.5" />
+                        {t("support.closeTicket")}
+                      </button>
+                    ) : (
+                      <button onClick={() => handleTicketStatus(selectedTicket.id, "OPEN")} className="btn-secondary text-sm gap-1.5">
+                        {t("support.reopenTicket")}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Messages */}
+                  <div className="card overflow-hidden">
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {selectedTicket.messages.map((msg) => (
+                        <div key={msg.id} className={`p-4 ${msg.isAdmin ? "bg-brand-50/50 dark:bg-brand-900/10" : ""}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            {msg.user.image ? (
+                              <img src={msg.user.image} alt="" className="w-6 h-6 rounded-full" />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-[10px] font-bold text-gray-500">
+                                {(msg.user.name || msg.user.email)?.[0]?.toUpperCase()}
+                              </div>
+                            )}
+                            <span className="text-sm font-medium">{msg.user.name || msg.user.email}</span>
+                            {msg.isAdmin && (
+                              <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400">
+                                {t("support.adminBadge")}
+                              </span>
+                            )}
+                            <span className="text-xs text-gray-400 ml-auto">{new Date(msg.createdAt).toLocaleString()}</span>
+                          </div>
+                          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap pl-8">{msg.body}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {selectedTicket.status !== "CLOSED" && (
+                      <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30">
+                        <div className="flex gap-3">
+                          <textarea
+                            value={ticketReply}
+                            onChange={(e) => setTicketReply(e.target.value)}
+                            rows={3}
+                            className="input-field flex-1 resize-none"
+                            placeholder={t("support.replyPlaceholder")}
+                          />
+                          <div className="flex flex-col gap-2 self-end shrink-0">
+                            <button
+                              onClick={handleTicketReply}
+                              disabled={replySubmitting || !ticketReply.trim()}
+                              className="btn-primary gap-2"
+                            >
+                              {replySubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                              {t("support.sendReply")}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* ── Admin Ticket List ───────────────────────── */
+                <div>
+                  {/* Admin header */}
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
+                      <Shield className="w-5 h-5 text-brand-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-lg">{t("support.adminPanel")}</h3>
+                      <p className="text-xs text-gray-400">{t("support.adminPanelDesc")}</p>
+                    </div>
+                  </div>
+
+                  {/* Stats cards */}
+                  {(() => {
+                    const openCount = tickets.filter((t) => t.status === "OPEN").length;
+                    const inProgressCount = tickets.filter((t) => t.status === "IN_PROGRESS").length;
+                    const resolvedCount = tickets.filter((t) => t.status === "RESOLVED").length;
+                    const closedCount = tickets.filter((t) => t.status === "CLOSED").length;
+                    return (
+                      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+                        <button onClick={() => setAdminStatusFilter("ALL")} className={`card p-3 text-center transition-all ${adminStatusFilter === "ALL" ? "!border-brand-500 ring-2 ring-brand-500/20" : "hover:border-gray-300 dark:hover:border-gray-600"}`}>
+                          <p className="text-2xl font-bold">{tickets.length}</p>
+                          <p className="text-xs text-gray-500">{t("support.totalTickets")}</p>
+                        </button>
+                        <button onClick={() => setAdminStatusFilter("OPEN")} className={`card p-3 text-center transition-all ${adminStatusFilter === "OPEN" ? "!border-blue-500 ring-2 ring-blue-500/20" : "hover:border-gray-300 dark:hover:border-gray-600"}`}>
+                          <p className="text-2xl font-bold text-blue-600">{openCount}</p>
+                          <p className="text-xs text-gray-500">{t("support.openTickets")}</p>
+                        </button>
+                        <button onClick={() => setAdminStatusFilter("IN_PROGRESS")} className={`card p-3 text-center transition-all ${adminStatusFilter === "IN_PROGRESS" ? "!border-amber-500 ring-2 ring-amber-500/20" : "hover:border-gray-300 dark:hover:border-gray-600"}`}>
+                          <p className="text-2xl font-bold text-amber-600">{inProgressCount}</p>
+                          <p className="text-xs text-gray-500">{t("support.inProgressTickets")}</p>
+                        </button>
+                        <button onClick={() => setAdminStatusFilter("RESOLVED")} className={`card p-3 text-center transition-all ${adminStatusFilter === "RESOLVED" ? "!border-emerald-500 ring-2 ring-emerald-500/20" : "hover:border-gray-300 dark:hover:border-gray-600"}`}>
+                          <p className="text-2xl font-bold text-emerald-600">{resolvedCount}</p>
+                          <p className="text-xs text-gray-500">{t("support.resolvedTickets")}</p>
+                        </button>
+                        <button onClick={() => setAdminStatusFilter("CLOSED")} className={`card p-3 text-center transition-all ${adminStatusFilter === "CLOSED" ? "!border-gray-500 ring-2 ring-gray-500/20" : "hover:border-gray-300 dark:hover:border-gray-600"}`}>
+                          <p className="text-2xl font-bold text-gray-500">{closedCount}</p>
+                          <p className="text-xs text-gray-500">{t("support.closedTickets")}</p>
+                        </button>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Ticket list */}
+                  {ticketsLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3, 4].map((i) => <div key={i} className="card h-24 animate-pulse bg-gray-100 dark:bg-gray-800" />)}
+                    </div>
+                  ) : (() => {
+                    const filtered = adminStatusFilter === "ALL" ? tickets : tickets.filter((t) => t.status === adminStatusFilter);
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="text-center py-16">
+                          <MessageSquare className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+                          <h3 className="text-lg font-semibold text-gray-500">{adminStatusFilter === "ALL" ? t("support.noTickets") : t("support.noTicketsForFilter")}</h3>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="space-y-2">
+                        {filtered.map((ticket) => {
+                          const lastMsg = ticket.messages?.[0];
+                          const lastMsgIsUser = lastMsg && !lastMsg.isAdmin;
+                          return (
+                            <div key={ticket.id} className="card px-4 py-3 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                              <button onClick={() => fetchTicketDetail(ticket.id)} className="flex items-center gap-4 flex-1 min-w-0 text-left">
+                                <CircleDot className={`w-4 h-4 shrink-0 ${
+                                  ticket.status === "OPEN" ? "text-blue-500" :
+                                  ticket.status === "IN_PROGRESS" ? "text-amber-500" :
+                                  ticket.status === "RESOLVED" ? "text-emerald-500" :
+                                  "text-gray-400"
+                                }`} />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium truncate text-sm">{ticket.subject}</p>
+                                    <TicketStatusBadge status={ticket.status} t={t} />
+                                    <PriorityDot priority={ticket.priority} />
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{ticket.user.name || ticket.user.email}</span>
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+                                      ticket.user.subscription === "ENTERPRISE" ? "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" :
+                                      ticket.user.subscription === "PRO" ? "bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400" :
+                                      "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                                    }`}>{ticket.user.subscription}</span>
+                                    <span className="text-xs text-gray-400">
+                                      {t("support.lastUpdated", { date: new Date(ticket.updatedAt).toLocaleDateString() })}
+                                    </span>
+                                    {ticket._count && (
+                                      <span className="text-xs text-gray-400">· {t("support.messages", { count: String(ticket._count.messages) })}</span>
+                                    )}
+                                    {lastMsgIsUser && (
+                                      <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">{t("support.awaitingReply")}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+                              </button>
+                              {ticket.status !== "CLOSED" && (
+                                <div className="flex gap-1.5 shrink-0 border-l border-gray-100 dark:border-gray-800 pl-3">
+                                  {ticket.status !== "RESOLVED" && (
+                                    <button
+                                      onClick={() => handleTicketStatus(ticket.id, "RESOLVED")}
+                                      title={t("support.quickResolve")}
+                                      className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                                    >
+                                      <CheckCircle2 className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleTicketStatus(ticket.id, "CLOSED")}
+                                    title={t("support.quickClose")}
+                                    className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )
+            ) : !canUseTickets ? (
+              /* ═══════════════════════════════════════════════
+                 FREE / STARTER — EMAIL ONLY
+                 ═══════════════════════════════════════════════ */
               <>
-                {/* Email support for Free/Starter */}
                 <div className="card p-6">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center shrink-0">
@@ -1419,10 +1682,7 @@ export default function Dashboard() {
                     <div>
                       <h3 className="font-semibold text-lg">{t("support.emailSupportTitle")}</h3>
                       <p className="text-sm text-gray-500 mt-1">{t("support.emailSupportDesc")}</p>
-                      <a
-                        href={`mailto:${SUPPORT_EMAIL}`}
-                        className="btn-primary mt-4 inline-flex items-center gap-2"
-                      >
+                      <a href={`mailto:${SUPPORT_EMAIL}`} className="btn-primary mt-4 inline-flex items-center gap-2">
                         <Mail className="w-4 h-4" />
                         {t("support.sendEmail")}
                       </a>
@@ -1448,7 +1708,9 @@ export default function Dashboard() {
                 </div>
               </>
             ) : ticketView === "new" ? (
-              /* ── New Ticket Form ─────────────────────────── */
+              /* ═══════════════════════════════════════════════
+                 PRO / ENTERPRISE USER — NEW TICKET
+                 ═══════════════════════════════════════════════ */
               <div className="card p-6">
                 <div className="flex items-center gap-3 mb-6">
                   <button onClick={() => setTicketView("list")} className="btn-ghost p-2">
@@ -1516,7 +1778,9 @@ export default function Dashboard() {
                 </div>
               </div>
             ) : ticketView === "detail" && selectedTicket ? (
-              /* ── Ticket Detail ───────────────────────────── */
+              /* ═══════════════════════════════════════════════
+                 PRO / ENTERPRISE USER — TICKET DETAIL
+                 ═══════════════════════════════════════════════ */
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <button onClick={() => { setTicketView("list"); setSelectedTicket(null); }} className="btn-ghost p-2">
@@ -1526,53 +1790,31 @@ export default function Dashboard() {
                     <h3 className="font-semibold text-lg truncate">{selectedTicket.subject}</h3>
                     <div className="flex items-center gap-2 mt-0.5">
                       <TicketStatusBadge status={selectedTicket.status} t={t} />
-                      <span className="text-xs text-gray-400">
-                        {new Date(selectedTicket.createdAt).toLocaleDateString()}
-                      </span>
-                      {isAdmin && (
-                        <span className="text-xs text-gray-400">
-                          · {selectedTicket.user.email} ({selectedTicket.user.subscription})
-                        </span>
-                      )}
+                      <span className="text-xs text-gray-400">{new Date(selectedTicket.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
-                  <div className="flex gap-2 shrink-0">
-                    {isAdmin && selectedTicket.status !== "RESOLVED" && selectedTicket.status !== "CLOSED" && (
-                      <button
-                        onClick={() => handleTicketStatus(selectedTicket.id, "RESOLVED")}
-                        className="btn-secondary text-sm gap-1.5"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        {t("support.markResolved")}
-                      </button>
-                    )}
-                    {selectedTicket.status !== "CLOSED" ? (
-                      <button
-                        onClick={() => handleTicketStatus(selectedTicket.id, "CLOSED")}
-                        className="btn-ghost text-sm gap-1.5 text-red-500 hover:!bg-red-50 dark:hover:!bg-red-900/20"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        {t("support.closeTicket")}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleTicketStatus(selectedTicket.id, "OPEN")}
-                        className="btn-secondary text-sm gap-1.5"
-                      >
-                        {t("support.reopenTicket")}
-                      </button>
-                    )}
-                  </div>
+                  {selectedTicket.status !== "CLOSED" ? (
+                    <button
+                      onClick={() => handleTicketStatus(selectedTicket.id, "CLOSED")}
+                      className="btn-ghost text-sm gap-1.5 text-red-500 hover:!bg-red-50 dark:hover:!bg-red-900/20 shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      {t("support.closeTicket")}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleTicketStatus(selectedTicket.id, "OPEN")}
+                      className="btn-secondary text-sm gap-1.5 shrink-0"
+                    >
+                      {t("support.reopenTicket")}
+                    </button>
+                  )}
                 </div>
 
-                {/* Messages */}
                 <div className="card overflow-hidden">
                   <div className="divide-y divide-gray-100 dark:divide-gray-800">
                     {selectedTicket.messages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={`p-4 ${msg.isAdmin ? "bg-brand-50/50 dark:bg-brand-900/10" : ""}`}
-                      >
+                      <div key={msg.id} className={`p-4 ${msg.isAdmin ? "bg-brand-50/50 dark:bg-brand-900/10" : ""}`}>
                         <div className="flex items-center gap-2 mb-2">
                           {msg.user.image ? (
                             <img src={msg.user.image} alt="" className="w-6 h-6 rounded-full" />
@@ -1587,9 +1829,7 @@ export default function Dashboard() {
                               {t("support.adminBadge")}
                             </span>
                           )}
-                          <span className="text-xs text-gray-400 ml-auto">
-                            {new Date(msg.createdAt).toLocaleString()}
-                          </span>
+                          <span className="text-xs text-gray-400 ml-auto">{new Date(msg.createdAt).toLocaleString()}</span>
                         </div>
                         <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap pl-8">{msg.body}</p>
                       </div>
@@ -1620,46 +1860,41 @@ export default function Dashboard() {
                 </div>
               </div>
             ) : (
-              /* ── Ticket List ──────────────────────────────── */
+              /* ═══════════════════════════════════════════════
+                 PRO / ENTERPRISE USER — TICKET LIST
+                 ═══════════════════════════════════════════════ */
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-lg flex items-center gap-2">
                     <LifeBuoy className="w-5 h-5" />
-                    {isAdmin ? t("support.allTickets") : t("support.myTickets")}
+                    {t("support.myTickets")}
                   </h3>
-                  {!isAdmin && (
-                    <button onClick={() => setTicketView("new")} className="btn-primary gap-2">
-                      <Plus className="w-4 h-4" />
-                      {t("support.newTicket")}
-                    </button>
-                  )}
+                  <button onClick={() => setTicketView("new")} className="btn-primary gap-2">
+                    <Plus className="w-4 h-4" />
+                    {t("support.newTicket")}
+                  </button>
                 </div>
 
-                {/* Email support also available */}
                 <div className="mb-4 flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                   <Mail className="w-4 h-4 text-blue-500 shrink-0" />
                   <p className="text-xs text-blue-600 dark:text-blue-400">
-                    {t("support.emailSupportDesc")} — <a href={`mailto:${SUPPORT_EMAIL}`} className="underline font-medium">{SUPPORT_EMAIL}</a>
+                    {t("support.emailAlsoAvailable")} — <a href={`mailto:${SUPPORT_EMAIL}`} className="underline font-medium">{SUPPORT_EMAIL}</a>
                   </p>
                 </div>
 
                 {ticketsLoading ? (
                   <div className="space-y-3">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="card h-20 animate-pulse bg-gray-100 dark:bg-gray-800" />
-                    ))}
+                    {[1, 2, 3].map((i) => <div key={i} className="card h-20 animate-pulse bg-gray-100 dark:bg-gray-800" />)}
                   </div>
                 ) : tickets.length === 0 ? (
                   <div className="text-center py-16">
                     <MessageSquare className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
                     <h3 className="text-lg font-semibold text-gray-500">{t("support.noTickets")}</h3>
                     <p className="text-sm text-gray-400 mt-1 mb-5">{t("support.noTicketsDesc")}</p>
-                    {!isAdmin && (
-                      <button onClick={() => setTicketView("new")} className="btn-primary gap-2 inline-flex">
-                        <Plus className="w-4 h-4" />
-                        {t("support.newTicket")}
-                      </button>
-                    )}
+                    <button onClick={() => setTicketView("new")} className="btn-primary gap-2 inline-flex">
+                      <Plus className="w-4 h-4" />
+                      {t("support.newTicket")}
+                    </button>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -1684,16 +1919,11 @@ export default function Dashboard() {
                               <PriorityDot priority={ticket.priority} />
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
-                              {isAdmin && (
-                                <span className="text-xs text-gray-500">{ticket.user.email}</span>
-                              )}
                               <span className="text-xs text-gray-400">
                                 {t("support.lastUpdated", { date: new Date(ticket.updatedAt).toLocaleDateString() })}
                               </span>
                               {ticket._count && (
-                                <span className="text-xs text-gray-400">
-                                  · {t("support.messages", { count: String(ticket._count.messages) })}
-                                </span>
+                                <span className="text-xs text-gray-400">· {t("support.messages", { count: String(ticket._count.messages) })}</span>
                               )}
                               {lastMsg && (
                                 <span className="text-xs text-gray-400 truncate max-w-[200px]">

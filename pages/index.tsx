@@ -70,6 +70,15 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
     <div className="dark:bg-gradient-to-b dark:from-[#0a1628] dark:via-[#060f1f] dark:to-black">
       <Head>
         <title>{t("home.title")}</title>
+        <meta name="description" content={t("home.metaDescription")} />
+        <meta property="og:title" content={t("home.title")} />
+        <meta property="og:description" content={t("home.metaDescription")} />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="nolink.ai" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={t("home.title")} />
+        <meta name="twitter:description" content={t("home.metaDescription")} />
+        <link rel="canonical" href="https://nolink.ai" />
       </Head>
 
       <section className="relative overflow-hidden">
@@ -90,7 +99,9 @@ export default function Home({ popularWorkflows }: { popularWorkflows: WorkflowE
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.1]">
               {t("home.headline1")}
               <br />
-              <span className="gradient-text">{t("home.headline2")}</span>
+              {t("home.headline2")}
+              <br />
+              <span className="gradient-text">{t("home.headline3")}</span>
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto leading-relaxed">

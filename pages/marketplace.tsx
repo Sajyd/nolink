@@ -40,7 +40,7 @@ export default function Marketplace() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("ALL");
-  const [sort, setSort] = useState("newest");
+  const [sort, setSort] = useState("popular");
   const [freeOnly, setFreeOnly] = useState(false);
 
   const { t } = useTranslation();
@@ -82,6 +82,15 @@ export default function Marketplace() {
     <>
       <Head>
         <title>{t("marketplace.title")}</title>
+        <meta name="description" content={t("marketplace.metaDescription")} />
+        <meta property="og:title" content={t("marketplace.title")} />
+        <meta property="og:description" content={t("marketplace.metaDescription")} />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="nolink.ai" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={t("marketplace.title")} />
+        <meta name="twitter:description" content={t("marketplace.metaDescription")} />
+        <link rel="canonical" href="https://nolink.ai/marketplace" />
       </Head>
 
       <div className="max-w-6xl mx-auto px-4 py-8">

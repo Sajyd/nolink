@@ -65,6 +65,8 @@ export default function SignIn() {
     <>
       <Head>
         <title>{t("auth.signInTitle")}</title>
+        <meta name="description" content={t("auth.signInMetaDescription")} />
+        <link rel="canonical" href="https://nolink.ai/auth/signin" />
       </Head>
 
       <div className="min-h-[80vh] flex items-center justify-center px-4">

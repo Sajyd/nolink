@@ -231,7 +231,11 @@ export default function CreateWorkflow() {
 
   return (
     <>
-      <Head><title>{t("builder.createTitle")}</title></Head>
+      <Head>
+        <title>{t("builder.createTitle")}</title>
+        <meta name="description" content={t("builder.createMetaDescription")} />
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
       <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
         <header className="flex items-center justify-between px-3 sm:px-4 h-14 border-b border-gray-200 dark:border-gray-800 glass">
           <div className="flex items-center gap-2 sm:gap-3">

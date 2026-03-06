@@ -2,7 +2,7 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM_EMAIL = process.env.EMAIL_FROM || "nolink.ai <noreply@nolink.ai>";
+const FROM_EMAIL = process.env.EMAIL_FROM || "Sajyd from Nolink <hello@nolink.ai>";
 
 function baseLayout(content: string) {
   return `

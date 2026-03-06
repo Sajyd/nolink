@@ -6,7 +6,7 @@ export default function Document() {
       <Head>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo.svg" />
-        <meta name="description" content="nolink.ai — AI Workflow Marketplace" />
+        <meta name="theme-color" content="#4f46e5" />
       </Head>
       <body className="min-h-screen">
         <Main />

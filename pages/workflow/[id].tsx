@@ -683,6 +683,15 @@ export default function WorkflowPage() {
     <>
       <Head>
         <title>{workflow.name} — nolink.ai</title>
+        <meta name="description" content={workflow.description?.slice(0, 160) || `Run the ${workflow.name} AI workflow on nolink.ai`} />
+        <meta property="og:title" content={`${workflow.name} — nolink.ai`} />
+        <meta property="og:description" content={workflow.description?.slice(0, 160) || `Run the ${workflow.name} AI workflow on nolink.ai`} />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="nolink.ai" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={`${workflow.name} — nolink.ai`} />
+        <meta name="twitter:description" content={workflow.description?.slice(0, 160) || `Run the ${workflow.name} AI workflow on nolink.ai`} />
+        <link rel="canonical" href={`https://nolink.ai/workflow/${workflow.id}`} />
       </Head>
 
       <div className="max-w-4xl mx-auto px-4 py-8">

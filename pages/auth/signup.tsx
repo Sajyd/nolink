@@ -33,7 +33,11 @@ export default function SignUp() {
 
   return (
     <>
-      <Head><title>{t("auth.signUpTitle")}</title></Head>
+      <Head>
+        <title>{t("auth.signUpTitle")}</title>
+        <meta name="description" content={t("auth.signUpMetaDescription")} />
+        <link rel="canonical" href="https://nolink.ai/auth/signup" />
+      </Head>
       <div className="mx-auto max-w-sm px-4 py-16">
       <h1 className="text-2xl font-semibold text-[var(--fg)]">{t("auth.createAccount")}</h1>
       <p className="mt-1 text-sm text-[var(--muted)]">

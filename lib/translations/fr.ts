@@ -45,9 +45,11 @@ export const fr = {
 
   home: {
     title: "nolink.ai — Marketplace de workflows IA",
+    metaDescription: "Créez des workflows IA multi-étapes avec un éditeur visuel. Combinez texte, image, audio, vidéo et documents — publiez sur la marketplace et gagnez des commissions.",
     badge: "Marketplace de workflows IA",
     headline1: "Chaînez des modèles IA.",
     headline2: "Livrez des automatisations.",
+    headline3: "Soyez payé.",
     subtitle: "Créez des workflows IA multi-étapes avec un éditeur visuel. Combinez texte, image, audio, vidéo et documents — puis publiez sur la marketplace ou gardez-les privés.",
     createWorkflow: "Créer un workflow",
     browseMarketplace: "Explorer la marketplace",
@@ -78,6 +80,7 @@ export const fr = {
 
   dashboard: {
     title: "Tableau de bord — nolink.ai",
+    metaDescription: "Gérez vos workflows IA, suivez vos revenus, consultez les analytiques et retirez vos gains depuis votre tableau de bord nolink.ai.",
     header: "Tableau de bord",
     welcomeBack: "Bon retour, {name}",
     upgradeToCreate: "Passer au supérieur pour créer",
@@ -174,7 +177,9 @@ export const fr = {
 
   auth: {
     signInTitle: "Connexion — nolink.ai",
+    signInMetaDescription: "Connectez-vous à votre compte nolink.ai pour gérer vos workflows, suivre vos revenus et exécuter des automatisations IA.",
     signUpTitle: "Inscription — nolink.ai",
+    signUpMetaDescription: "Créez un compte nolink.ai gratuit et obtenez 50 crédits Nolinks. Construisez, partagez et monétisez des workflows IA.",
     welcomeBack: "Bon retour",
     signInSubtitle: "Connectez-vous à votre compte nolink.ai",
     continueWithGoogle: "Continuer avec Google",
@@ -199,7 +204,8 @@ export const fr = {
   },
 
   marketplace: {
-    title: "Marketplace — nolink.ai",
+    title: "Marketplace de workflows IA — nolink.ai",
+    metaDescription: "Découvrez et exécutez des workflows IA créés par la communauté. Parcourez les automatisations de contenu, marketing, design, audio et vidéo — payez à l'utilisation.",
     header: "Marketplace",
     subtitle: "Découvrez et exécutez des workflows IA créés par la communauté",
     searchPlaceholder: "Rechercher des workflows…",
@@ -283,8 +289,10 @@ export const fr = {
   },
 
   builder: {
-    createTitle: "Créer un workflow — nolink.ai",
+    createTitle: "Créer un workflow IA — nolink.ai",
+    createMetaDescription: "Construisez un workflow IA multi-étapes avec un éditeur visuel en glisser-déposer. Chaînez GPT-4, DALL·E 3, Whisper, Stable Diffusion et plus.",
     editTitle: "Modifier le workflow — nolink.ai",
+    editMetaDescription: "Modifiez les étapes, le prix et les paramètres de votre workflow IA dans l'éditeur visuel.",
     workflowBuilder: "Éditeur de workflows",
     editWorkflow: "Modifier le workflow",
     untitled: "Sans titre",
@@ -343,7 +351,8 @@ export const fr = {
   support: {
     tabSupport: "Support",
     emailSupportTitle: "Support par e-mail",
-    emailSupportDesc: "Avec votre plan actuel, vous avez accès au support par e-mail. Envoyez-nous vos questions et nous vous répondrons dès que possible.",
+    emailSupportDesc: "Votre plan actuel inclut le support par e-mail. Envoyez-nous vos questions et nous vous répondrons.",
+    emailAlsoAvailable: "Vous pouvez également nous contacter par e-mail pour des questions rapides.",
     sendEmail: "Envoyer un e-mail",
     upgradeForTickets: "Passez au supérieur pour le support par tickets",
     upgradeForTicketsDesc: "Les plans Pro et Enterprise incluent un système de tickets intégré avec des délais de réponse prioritaires et le suivi des conversations.",
@@ -381,11 +390,35 @@ export const fr = {
     lastUpdated: "Mis à jour le {date}",
     markResolved: "Marquer comme résolu",
     markInProgress: "Marquer en cours",
+    adminPanel: "Admin Support",
+    adminPanelDesc: "Gérez et répondez à tous les tickets de support client.",
+    filterAll: "Tous",
+    filterOpen: "Ouverts",
+    filterInProgress: "En cours",
+    filterResolved: "Résolus",
+    filterClosed: "Fermés",
+    openTickets: "Ouverts",
+    inProgressTickets: "En cours",
+    resolvedTickets: "Résolus",
+    closedTickets: "Fermés",
+    totalTickets: "Total",
+    noTicketsForFilter: "Aucun ticket ne correspond à ce filtre",
+    userInfo: "Utilisateur",
+    planBadge: "Plan {plan}",
+    quickResolve: "Résoudre",
+    quickClose: "Fermer",
+    repliedAgo: "Dernière réponse {date}",
+    awaitingReply: "En attente de réponse",
+    customerSince: "Client depuis {date}",
+  },
+
+  integrate: {
+    title: "Intégration — nolink.ai",
   },
 
   phBanner: {
     launch: "Lancement Product Hunt",
-    offer: "votre premier mois — 100 premiers utilisateurs",
+    offer: "vos 3 premiers mois — 100 premiers utilisateurs",
     discount: "-50 %",
     claimOffer: "Profiter de l'offre",
   },

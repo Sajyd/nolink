@@ -7,12 +7,14 @@ import Head from "next/head";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import { useTranslation } from "@/lib/i18n";
 
 const DEFAULT_SLUG = "notion";
 const DEFAULT_COLOR = "#6366f1";
 
 export default function IntegratePage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [slug, setSlug] = useState(DEFAULT_SLUG);
   const [color, setColor] = useState(DEFAULT_COLOR);
   const [returnToken, setReturnToken] = useState<string | null>(null);
@@ -83,7 +85,11 @@ const data = await res.json();
 
   return (
     <>
-      <Head><title>Integrate — nolink.ai</title></Head>
+      <Head>
+        <title>{t("integrate.title")}</title>
+        <meta name="description" content="Preview the nolink.ai partner integration SDK. Test the subscribe button flow, return tokens, and code snippets for your SaaS." />
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
       <Navbar />
       <main className="min-h-screen bg-gray-50 pt-14">
         <div className="mx-auto max-w-4xl px-4 py-10">
