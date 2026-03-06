@@ -88,6 +88,7 @@ model User {
   tickets        SupportTicket[]
   ticketMessages TicketMessage[]
   notifications  Notification[]
+  feedbacks      Feedback[]
 }
 
 enum IOType {
@@ -132,6 +133,7 @@ model Workflow {
   steps      Step[]
   executions Execution[]
   analytics  WorkflowAnalytics[]
+  feedbacks  Feedback[]
 }
 
 enum StepType {
@@ -290,6 +292,22 @@ model Notification {
 
   @@index([userId, read])
   @@index([userId, createdAt])
+}
+
+model Feedback {
+  id         String   @id @default(cuid())
+  userId     String?
+  workflowId String?
+  page       String
+  rating     Int
+  message    String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  user     User?     @relation(fields: [userId], references: [id])
+  workflow Workflow?  @relation(fields: [workflowId], references: [id])
+
+  @@index([workflowId])
+  @@index([userId])
 }
 
 model WorkflowAnalytics {

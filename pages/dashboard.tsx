@@ -48,6 +48,7 @@ import {
   Shield,
   UserCircle,
 } from "lucide-react";
+import FeedbackButton from "@/components/FeedbackButton";
 import toast from "react-hot-toast";
 import { useTranslation } from "@/lib/i18n";
 import {
@@ -1943,6 +1944,8 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      <FeedbackButton page="dashboard" />
     </>
   );
 }

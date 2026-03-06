@@ -504,6 +504,24 @@ export const fr = {
     creditsWaiting: "Vos 50 NL vous attendent. Ne les laissez pas tomber.",
   },
 
+  feedback: {
+    title: "Envoyer un avis",
+    rateWorkflow: "Notez ce workflow",
+    subtitle: "Vos retours nous aident à améliorer l'expérience.",
+    ratingLabel: "Quelle note donneriez-vous ?",
+    messageLabel: "Autre chose ? (optionnel)",
+    placeholder: "Qu'avez-vous aimé ? Que peut-on améliorer ?",
+    submit: "Envoyer",
+    thanks: "Merci pour votre avis !",
+    thanksTitle: "Merci !",
+    thanksDesc: "Votre avis compte beaucoup pour nous.",
+    nudgeTitle: "Vous aimez nolink ?",
+    nudgeDesc: "Donnez-nous votre avis — ça ne prend qu'une seconde.",
+    endTitle: "Comment était ce workflow ?",
+    endDesc: "Notez votre expérience avec {name}",
+    endPlaceholder: "Dites-nous ce que vous avez pensé des résultats...",
+  },
+
   plans: {
     free: "Gratuit",
     starter: "Starter",

@@ -38,6 +38,7 @@ import {
 import toast from "react-hot-toast";
 import { useTranslation } from "@/lib/i18n";
 import { FREE_TRIAL_MAX_COST } from "@/lib/constants";
+import FeedbackButton, { WorkflowEndFeedback } from "@/components/FeedbackButton";
 
 interface InputParameter {
   id: string;
@@ -1376,9 +1377,23 @@ export default function WorkflowPage() {
                 </div>
               </div>
             )}
+
+            {/* Workflow-end feedback prompt */}
+            {finished && !executing && (
+              <WorkflowEndFeedback
+                workflowId={workflow.id}
+                workflowName={workflow.name}
+              />
+            )}
           </div>
         )}
       </div>
+
+      <FeedbackButton
+        page="workflow"
+        workflowId={workflow.id}
+        workflowName={workflow.name}
+      />
 
       {showApiModal && (
         <ApiIntegrationModal

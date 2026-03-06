@@ -504,6 +504,24 @@ export const en = {
     creditsWaiting: "Your 50 NL are waiting. Don't leave them hanging.",
   },
 
+  feedback: {
+    title: "Send Feedback",
+    rateWorkflow: "Rate this Workflow",
+    subtitle: "Your feedback helps us improve the experience.",
+    ratingLabel: "How would you rate it?",
+    messageLabel: "Anything else? (optional)",
+    placeholder: "What did you like? What could be better?",
+    submit: "Send Feedback",
+    thanks: "Thanks for your feedback!",
+    thanksTitle: "Thank you!",
+    thanksDesc: "Your feedback means a lot to us.",
+    nudgeTitle: "Enjoying nolink?",
+    nudgeDesc: "We'd love to hear your thoughts — it only takes a second.",
+    endTitle: "How was this workflow?",
+    endDesc: "Rate your experience with {name}",
+    endPlaceholder: "Tell us what you thought of the results...",
+  },
+
   plans: {
     free: "Free",
     starter: "Starter",
