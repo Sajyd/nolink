@@ -62,8 +62,7 @@ export default function Register() {
       });
 
       if (result?.ok) {
-        toast.success(t("auth.welcomeToNolink"));
-        router.push("/dashboard");
+        router.push("/welcome");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("auth.registrationFailed"));
@@ -74,7 +73,7 @@ export default function Register() {
 
   const handleGoogleSignUp = () => {
     setGoogleLoading(true);
-    signIn("google", { callbackUrl: "/dashboard" });
+    signIn("google", { callbackUrl: "/welcome" });
   };
 
   return (
