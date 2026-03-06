@@ -1363,8 +1363,14 @@ export const ALL_MODELS: AIModel[] = [
   CUSTOM_REPLICATE_MODEL,
 ];
 
+const MODEL_ALIASES: Record<string, string> = {
+  "gpt-4o": "gpt-4.1",
+  "gpt-4o-mini": "gpt-5-nano",
+};
+
 export function getModelById(id: string): AIModel | undefined {
-  return ALL_MODELS.find((m) => m.id === id);
+  const resolvedId = MODEL_ALIASES[id] ?? id;
+  return ALL_MODELS.find((m) => m.id === resolvedId);
 }
 
 export function getModelsByCategory(category: ModelCategory): AIModel[] {
